@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { WeeklyScore, ScoringCategory, MemberWeeklySummary, Member } from '../types/awana';
+import type { WeeklyScore, ScoringCategory, MemberWeeklySummary, Member, WeeklyScoreSubmission, ScoreEditHistory } from '../types/awana';
 
 export async function getWeeklyScores(clubId: string, trainingDate: string): Promise<WeeklyScore[]> {
   const { data, error } = await supabase
@@ -124,4 +124,210 @@ export async function getTeamScoreTotals(
   }
 
   return teamTotals;
+}
+
+// ============================================
+// Score Submission Workflow (점수 제출 워크플로우)
+// ============================================
+
+/** 제출 상태 조회 (팀+날짜) */
+export async function getSubmission(
+  clubId: string,
+  teamId: string,
+  trainingDate: string
+): Promise<WeeklyScoreSubmission | null> {
+  const { data, error } = await supabase
+    .from('weekly_score_submissions')
+    .select('*')
+    .eq('club_id', clubId)
+    .eq('team_id', teamId)
+    .eq('training_date', trainingDate)
+    .maybeSingle();
+  if (error) throw error;
+  return data as WeeklyScoreSubmission | null;
+}
+
+/** 제출 상태 조회 (클럽+날짜, 전체 팀) */
+export async function getSubmissionsByDate(
+  clubId: string,
+  trainingDate: string
+): Promise<WeeklyScoreSubmission[]> {
+  const { data, error } = await supabase
+    .from('weekly_score_submissions')
+    .select('*')
+    .eq('club_id', clubId)
+    .eq('training_date', trainingDate);
+  if (error) throw error;
+  return (data as WeeklyScoreSubmission[]) || [];
+}
+
+/** 교사: draft -> submitted 제출 */
+export async function submitScores(params: {
+  clubId: string;
+  teamId: string;
+  trainingDate: string;
+  submittedBy: string;
+}): Promise<WeeklyScoreSubmission> {
+  const { data, error } = await supabase
+    .from('weekly_score_submissions')
+    .upsert(
+      {
+        club_id: params.clubId,
+        team_id: params.teamId,
+        training_date: params.trainingDate,
+        status: 'submitted',
+        submitted_by: params.submittedBy,
+        submitted_at: new Date().toISOString(),
+        rejection_note: null,
+      },
+      { onConflict: 'club_id,team_id,training_date' }
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data as WeeklyScoreSubmission;
+}
+
+/** 교사: rejected -> draft 로 되돌리기 (수정 시작) */
+export async function reopenSubmission(params: {
+  clubId: string;
+  teamId: string;
+  trainingDate: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('weekly_score_submissions')
+    .update({ status: 'draft', updated_at: new Date().toISOString() })
+    .eq('club_id', params.clubId)
+    .eq('team_id', params.teamId)
+    .eq('training_date', params.trainingDate)
+    .eq('status', 'rejected');
+  if (error) throw error;
+}
+
+/** 관리자: submitted -> approved */
+export async function approveSubmission(params: {
+  clubId: string;
+  teamId: string;
+  trainingDate: string;
+  approvedBy: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('weekly_score_submissions')
+    .update({
+      status: 'approved',
+      approved_by: params.approvedBy,
+      approved_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('club_id', params.clubId)
+    .eq('team_id', params.teamId)
+    .eq('training_date', params.trainingDate);
+  if (error) throw error;
+}
+
+/** 관리자: submitted -> rejected */
+export async function rejectSubmission(params: {
+  clubId: string;
+  teamId: string;
+  trainingDate: string;
+  rejectionNote: string;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('weekly_score_submissions')
+    .update({
+      status: 'rejected',
+      rejection_note: params.rejectionNote,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('club_id', params.clubId)
+    .eq('team_id', params.teamId)
+    .eq('training_date', params.trainingDate);
+  if (error) throw error;
+}
+
+// ============================================
+// Score Edit History (점수 수정 이력)
+// ============================================
+
+/** 관리자 점수 수정 (이력 기록 포함) */
+export async function editScoreWithHistory(params: {
+  weeklyScoreId: string;
+  newBasePoints: number;
+  newMultiplier: number;
+  editedBy: string;
+  editReason: string;
+}): Promise<WeeklyScore> {
+  // 1. 기존 점수 조회
+  const { data: existing, error: fetchError } = await supabase
+    .from('weekly_scores')
+    .select('*')
+    .eq('id', params.weeklyScoreId)
+    .single();
+  if (fetchError) throw fetchError;
+
+  const oldScore = existing as WeeklyScore;
+  const newTotalPoints = params.newBasePoints * params.newMultiplier;
+
+  // 2. 이력 기록
+  const { error: historyError } = await supabase
+    .from('score_edit_history')
+    .insert({
+      weekly_score_id: params.weeklyScoreId,
+      member_id: oldScore.member_id,
+      club_id: oldScore.club_id,
+      training_date: oldScore.training_date,
+      category: oldScore.category,
+      old_base_points: oldScore.base_points,
+      old_multiplier: oldScore.multiplier,
+      old_total_points: oldScore.total_points,
+      new_base_points: params.newBasePoints,
+      new_multiplier: params.newMultiplier,
+      new_total_points: newTotalPoints,
+      edited_by: params.editedBy,
+      edit_reason: params.editReason,
+    });
+  if (historyError) throw historyError;
+
+  // 3. 점수 업데이트
+  const { data: updated, error: updateError } = await supabase
+    .from('weekly_scores')
+    .update({
+      base_points: params.newBasePoints,
+      multiplier: params.newMultiplier,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.weeklyScoreId)
+    .select()
+    .single();
+  if (updateError) throw updateError;
+
+  return updated as WeeklyScore;
+}
+
+/** 점수 수정 이력 조회 (멤버+날짜) */
+export async function getScoreEditHistory(
+  memberId: string,
+  trainingDate: string
+): Promise<ScoreEditHistory[]> {
+  const { data, error } = await supabase
+    .from('score_edit_history')
+    .select('*')
+    .eq('member_id', memberId)
+    .eq('training_date', trainingDate)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data as ScoreEditHistory[]) || [];
+}
+
+/** 특정 점수의 수정 이력 조회 */
+export async function getScoreEditHistoryByScoreId(
+  weeklyScoreId: string
+): Promise<ScoreEditHistory[]> {
+  const { data, error } = await supabase
+    .from('score_edit_history')
+    .select('*')
+    .eq('weekly_score_id', weeklyScoreId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data as ScoreEditHistory[]) || [];
 }

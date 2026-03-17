@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
+import { useTeacherAssignment } from '../../hooks/useTeacherAssignment';
 import {
   recordAttendance,
   bulkRecordAttendance,
@@ -29,6 +30,17 @@ export default function AttendancePage() {
   const { teacher } = useAuth();
   const { currentClub, curriculumTemplate, teams, members } = useClub();
   const { openMemberProfile } = useMemberProfile();
+  const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned } = useTeacherAssignment();
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
+  const visibleTeams = isUnassigned ? teams : teams.filter(t => assignedTeamIds.includes(t.id));
+
+  // 배정된 반이 1개면 자동 선택
+  useEffect(() => {
+    if (!isUnassigned && visibleTeams.length === 1) {
+      setSelectedTeamId(visibleTeams[0].id);
+    }
+  }, [isUnassigned, visibleTeams]);
 
   const attendanceBasePoints = curriculumTemplate?.scoring_categories?.find(c => c.key === 'attendance')?.basePoints ?? 50;
   const [selectedDate, setSelectedDate] = useState(getToday());
@@ -36,13 +48,15 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AttendanceStatus | 'all'>('all');
 
+  const baseMembers = isUnassigned ? members : assignedMembers;
+
   // Initialize all members as unset
   useEffect(() => {
     if (!currentClub) return;
     setLoading(true);
 
     const initial: Record<string, MemberAttendanceState> = {};
-    for (const m of members) {
+    for (const m of baseMembers) {
       initial[m.id] = { status: 'present', absenceReason: '' };
     }
 
@@ -68,6 +82,7 @@ export default function AttendancePage() {
 
   const handleStatusChange = useCallback(
     (memberId: string) => {
+      if (isReadOnly) return;
       const cycle: AttendanceStatus[] = ['present', 'late', 'absent'];
       setAttendance((prev) => {
         const current = prev[memberId];
@@ -104,7 +119,7 @@ export default function AttendancePage() {
         };
       });
     },
-    [selectedDate, currentClub, attendanceBasePoints, teacher]
+    [selectedDate, currentClub, attendanceBasePoints, teacher, isReadOnly]
   );
 
   const handleReasonChange = (memberId: string, reason: string) => {
@@ -128,16 +143,17 @@ export default function AttendancePage() {
 
   const handleBulkPresent = async () => {
     if (!currentClub) return;
+    if (isReadOnly) return;
     try {
       await bulkRecordAttendance(
-        members.map((m) => m.id),
+        baseMembers.map((m) => m.id),
         selectedDate,
         'present'
       );
       // Bulk sync attendance scores
       const points = getAttendancePoints('present', attendanceBasePoints);
       await Promise.all(
-        members.map((m) =>
+        baseMembers.map((m) =>
           upsertScore({
             memberId: m.id,
             clubId: currentClub.id,
@@ -150,7 +166,7 @@ export default function AttendancePage() {
         )
       );
       const updated: Record<string, MemberAttendanceState> = {};
-      for (const m of members) {
+      for (const m of baseMembers) {
         updated[m.id] = { status: 'present', absenceReason: '' };
       }
       setAttendance(updated);
@@ -163,14 +179,18 @@ export default function AttendancePage() {
 
   // Counts
   const counts = { present: 0, late: 0, absent: 0 };
-  for (const entry of Object.values(attendance)) {
-    counts[entry.status]++;
+  for (const m of baseMembers) {
+    const entry = attendance[m.id];
+    if (entry) counts[entry.status]++;
   }
 
+  const teamFilteredMembers = selectedTeamId
+    ? baseMembers.filter((m) => m.team_id === selectedTeamId)
+    : baseMembers;
   const filteredMembers =
     filter === 'all'
-      ? members
-      : members.filter((m) => attendance[m.id]?.status === filter);
+      ? teamFilteredMembers
+      : teamFilteredMembers.filter((m) => attendance[m.id]?.status === filter);
 
   if (loading) {
     return (
@@ -192,11 +212,48 @@ export default function AttendancePage() {
         />
       </div>
 
+      {/* Team tabs - 2개 이상일 때만 표시 */}
+      {(isUnassigned || visibleTeams.length >= 2) && (
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3 scrollbar-hide">
+          <button
+            onClick={() => setSelectedTeamId(null)}
+            className={cn(
+              'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
+              !selectedTeamId ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+            )}
+          >
+            전체
+          </button>
+          {visibleTeams.map((team) => (
+            <button
+              key={team.id}
+              onClick={() => setSelectedTeamId(team.id)}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
+                selectedTeamId === team.id ? 'text-white' : 'bg-gray-100 text-gray-700'
+              )}
+              style={selectedTeamId === team.id ? { backgroundColor: team.color } : undefined}
+            >
+              {team.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Unassigned banner */}
+      {isUnassigned && (
+        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700 font-medium">반 배정 후 입력이 가능합니다</p>
+          <p className="text-xs text-amber-600 mt-0.5">현재 열람 전용 모드입니다</p>
+        </div>
+      )}
+
       {/* Bulk action + filter */}
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={handleBulkPresent}
-          className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg active:scale-95 touch-manipulation"
+          disabled={isReadOnly}
+          className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg active:scale-95 touch-manipulation disabled:opacity-50"
         >
           전체 출석
         </button>
@@ -204,7 +261,7 @@ export default function AttendancePage() {
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
         {[
-          { key: 'all' as const, label: '전체', count: members.length },
+          { key: 'all' as const, label: '전체', count: baseMembers.length },
           { key: 'present' as const, label: '출석', count: counts.present },
           { key: 'late' as const, label: '지각', count: counts.late },
           { key: 'absent' as const, label: '결석', count: counts.absent },
@@ -251,10 +308,12 @@ export default function AttendancePage() {
 
                 <button
                   onClick={() => handleStatusChange(member.id)}
+                  disabled={isReadOnly}
                   className={cn(
                     'px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all active:scale-95 touch-manipulation min-w-[72px]',
                     config.bg,
-                    config.color
+                    config.color,
+                    isReadOnly && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   {config.label}

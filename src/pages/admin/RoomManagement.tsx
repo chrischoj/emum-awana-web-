@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { QRCodeCard } from '../../components/QRCodeCard';
@@ -7,7 +8,11 @@ import { Badge } from '../../components/ui/Badge';
 import { Switch } from '../../components/ui/Switch';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
-import type { Room, Team } from '../../types/awana';
+import { Avatar } from '../../components/ui/Avatar';
+import { getRoomAssignments } from '../../services/assignmentService';
+import type { Room, Team, ActiveTeacherAssignment } from '../../types/awana';
+
+type RoomTeacherInfo = ActiveTeacherAssignment & { teacher_name: string; teacher_avatar_url?: string | null };
 
 export default function RoomManagement() {
   const { clubs } = useClub();
@@ -25,6 +30,9 @@ export default function RoomManagement() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [generatingQR, setGeneratingQR] = useState(false);
 
+  const [roomAssignments, setRoomAssignments] = useState<Map<string, RoomTeacherInfo[]>>(new Map());
+  const [refreshing, setRefreshing] = useState(false);
+
   const loadRooms = async () => {
     const { data, error } = await supabase
       .from('rooms')
@@ -40,10 +48,50 @@ export default function RoomManagement() {
     setAllTeams((data as Team[]) || []);
   };
 
+  const loadRoomAssignments = async (rooms: Room[]) => {
+    const assignmentMap = new Map<string, RoomTeacherInfo[]>();
+    for (const room of rooms) {
+      try {
+        const teachers = await getRoomAssignments(room.id);
+        if (teachers.length > 0) {
+          assignmentMap.set(room.id, teachers as RoomTeacherInfo[]);
+        }
+      } catch {
+        // skip errors for individual rooms
+      }
+    }
+    setRoomAssignments(assignmentMap);
+  };
+
   useEffect(() => {
-    loadRooms();
-    loadTeams();
+    Promise.all([loadRooms(), loadTeams()]);
   }, []);
+
+  // Realtime 구독
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-rooms')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadRooms())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teacher_assignments' }, () => {
+        if (allRooms.length > 0) loadRoomAssignments(allRooms);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [allRooms]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadRooms(), loadTeams()]);
+    setRefreshing(false);
+    toast.success('갱신됨');
+  };
+
+  // allRooms가 변경되면 배정 로드
+  useEffect(() => {
+    if (allRooms.length > 0) {
+      loadRoomAssignments(allRooms);
+    }
+  }, [allRooms]);
 
   // 클럽 목록이 로드되면 새 교실 생성 시 기본 클럽 설정
   useEffect(() => {
@@ -161,6 +209,7 @@ export default function RoomManagement() {
                   teamMap={teamMap}
                   showClubBadge={false}
                   clubName={club.name}
+                  assignedTeachers={roomAssignments.get(room.id) || []}
                   onQR={() => setSelectedRoom(room)}
                   onToggle={() => handleToggleActive(room)}
                 />
@@ -190,6 +239,7 @@ export default function RoomManagement() {
                 teamMap={teamMap}
                 showClubBadge={false}
                 clubName={selectedClub?.name ?? ''}
+                assignedTeachers={roomAssignments.get(room.id) || []}
                 onQR={() => setSelectedRoom(room)}
                 onToggle={() => handleToggleActive(room)}
               />
@@ -204,7 +254,17 @@ export default function RoomManagement() {
     <div>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">교실 관리</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900">교실 관리</h1>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            title="새로고침"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
         <Button onClick={openCreateModal}>교실 추가</Button>
       </div>
 
@@ -346,11 +406,12 @@ interface RoomCardProps {
   teamMap: Map<string, Team>;
   showClubBadge: boolean;
   clubName: string;
+  assignedTeachers: RoomTeacherInfo[];
   onQR: () => void;
   onToggle: () => void;
 }
 
-function RoomCard({ room, teamMap, onQR, onToggle }: RoomCardProps) {
+function RoomCard({ room, teamMap, assignedTeachers, onQR, onToggle }: RoomCardProps) {
   const team = room.team_id ? teamMap.get(room.team_id) : null;
   const teamColor = team?.color || '#6B7280';
 
@@ -393,6 +454,35 @@ function RoomCard({ room, teamMap, onQR, onToggle }: RoomCardProps) {
             />
           </div>
         </div>
+
+        {/* 배정된 교사 */}
+        {assignedTeachers.length > 0 && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <p className="text-xs text-gray-500 mb-1.5">배정 교사</p>
+            <div className="flex flex-wrap gap-1.5">
+              {assignedTeachers.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-full"
+                >
+                  <Avatar name={t.teacher_name} src={t.teacher_avatar_url || null} size="sm" />
+                  <span className="text-xs font-medium text-gray-700">{t.teacher_name}</span>
+                  <span className={`text-[10px] px-1 rounded ${
+                    t.assignment_type === 'primary' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'
+                  }`}>
+                    {t.assignment_type === 'primary' ? '담임' : '지원'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {assignedTeachers.length === 0 && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <p className="text-xs text-gray-400 italic">배정된 교사 없음</p>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <button
             onClick={onQR}

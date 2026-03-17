@@ -1,28 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
-import { getWeeklyScores } from '../../services/scoringService';
+import { useAuth } from '../../contexts/AuthContext';
+import { getWeeklyScores, getSubmissionsByDate, approveSubmission, rejectSubmission, editScoreWithHistory, getScoreEditHistory } from '../../services/scoringService';
 import { getTeamGameTotals } from '../../services/gameScoreService';
-import { getToday } from '../../lib/utils';
+import { getToday, cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
-import type { WeeklyScore, ScoringCategory, Team, Member } from '../../types/awana';
-
-type SubmissionStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
-
-interface WeeklyScoreSubmission {
-  id: string;
-  club_id: string;
-  team_id: string;
-  training_date: string;
-  status: SubmissionStatus;
-  submitted_by: string | null;
-  approved_by: string | null;
-  rejection_note: string | null;
-  created_at: string;
-  updated_at: string;
-}
+import type { WeeklyScore, ScoringCategory, Team, Member, SubmissionStatus, WeeklyScoreSubmission, ScoreEditHistory } from '../../types/awana';
 
 interface TeamScoreData {
   teamId: string;
@@ -60,34 +47,9 @@ const STATUS_CONFIG: Record<SubmissionStatus, { label: string; className: string
   rejected:  { label: '반려됨',  className: 'bg-red-100 text-red-700' },
 };
 
-async function getSubmissions(clubId: string, trainingDate: string): Promise<WeeklyScoreSubmission[]> {
-  const { data, error } = await supabase
-    .from('weekly_score_submissions')
-    .select('*')
-    .eq('club_id', clubId)
-    .eq('training_date', trainingDate);
-  if (error) throw error;
-  return (data as WeeklyScoreSubmission[]) || [];
-}
-
-async function updateSubmissionStatus(
-  clubId: string,
-  teamId: string,
-  trainingDate: string,
-  status: SubmissionStatus,
-  rejectionNote?: string
-): Promise<void> {
-  const { error } = await supabase
-    .from('weekly_score_submissions')
-    .update({ status, rejection_note: rejectionNote ?? null, updated_at: new Date().toISOString() })
-    .eq('club_id', clubId)
-    .eq('team_id', teamId)
-    .eq('training_date', trainingDate);
-  if (error) throw error;
-}
-
 export default function ScoringOverview() {
   const { clubs, currentClub, setCurrentClub, teams, members } = useClub();
+  const { teacher: adminTeacher } = useAuth();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [viewMode, setViewMode] = useState<'all' | string>('all');
   const [teamScores, setTeamScores] = useState<TeamScoreData[]>([]);
@@ -97,6 +59,23 @@ export default function ScoringOverview() {
   const [rejectingTeam, setRejectingTeam] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const { openMemberProfile } = useMemberProfile();
+  const [editingScore, setEditingScore] = useState<{
+    memberId: string;
+    memberName: string;
+    teamId: string;
+    scores: Partial<Record<ScoringCategory, { id: string; basePoints: number; multiplier: number; totalPoints: number }>>;
+  } | null>(null);
+  const [editValues, setEditValues] = useState<Record<ScoringCategory, { basePoints: number; multiplier: number }>>({
+    attendance: { basePoints: 0, multiplier: 1 },
+    handbook: { basePoints: 0, multiplier: 1 },
+    uniform: { basePoints: 0, multiplier: 1 },
+    recitation: { basePoints: 0, multiplier: 1 },
+  });
+  const [editReason, setEditReason] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  const [historyData, setHistoryData] = useState<ScoreEditHistory[]>([]);
+  const [showHistory, setShowHistory] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // When viewMode changes to a specific club, update context
   useEffect(() => {
@@ -115,14 +94,38 @@ export default function ScoringOverview() {
     }
   }, [viewMode, currentClub, selectedDate, members, clubs]);
 
-  async function loadData() {
+  // Realtime 구독
+  useEffect(() => {
+    const channel = supabase
+      .channel(`admin-scoring-${selectedDate}-${viewMode}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_scores' }, () => {
+        if (viewMode === 'all') loadAllData(false);
+        else loadData(false);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_score_submissions' }, () => {
+        if (viewMode === 'all') loadAllData(false);
+        else loadData(false);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedDate, viewMode, currentClub, members, clubs]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    if (viewMode === 'all') await loadAllData(false);
+    else await loadData(false);
+    setRefreshing(false);
+    toast.success('갱신됨');
+  };
+
+  async function loadData(showLoading = true) {
     if (!currentClub) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const [weeklyScores, gameTotals, submissions] = await Promise.all([
         getWeeklyScores(currentClub.id, selectedDate),
         getTeamGameTotals(currentClub.id, selectedDate),
-        getSubmissions(currentClub.id, selectedDate),
+        getSubmissionsByDate(currentClub.id, selectedDate),
       ]);
 
       // member_id -> team_id 맵
@@ -194,13 +197,13 @@ export default function ScoringOverview() {
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }
 
-  async function loadAllData() {
+  async function loadAllData(showLoading = true) {
     if (clubs.length === 0) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     try {
       const [teamsRes, membersRes, scoresRes, gameRes] = await Promise.all([
         supabase.from('teams').select('*').order('name'),
@@ -288,7 +291,7 @@ export default function ScoringOverview() {
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   }
 
@@ -302,10 +305,15 @@ export default function ScoringOverview() {
   }
 
   async function handleApprove(teamScore: TeamScoreData) {
-    if (!currentClub) return;
+    if (!currentClub || !adminTeacher) return;
     setActionLoading(teamScore.teamId);
     try {
-      await updateSubmissionStatus(currentClub.id, teamScore.teamId, selectedDate, 'approved');
+      await approveSubmission({
+        clubId: currentClub.id,
+        teamId: teamScore.teamId,
+        trainingDate: selectedDate,
+        approvedBy: adminTeacher.id,
+      });
       toast.success(`${teamScore.teamName} 팀 승인됨`);
       await loadData();
     } catch {
@@ -320,7 +328,12 @@ export default function ScoringOverview() {
     setActionLoading(teamScore.teamId);
     try {
       const note = rejectionNotes[teamScore.teamId] || '';
-      await updateSubmissionStatus(currentClub.id, teamScore.teamId, selectedDate, 'rejected', note);
+      await rejectSubmission({
+        clubId: currentClub.id,
+        teamId: teamScore.teamId,
+        trainingDate: selectedDate,
+        rejectionNote: note,
+      });
       toast.success(`${teamScore.teamName} 팀 반려됨`);
       setRejectingTeam(null);
       setRejectionNotes((prev) => { const n = { ...prev }; delete n[teamScore.teamId]; return n; });
@@ -332,6 +345,67 @@ export default function ScoringOverview() {
     }
   }
 
+  async function handleOpenEdit(row: MemberScoreRow, teamId: string) {
+    if (!currentClub) return;
+    const scores = await getWeeklyScores(currentClub.id, selectedDate);
+    const memberScores = scores.filter(s => s.member_id === row.memberId);
+
+    const scoreMap: Partial<Record<ScoringCategory, { id: string; basePoints: number; multiplier: number; totalPoints: number }>> = {};
+    for (const s of memberScores) {
+      scoreMap[s.category] = { id: s.id, basePoints: s.base_points, multiplier: s.multiplier, totalPoints: s.total_points };
+    }
+
+    setEditingScore({ memberId: row.memberId, memberName: row.memberName, teamId, scores: scoreMap });
+    setEditValues({
+      attendance: { basePoints: scoreMap.attendance?.basePoints ?? 0, multiplier: scoreMap.attendance?.multiplier ?? 1 },
+      handbook: { basePoints: scoreMap.handbook?.basePoints ?? 0, multiplier: scoreMap.handbook?.multiplier ?? 1 },
+      uniform: { basePoints: scoreMap.uniform?.basePoints ?? 0, multiplier: scoreMap.uniform?.multiplier ?? 1 },
+      recitation: { basePoints: scoreMap.recitation?.basePoints ?? 100, multiplier: scoreMap.recitation?.multiplier ?? 0 },
+    });
+    setEditReason('');
+  }
+
+  async function handleSaveEdit() {
+    if (!editingScore || !adminTeacher || !editReason.trim()) {
+      toast.error('수정 사유를 입력해주세요');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      for (const cat of CATEGORIES) {
+        const existing = editingScore.scores[cat];
+        if (!existing) continue;
+        const newVals = editValues[cat];
+        if (existing.basePoints !== newVals.basePoints || existing.multiplier !== newVals.multiplier) {
+          await editScoreWithHistory({
+            weeklyScoreId: existing.id,
+            newBasePoints: newVals.basePoints,
+            newMultiplier: newVals.multiplier,
+            editedBy: adminTeacher.id,
+            editReason: editReason.trim(),
+          });
+        }
+      }
+      toast.success('점수가 수정되었습니다');
+      setEditingScore(null);
+      await loadData();
+    } catch {
+      toast.error('점수 수정 실패');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleViewHistory(memberId: string) {
+    try {
+      const history = await getScoreEditHistory(memberId, selectedDate);
+      setHistoryData(history);
+      setShowHistory(memberId);
+    } catch {
+      toast.error('이력 조회 실패');
+    }
+  }
+
   const submittedCount = teamScores.filter((t) => t.submission?.status === 'submitted').length;
 
   return (
@@ -339,7 +413,17 @@ export default function ScoringOverview() {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">점수 총괄</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-gray-900">점수 총괄</h1>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+              title="새로고침"
+            >
+              <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />
+            </button>
+          </div>
           {submittedCount > 0 && (
             <p className="text-sm text-blue-600 mt-0.5">{submittedCount}개 팀이 승인 대기 중입니다</p>
           )}
@@ -531,6 +615,9 @@ export default function ScoringOverview() {
                                 </th>
                               ))}
                               <th className="px-5 py-2.5 text-right text-xs font-medium text-gray-500">소계</th>
+                              {viewMode !== 'all' && (
+                                <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-500">관리</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
@@ -559,6 +646,24 @@ export default function ScoringOverview() {
                                 <td className="px-5 py-2.5 text-right font-bold text-gray-800">
                                   {row.total.toLocaleString()}
                                 </td>
+                                {viewMode !== 'all' && (
+                                  <td className="px-3 py-2.5 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => handleOpenEdit(row, t.teamId)}
+                                        className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium"
+                                      >
+                                        수정
+                                      </button>
+                                      <button
+                                        onClick={() => handleViewHistory(row.memberId)}
+                                        className="text-xs px-2 py-1 rounded bg-gray-50 text-gray-500 hover:bg-gray-100 font-medium"
+                                      >
+                                        이력
+                                      </button>
+                                    </div>
+                                  </td>
+                                )}
                               </tr>
                             ))}
                           </tbody>
@@ -579,6 +684,7 @@ export default function ScoringOverview() {
                               <td className="px-5 py-2.5 text-right font-bold" style={{ color: t.teamColor }}>
                                 {t.handbookTotal.toLocaleString()}
                               </td>
+                              {viewMode !== 'all' && <td />}
                             </tr>
                           </tfoot>
                         </table>
@@ -590,6 +696,116 @@ export default function ScoringOverview() {
             })}
           </div>
         </>
+      )}
+
+      {/* 점수 수정 모달 */}
+      {editingScore && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">점수 수정</h3>
+            <p className="text-sm text-gray-500 mb-4">{editingScore.memberName}</p>
+
+            <div className="space-y-3 mb-4">
+              {CATEGORIES.map((cat) => {
+                const existing = editingScore.scores[cat];
+                if (!existing) return null;
+                return (
+                  <div key={cat} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-700">{CATEGORY_LABELS[cat]}</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={editValues[cat].basePoints}
+                        onChange={(e) => setEditValues(prev => ({
+                          ...prev,
+                          [cat]: { ...prev[cat], basePoints: Number(e.target.value) }
+                        }))}
+                        className="w-20 text-sm border border-gray-300 rounded px-2 py-1 text-right"
+                      />
+                      {cat === 'recitation' && (
+                        <>
+                          <span className="text-xs text-gray-400">x</span>
+                          <input
+                            type="number"
+                            value={editValues[cat].multiplier}
+                            onChange={(e) => setEditValues(prev => ({
+                              ...prev,
+                              [cat]: { ...prev[cat], multiplier: Number(e.target.value) }
+                            }))}
+                            className="w-16 text-sm border border-gray-300 rounded px-2 py-1 text-right"
+                          />
+                        </>
+                      )}
+                      <span className="text-xs text-gray-400 w-12 text-right">
+                        = {editValues[cat].basePoints * editValues[cat].multiplier}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-600 mb-1">수정 사유 (필수)</label>
+              <textarea
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                placeholder="수정 사유를 입력해주세요..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
+                rows={2}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingScore(null)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSaving || !editReason.trim()}
+                className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {editSaving ? '저장중...' : '수정 저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 수정 이력 모달 */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">수정 이력</h3>
+            {historyData.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">수정 이력이 없습니다</p>
+            ) : (
+              <div className="space-y-3">
+                {historyData.map((h) => (
+                  <div key={h.id} className="p-3 bg-gray-50 rounded-lg text-sm">
+                    <div className="flex justify-between mb-1">
+                      <span className="font-medium text-gray-700">{CATEGORY_LABELS[h.category]}</span>
+                      <span className="text-xs text-gray-400">{new Date(h.created_at).toLocaleString('ko-KR')}</span>
+                    </div>
+                    <p className="text-gray-600">
+                      {h.old_total_points} → {h.new_total_points}
+                    </p>
+                    {h.edit_reason && <p className="text-xs text-gray-500 mt-1">사유: {h.edit_reason}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setShowHistory(null)}
+              className="mt-4 w-full py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Camera } from 'lucide-react';
+import { Camera, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
@@ -9,7 +9,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { Switch } from '../../components/ui/Switch';
-import type { Teacher } from '../../types/awana';
+import { getAllAssignmentsByClub, createAssignment, endAssignment, deleteAssignment } from '../../services/assignmentService';
+import type { Teacher, ActiveTeacherAssignment, AssignmentType, Room } from '../../types/awana';
 
 // ---- 상수 ----
 
@@ -29,11 +30,13 @@ const CLUB_FILTER_TABS: { key: ClubFilterKey; label: string }[] = [
 interface TeacherCardProps {
   teacher: Teacher;
   clubs: { id: string; name: string; type: string }[];
+  assignments: ActiveTeacherAssignment[];
   onAction: () => void;
   onAvatarClick: (teacher: Teacher) => void;
+  onManageAssignment: (teacher: Teacher) => void;
 }
 
-function TeacherCard({ teacher, clubs, onAction, onAvatarClick }: TeacherCardProps) {
+function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onManageAssignment }: TeacherCardProps) {
   const [loading, setLoading] = useState(false);
 
   async function handleChangePosition(newPosition: string) {
@@ -177,6 +180,38 @@ function TeacherCard({ teacher, clubs, onAction, onAvatarClick }: TeacherCardPro
             ))}
           </select>
         </div>
+
+        {/* 담임 배정 정보 */}
+        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+          {assignments.length === 0 ? (
+            <span className="text-xs text-gray-400 italic">미배정</span>
+          ) : (
+            assignments.map((a) => (
+              <span
+                key={a.id}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  a.assignment_type === 'primary' ? 'text-white' : 'border'
+                }`}
+                style={
+                  a.assignment_type === 'primary'
+                    ? { backgroundColor: a.team_color }
+                    : { borderColor: a.team_color, color: a.team_color }
+                }
+              >
+                {a.team_name} {a.assignment_type === 'primary' ? '담임' : '지원'}
+                {a.assignment_type === 'temporary' && a.end_date && (
+                  <span className="opacity-70">(~{a.end_date})</span>
+                )}
+              </span>
+            ))
+          )}
+          <button
+            onClick={() => onManageAssignment(teacher)}
+            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium ml-1"
+          >
+            배정관리
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -192,6 +227,15 @@ export default function TeacherManagement() {
   const [filterTab, setFilterTab] = useState<ClubFilterKey>('all');
   const [loading, setLoading] = useState(true);
   const [editAvatarTeacher, setEditAvatarTeacher] = useState<Teacher | null>(null);
+
+  const [assignments, setAssignments] = useState<ActiveTeacherAssignment[]>([]);
+  const [assignmentTeacher, setAssignmentTeacher] = useState<Teacher | null>(null);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [newAssignRoomId, setNewAssignRoomId] = useState('');
+  const [newAssignType, setNewAssignType] = useState<AssignmentType>('primary');
+  const [newAssignEndDate, setNewAssignEndDate] = useState('');
+  const [assignCreating, setAssignCreating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadTeachers = async () => {
     const showUnassigned = filterTab === 'unassigned';
@@ -225,10 +269,41 @@ export default function TeacherManagement() {
     setAllTeachers((data as Teacher[]) || []);
   };
 
+  const loadAssignments = async () => {
+    const allAssignments: ActiveTeacherAssignment[] = [];
+    for (const club of clubs) {
+      const clubAssignments = await getAllAssignmentsByClub(club.id);
+      allAssignments.push(...clubAssignments);
+    }
+    setAssignments(allAssignments);
+  };
+
+  const loadRooms = async () => {
+    const { data } = await supabase.from('rooms').select('*').eq('active', true);
+    setAllRooms((data as Room[]) || []);
+  };
+
   useEffect(() => {
     setLoading(true);
-    loadTeachers().finally(() => setLoading(false));
+    Promise.all([loadTeachers(), loadAssignments(), loadRooms()]).finally(() => setLoading(false));
   }, [filterTab, clubs]);
+
+  // Realtime 구독
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-teachers')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teachers' }, () => loadTeachers())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teacher_assignments' }, () => loadAssignments())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [filterTab, clubs]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([loadTeachers(), loadAssignments(), loadRooms()]);
+    setRefreshing(false);
+    toast.success('갱신됨');
+  };
 
   const handleTeacherAvatarUpload = async (url: string) => {
     if (!editAvatarTeacher) return;
@@ -248,6 +323,50 @@ export default function TeacherManagement() {
     }
   };
 
+  const handleCreateAssignment = async () => {
+    if (!assignmentTeacher || !newAssignRoomId || !currentTeacher) return;
+    setAssignCreating(true);
+    try {
+      await createAssignment({
+        teacherId: assignmentTeacher.id,
+        roomId: newAssignRoomId,
+        assignmentType: newAssignType,
+        endDate: newAssignType === 'temporary' && newAssignEndDate ? newAssignEndDate : null,
+        createdBy: currentTeacher.id,
+      });
+      toast.success('배정이 추가되었습니다');
+      setNewAssignRoomId('');
+      setNewAssignType('primary');
+      setNewAssignEndDate('');
+      await loadAssignments();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      toast.error(msg.includes('duplicate') ? '이미 배정되어 있습니다' : '배정 추가 실패');
+    } finally {
+      setAssignCreating(false);
+    }
+  };
+
+  const handleEndAssignment = async (assignmentId: string) => {
+    try {
+      await endAssignment(assignmentId);
+      toast.success('배정이 종료되었습니다');
+      await loadAssignments();
+    } catch {
+      toast.error('배정 종료 실패');
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    try {
+      await deleteAssignment(assignmentId);
+      toast.success('배정이 삭제되었습니다');
+      await loadAssignments();
+    } catch {
+      toast.error('배정 삭제 실패');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -260,7 +379,17 @@ export default function TeacherManagement() {
     <div>
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">교사 관리</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900">교사 관리</h1>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+            title="새로고침"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* 클럽 필터 탭 */}
@@ -290,8 +419,10 @@ export default function TeacherManagement() {
               key={teacher.id}
               teacher={teacher}
               clubs={clubs}
-              onAction={loadTeachers}
+              assignments={assignments.filter(a => a.teacher_id === teacher.id)}
+              onAction={() => { loadTeachers(); loadAssignments(); }}
               onAvatarClick={setEditAvatarTeacher}
+              onManageAssignment={setAssignmentTeacher}
             />
           ))}
         </div>
@@ -313,6 +444,102 @@ export default function TeacherManagement() {
               onUpload={handleTeacherAvatarUpload}
               size="lg"
             />
+          </div>
+        )}
+      </Modal>
+
+      {/* 배정 관리 모달 */}
+      <Modal
+        open={!!assignmentTeacher}
+        onClose={() => setAssignmentTeacher(null)}
+        title={`${assignmentTeacher?.name} - 배정 관리`}
+      >
+        {assignmentTeacher && (
+          <div className="space-y-4">
+            {/* 현재 배정 목록 */}
+            <div>
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">현재 배정</h4>
+              {assignments.filter(a => a.teacher_id === assignmentTeacher.id).length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">배정된 반이 없습니다</p>
+              ) : (
+                <div className="space-y-2">
+                  {assignments.filter(a => a.teacher_id === assignmentTeacher.id).map((a) => (
+                    <div key={a.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: a.team_color }} />
+                        <span className="text-sm font-medium">{a.room_name}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          a.assignment_type === 'primary' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {a.assignment_type === 'primary' ? '담임' : '지원'}
+                        </span>
+                        {a.end_date && <span className="text-xs text-gray-400">~{a.end_date}</span>}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleEndAssignment(a.id)}
+                          className="text-xs text-amber-600 hover:text-amber-800 px-2 py-1"
+                        >
+                          종료
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAssignment(a.id)}
+                          className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 새 배정 추가 */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">새 배정 추가</h4>
+              <div className="space-y-2">
+                <select
+                  value={newAssignRoomId}
+                  onChange={(e) => setNewAssignRoomId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="">교실 선택</option>
+                  {allRooms
+                    .filter(r => r.club_id === assignmentTeacher.club_id)
+                    .map((room) => (
+                      <option key={room.id} value={room.id}>{room.name}</option>
+                    ))
+                  }
+                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={newAssignType}
+                    onChange={(e) => setNewAssignType(e.target.value as AssignmentType)}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  >
+                    <option value="primary">담임 (영구)</option>
+                    <option value="temporary">지원 (임시)</option>
+                  </select>
+                  {newAssignType === 'temporary' && (
+                    <input
+                      type="date"
+                      value={newAssignEndDate}
+                      onChange={(e) => setNewAssignEndDate(e.target.value)}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      placeholder="종료일"
+                    />
+                  )}
+                </div>
+                <button
+                  onClick={handleCreateAssignment}
+                  disabled={!newAssignRoomId || assignCreating}
+                  className="w-full py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                >
+                  {assignCreating ? '추가중...' : '배정 추가'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </Modal>

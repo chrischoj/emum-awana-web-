@@ -75,7 +75,7 @@ export const adminNavItems: NavItem[] = adminNavSections.flatMap((s) => s.items)
 
 export const teacherNavItems: NavItem[] = [
   { label: '홈', path: '/teacher', icon: Home },
+  { label: '출석', path: '/teacher/attendance', icon: ClipboardCheck },
   { label: '점수 입력', path: '/teacher/scoring', icon: PenLine },
   { label: '게임 점수', path: '/teacher/game', icon: Gamepad2 },
-  { label: '출석', path: '/teacher/attendance', icon: ClipboardCheck },
 ];

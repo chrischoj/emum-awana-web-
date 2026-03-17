@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
-import { getWeeklyScores, upsertScore } from '../../services/scoringService';
-import { recordAttendance, getAttendancePoints } from '../../services/attendanceService';
+import { getWeeklyScores, upsertScore, getSubmission, submitScores, reopenSubmission } from '../../services/scoringService';
+import { recordAttendance, getAttendancePoints, getAttendanceByDate } from '../../services/attendanceService';
+import { supabase } from '../../lib/supabase';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
-import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member } from '../../types/awana';
+import { useTeacherAssignment } from '../../hooks/useTeacherAssignment';
+import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member, SubmissionStatus } from '../../types/awana';
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
 const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
@@ -35,24 +37,42 @@ export default function ScoringPage() {
   const { teacher } = useAuth();
   const { currentClub, curriculumTemplate, teams, members } = useClub();
   const { openMemberProfile } = useMemberProfile();
+  const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned, primaryAssignments, temporaryAssignments } = useTeacherAssignment();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
   const [loading, setLoading] = useState(true);
   const [recitationMemberId, setRecitationMemberId] = useState<string | null>(null);
   const pendingSyncs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [submission, setSubmission] = useState<{ status: SubmissionStatus; rejectionNote?: string | null } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
+  const baseMembers = isUnassigned ? members : assignedMembers;
   const filteredMembers = selectedTeamId
-    ? members.filter((m) => m.team_id === selectedTeamId)
-    : members;
+    ? baseMembers.filter((m) => m.team_id === selectedTeamId)
+    : baseMembers;
+
+  const isLocked = isReadOnly || submission?.status === 'submitted' || submission?.status === 'approved';
 
   // Load scores
-  useEffect(() => {
-    if (!currentClub) return;
-    setLoading(true);
+  const loadScores = useCallback(
+    async (showLoading = true) => {
+      if (!currentClub) return;
+      if (showLoading) setLoading(true);
+      try {
+        const [weeklyScores, attendanceRecords] = await Promise.all([
+          getWeeklyScores(currentClub.id, selectedDate),
+          getAttendanceByDate(selectedDate, currentClub.id),
+        ]);
 
-    getWeeklyScores(currentClub.id, selectedDate)
-      .then((weeklyScores) => {
+        // Build attendance status map from member_attendance table
+        const attStatusMap: Record<string, AttendanceStatus> = {};
+        for (const rec of attendanceRecords) {
+          const status = rec.status || (rec.present ? 'present' : 'absent');
+          if (status !== 'none') attStatusMap[rec.member_id] = status;
+        }
+
         const scoreMap: Record<string, MemberScoreState> = {};
         for (const member of members) {
           const memberScores = weeklyScores.filter((s) => s.member_id === member.id);
@@ -61,11 +81,11 @@ export default function ScoringPage() {
           const uni = memberScores.find((s) => s.category === 'uniform');
           const rec = memberScores.find((s) => s.category === 'recitation');
 
-          const attPoints = att?.total_points ?? 0;
-          const attStatus: AttendanceStatus = attPoints >= 50 ? 'present' : 'absent';
+          // Use actual status from member_attendance table
+          const attStatus = attStatusMap[member.id] ?? 'present';
 
           const state: Omit<MemberScoreState, 'total'> = {
-            attendance: { status: att ? attStatus : 'present', points: att?.total_points ?? 0 },
+            attendance: { status: attStatus, points: att?.total_points ?? 0 },
             handbook: { done: (hb?.base_points ?? 0) > 0, points: hb?.total_points ?? 0 },
             uniform: { done: (uni?.base_points ?? 0) > 0, points: uni?.total_points ?? 0 },
             recitation: { multiplier: rec?.multiplier ?? 0, points: rec?.total_points ?? 0 },
@@ -73,10 +93,58 @@ export default function ScoringPage() {
           scoreMap[member.id] = { ...state, total: calcTotal(state) };
         }
         setScores(scoreMap);
+      } catch {
+        toast.error('점수 로드 실패');
+      } finally {
+        if (showLoading) setLoading(false);
+      }
+    },
+    [currentClub, selectedDate, members]
+  );
+
+  useEffect(() => {
+    loadScores(true);
+  }, [loadScores]);
+
+  // Realtime subscription for attendance & score changes
+  useEffect(() => {
+    if (!currentClub) return;
+
+    const channel = supabase
+      .channel(`scoring-sync-${currentClub.id}-${selectedDate}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'member_attendance', filter: `training_date=eq.${selectedDate}` },
+        () => loadScores(false)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'weekly_scores', filter: `club_id=eq.${currentClub.id}` },
+        () => loadScores(false)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentClub, selectedDate, loadScores]);
+
+  // Load submission status
+  useEffect(() => {
+    if (!currentClub || !selectedTeamId) {
+      setSubmission(null);
+      return;
+    }
+    getSubmission(currentClub.id, selectedTeamId, selectedDate)
+      .then((sub) => {
+        if (sub) {
+          setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
+        } else {
+          setSubmission(null);
+        }
       })
-      .catch(() => toast.error('점수 로드 실패'))
-      .finally(() => setLoading(false));
-  }, [currentClub, selectedDate, members]);
+      .catch(() => setSubmission(null));
+  }, [currentClub, selectedTeamId, selectedDate]);
 
   // Debounced sync to Supabase
   const syncScore = useCallback(
@@ -115,6 +183,7 @@ export default function ScoringPage() {
   );
 
   const handleAttendanceTap = (memberId: string) => {
+    if (isLocked) return;
     navigator.vibrate?.(10);
     setScores((prev) => {
       const current = prev[memberId];
@@ -134,6 +203,7 @@ export default function ScoringPage() {
   };
 
   const handleToggle = (memberId: string, category: 'handbook' | 'uniform') => {
+    if (isLocked) return;
     navigator.vibrate?.(10);
     setScores((prev) => {
       const current = prev[memberId];
@@ -151,6 +221,7 @@ export default function ScoringPage() {
   };
 
   const handleRecitationChange = (memberId: string, delta: number) => {
+    if (isLocked) return;
     navigator.vibrate?.(10);
     setScores((prev) => {
       const current = prev[memberId];
@@ -166,6 +237,91 @@ export default function ScoringPage() {
       return { ...prev, [memberId]: updated };
     });
   };
+
+  const handleSubmit = async () => {
+    if (!currentClub || !selectedTeamId || !teacher) return;
+    // flush pending syncs - 대기 중인 sync를 즉시 실행
+    const flushPromises: Promise<void>[] = [];
+    for (const [key, timeout] of pendingSyncs.current) {
+      clearTimeout(timeout);
+      // key format: "memberId-category"
+      const dashIdx = key.indexOf('-');
+      const memberId = key.slice(0, dashIdx);
+      const category = key.slice(dashIdx + 1);
+      const memberScore = scores[memberId];
+      if (memberScore && category) {
+        const cat = category as ScoringCategory;
+        let basePoints = 0;
+        let multiplier = 1;
+        if (cat === 'attendance') {
+          basePoints = memberScore.attendance.points;
+        } else if (cat === 'handbook') {
+          basePoints = memberScore.handbook.points;
+        } else if (cat === 'uniform') {
+          basePoints = memberScore.uniform.points;
+        } else if (cat === 'recitation') {
+          basePoints = 100;
+          multiplier = memberScore.recitation.multiplier;
+        }
+        flushPromises.push(
+          upsertScore({
+            memberId,
+            clubId: currentClub.id,
+            trainingDate: selectedDate,
+            category: cat,
+            basePoints,
+            multiplier,
+            recordedBy: teacher.id,
+          }).then(() => {}).catch(() => {})
+        );
+      }
+    }
+    pendingSyncs.current.clear();
+    if (flushPromises.length > 0) {
+      await Promise.all(flushPromises);
+    }
+
+    setSubmitting(true);
+    try {
+      await submitScores({
+        clubId: currentClub.id,
+        teamId: selectedTeamId,
+        trainingDate: selectedDate,
+        submittedBy: teacher.id,
+      });
+      setSubmission({ status: 'submitted' });
+      setShowSubmitConfirm(false);
+      toast.success('점수가 제출되었습니다');
+    } catch {
+      toast.error('제출 실패');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReopen = async () => {
+    if (!currentClub || !selectedTeamId) return;
+    try {
+      await reopenSubmission({
+        clubId: currentClub.id,
+        teamId: selectedTeamId,
+        trainingDate: selectedDate,
+      });
+      setSubmission({ status: 'draft' });
+      toast.success('수정 모드로 전환되었습니다');
+    } catch {
+      toast.error('전환 실패');
+    }
+  };
+
+  const visibleTeams = isUnassigned ? teams : teams.filter(t => assignedTeamIds.includes(t.id));
+
+  // 배정된 반이 1개면 자동 선택
+  useEffect(() => {
+    if (!isUnassigned && visibleTeams.length === 1) {
+      setSelectedTeamId(visibleTeams[0].id);
+    }
+  }, [isUnassigned, visibleTeams]);
 
   const teamTotal = filteredMembers.reduce(
     (sum, m) => sum + (scores[m.id]?.total ?? 0),
@@ -193,33 +349,65 @@ export default function ScoringPage() {
         />
       </div>
 
-      {/* Team tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide">
-        <button
-          onClick={() => setSelectedTeamId(null)}
-          className={cn(
-            'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
-            !selectedTeamId ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
-          )}
-        >
-          전체
-        </button>
-        {teams.map((team) => (
+      {/* Team tabs - 2개 이상일 때만 표시 */}
+      {(isUnassigned || visibleTeams.length >= 2) && (
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide">
           <button
-            key={team.id}
-            onClick={() => setSelectedTeamId(team.id)}
+            onClick={() => setSelectedTeamId(null)}
             className={cn(
               'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
-              selectedTeamId === team.id
-                ? 'text-white'
-                : 'bg-gray-100 text-gray-700'
+              !selectedTeamId ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
             )}
-            style={selectedTeamId === team.id ? { backgroundColor: team.color } : undefined}
           >
-            {team.name}
+            전체
           </button>
-        ))}
-      </div>
+          {visibleTeams.map((team) => (
+            <button
+              key={team.id}
+              onClick={() => setSelectedTeamId(team.id)}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0 transition-colors',
+                selectedTeamId === team.id
+                  ? 'text-white'
+                  : 'bg-gray-100 text-gray-700'
+              )}
+              style={selectedTeamId === team.id ? { backgroundColor: team.color } : undefined}
+            >
+              {team.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Unassigned banner */}
+      {isUnassigned && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700 font-medium">반 배정 후 입력이 가능합니다</p>
+          <p className="text-xs text-amber-600 mt-0.5">현재 열람 전용 모드입니다</p>
+        </div>
+      )}
+
+      {/* Rejected banner */}
+      {submission?.status === 'rejected' && submission.rejectionNote && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700 font-medium">반려됨</p>
+          <p className="text-xs text-red-600 mt-0.5">사유: {submission.rejectionNote}</p>
+          <button onClick={handleReopen} className="mt-2 text-xs text-red-700 underline font-medium">수정 후 재제출하기</button>
+        </div>
+      )}
+
+      {/* Submitted/Approved lock banner */}
+      {(submission?.status === 'submitted' || submission?.status === 'approved') && (
+        <div className={`mb-4 p-3 rounded-lg border ${
+          submission.status === 'submitted' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
+        }`}>
+          <p className={`text-sm font-medium ${
+            submission.status === 'submitted' ? 'text-blue-700' : 'text-green-700'
+          }`}>
+            {submission.status === 'submitted' ? '제출 완료 - 승인 대기 중' : '승인 완료'}
+          </p>
+        </div>
+      )}
 
       {/* Member cards */}
       <div className="space-y-3">
@@ -253,9 +441,11 @@ export default function ScoringPage() {
                 <button
                   type="button"
                   onClick={() => handleAttendanceTap(member.id)}
+                  disabled={isLocked}
                   className={cn(
                     'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
-                    ATTENDANCE_COLORS[s.attendance.status]
+                    ATTENDANCE_COLORS[s.attendance.status],
+                    isLocked && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <span className="text-[10px] font-medium">출석</span>
@@ -267,11 +457,13 @@ export default function ScoringPage() {
                 <button
                   type="button"
                   onClick={() => handleToggle(member.id, 'handbook')}
+                  disabled={isLocked}
                   className={cn(
                     'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
                     s.handbook.done
                       ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent'
+                      : 'bg-gray-100 text-gray-500 border-transparent',
+                    isLocked && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <span className="text-[10px] font-medium">핸드북</span>
@@ -283,11 +475,13 @@ export default function ScoringPage() {
                 <button
                   type="button"
                   onClick={() => handleToggle(member.id, 'uniform')}
+                  disabled={isLocked}
                   className={cn(
                     'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
                     s.uniform.done
                       ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent'
+                      : 'bg-gray-100 text-gray-500 border-transparent',
+                    isLocked && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <span className="text-[10px] font-medium">단복</span>
@@ -303,11 +497,13 @@ export default function ScoringPage() {
                       recitationMemberId === member.id ? null : member.id
                     )
                   }
+                  disabled={isLocked}
                   className={cn(
                     'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
                     s.recitation.multiplier > 0
                       ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent'
+                      : 'bg-gray-100 text-gray-500 border-transparent',
+                    isLocked && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   <span className="text-[10px] font-medium">암송</span>
@@ -352,8 +548,57 @@ export default function ScoringPage() {
           <span className="text-sm text-gray-500">팀 합계</span>
           <span className="ml-2 text-lg font-bold text-indigo-600">{teamTotal.toLocaleString()}pt</span>
         </div>
-        <span className="text-xs text-green-600 font-medium">자동 저장됨</span>
+        <div className="flex items-center gap-2">
+          {submission?.status && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              submission.status === 'draft' ? 'bg-gray-100 text-gray-600' :
+              submission.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+              submission.status === 'approved' ? 'bg-green-100 text-green-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {submission.status === 'draft' ? '작성중' :
+               submission.status === 'submitted' ? '제출됨' :
+               submission.status === 'approved' ? '승인됨' : '반려됨'}
+            </span>
+          )}
+          {!isLocked && selectedTeamId && (
+            <button
+              onClick={() => setShowSubmitConfirm(true)}
+              disabled={submitting}
+              className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg active:scale-95 touch-manipulation disabled:opacity-50"
+            >
+              {submitting ? '제출중...' : '제출'}
+            </button>
+          )}
+          {!selectedTeamId && <span className="text-xs text-gray-400">팀을 선택하세요</span>}
+          {isLocked && !isUnassigned && <span className="text-xs text-green-600 font-medium">자동 저장됨</span>}
+        </div>
       </div>
+
+      {/* Submit confirmation modal */}
+      {showSubmitConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">점수를 제출하시겠습니까?</h3>
+            <p className="text-sm text-gray-500 mb-4">제출 후에는 수정이 불가합니다. 관리자 승인 후 점수가 확정됩니다.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowSubmitConfirm(false)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {submitting ? '제출중...' : '제출하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

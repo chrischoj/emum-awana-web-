@@ -262,3 +262,92 @@ export interface TrainingSchedule {
   updated_at: string;
 }
 
+// ---- Assignment Types (담임 배정) ----
+
+export type AssignmentType = 'primary' | 'temporary';
+
+export interface TeacherRoomAssignment {
+  id: string;
+  teacher_id: string;
+  room_id: string;
+  assignment_type: AssignmentType;
+  effective_date: string;
+  end_date: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** active_teacher_assignments 뷰의 반환 타입 */
+export interface ActiveTeacherAssignment {
+  id: string;
+  teacher_id: string;
+  room_id: string;
+  assignment_type: AssignmentType;
+  effective_date: string;
+  end_date: string | null;
+  club_id: string;
+  team_id: string;
+  room_name: string;
+  team_name: string;
+  team_color: string;
+}
+
+// ---- Submission Types (점수 제출/승인) ----
+
+export type SubmissionStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
+
+export interface WeeklyScoreSubmission {
+  id: string;
+  club_id: string;
+  team_id: string;
+  training_date: string;
+  status: SubmissionStatus;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---- Score Edit History (점수 수정 이력) ----
+
+export interface ScoreEditHistory {
+  id: string;
+  weekly_score_id: string;
+  member_id: string;
+  club_id: string;
+  training_date: string;
+  category: ScoringCategory;
+  old_base_points: number;
+  old_multiplier: number;
+  old_total_points: number;
+  new_base_points: number;
+  new_multiplier: number;
+  new_total_points: number;
+  edited_by: string;
+  edit_reason: string | null;
+  created_at: string;
+}
+
+// ---- Teacher Assignment Info (프런트엔드 훅 반환용) ----
+
+export interface TeacherAssignmentInfo {
+  /** 배정된 팀 ID 목록 (primary + active temporary) */
+  assignedTeamIds: string[];
+  /** 배정된 방 ID 목록 */
+  assignedRoomIds: string[];
+  /** primary 배정 상세 */
+  primaryAssignments: ActiveTeacherAssignment[];
+  /** temporary 배정 상세 */
+  temporaryAssignments: ActiveTeacherAssignment[];
+  /** 배정된 팀의 멤버만 필터 */
+  assignedMembers: Member[];
+  /** 미배정 교사 여부 */
+  isUnassigned: boolean;
+  /** 읽기 전용 여부 (미배정 = true) */
+  isReadOnly: boolean;
+}
+
