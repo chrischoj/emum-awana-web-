@@ -7,8 +7,6 @@ import {
   Gamepad2,
   DoorOpen,
   BarChart3,
-  Package,
-  Wallet,
   Settings,
   Home,
   PenLine,
@@ -33,8 +31,6 @@ export const adminNavItems: NavItem[] = [
   { label: '시상식', path: '/admin/ceremony', icon: Star },
   { label: '교실 관리', path: '/admin/rooms', icon: DoorOpen },
   { label: '보고서', path: '/admin/reports', icon: BarChart3 },
-  { label: '재고 관리', path: '/admin/inventory', icon: Package },
-  { label: '예산 관리', path: '/admin/budget', icon: Wallet },
   { label: '설정', path: '/admin/settings', icon: Settings },
 ];
 

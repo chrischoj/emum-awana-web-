@@ -11,8 +11,8 @@ import {
 import { cn, getToday } from '../../lib/utils';
 import type { GameScoreEntry } from '../../types/awana';
 
-const POINT_PRESETS = [50, 100, 200, 500];
-const DESCRIPTION_PRESETS = ['릴레이 게임', '퀴즈 게임', '응원 점수', '보너스', '참여 점수'];
+const POINT_PRESETS = [50, 100, 200, 400];
+const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수', '보너스', '애교 점수'];
 
 export default function GameScoringPage() {
   const { teacher } = useAuth();
