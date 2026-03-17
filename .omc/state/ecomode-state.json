@@ -1,0 +1,7 @@
+{
+  "active": true,
+  "started_at": "2026-03-17T08:28:34.265Z",
+  "original_prompt": "DB스키마에 맞춰서 ui중에도 쓸데 없는 기능은 적절히 제거시켜줄래? 재고 관리, budget등 삭제해주고~~ qr코드부터해서, 관리자 페이지등등은 어떻게 활용가능한지 실행 흐름 알려줘~",
+  "reinforcement_count": 0,
+  "last_checked_at": "2026-03-17T08:28:34.266Z"
+}

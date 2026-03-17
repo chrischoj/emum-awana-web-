@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install)",
+      "Bash(npm run dev)",
+      "Bash(npx vite --port 4321)",
+      "Bash(nslookup zjtnewomqeiwqueizwvw.supabase.co 2>&1 || true)",
+      "WebFetch(domain:awana-awards.netlify.app)",
+      "Bash(npm install clsx tailwind-merge class-variance-authority qrcode.react 2>&1 | tail -5)",
+      "Bash(npx tsc --noEmit 2>&1 | head -60)",
+      "Bash(npx tsc --noEmit 2>&1 | head -80)",
+      "Bash(npm run build 2>&1 | tail -20)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --max-time 5 https://zjtnewomqeiwqueizwvw.supabase.co/rest/v1/ 2>&1 || echo \"FAILED\")",
+      "Bash(find /Users/chris.cho/work/study/web_sevice/awana/awana-web-service/src -type f \\\\\\( -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) 2>/dev/null | head -30)",
+      "Bash(find /Users/chris.cho/work/study/web_sevice/awana/awana-web-service -maxdepth 2 -name \"*.md\" -type f 2>/dev/null | head -20)",
+      "Bash(which netlify 2>/dev/null || npx netlify --version 2>/dev/null || echo \"NOT_INSTALLED\")",
+      "Bash(npm run build 2>&1 | tail -3)",
+      "Bash(netlify deploy --prod --dir=dist --message=\"Initial deploy: Awana Club Management System\" 2>&1)",
+      "Bash(npx tsc --noEmit 2>&1)"
+    ]
+  }
+}
