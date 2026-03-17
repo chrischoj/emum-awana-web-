@@ -30,7 +30,13 @@
       "Bash(curl -s \"https://fvzantauyjcfvzndsqky.supabase.co/rest/v1/clubs?select=id,name,type\" \\\\\n  -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\" \\\\\n  -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\")",
       "mcp__plugin_oh-my-claudecode_omc-tools__lsp_diagnostics_directory",
       "Bash(npx tsc --noEmit 2>&1 | head -10 && npx vite build 2>&1 | tail -5)",
-      "Bash(npx tsc --noEmit --pretty 2>&1 | head -40)"
+      "Bash(npx tsc --noEmit --pretty 2>&1 | head -40)",
+      "Bash(npm run build 2>&1)",
+      "Bash(netlify deploy --prod --dir=dist 2>&12)",
+      "Bash(gh auth status 2>&1)",
+      "Bash(git remote add origin https://github.com/chrischoj/emum-awana-web-.git)",
+      "Bash(git push -u origin master)",
+      "Bash(npx tsc --noEmit --pretty 2>&1 | head -30)"
     ]
   }
 }

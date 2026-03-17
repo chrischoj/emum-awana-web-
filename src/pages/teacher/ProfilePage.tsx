@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 
-const POSITIONS = ['조정관', '감독관', '서기', '게임디렉터', '회계', '교사'] as const;
+const POSITIONS = ['조정관', '감독관', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
 
 export default function ProfilePage() {
   const { teacher, user, refreshTeacher } = useAuth();

@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { AvatarUpload } from '../components/ui/AvatarUpload';
 
 type TabType = 'teacher' | 'member';
+
+const POSITIONS = ['조정관', '감독관', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
 
 const initialFormData = {
   email: '',
@@ -13,6 +16,7 @@ const initialFormData = {
   name: '',
   phone: '',
   clubId: '',
+  position: '',
   birthday: '',
   parentName: '',
   parentPhone: '',
@@ -20,6 +24,7 @@ const initialFormData = {
 
 const Signup = () => {
   const navigate = useNavigate();
+  const { refreshTeacher } = useAuth();
   const [searchParams] = useSearchParams();
   const qrRoomId = searchParams.get('roomId');
   const [roomInfo, setRoomInfo] = useState<{ roomId: string; clubId: string; clubName: string } | null>(null);
@@ -100,13 +105,18 @@ const Signup = () => {
         user_id: authData.user?.id,
         name: formData.name,
         phone: formData.phone,
-        club_id: formData.clubId,
+        club_id: formData.clubId || null,
+        position: formData.position || null,
         role: 'teacher',
       })
       .select('id, name')
       .single();
 
     if (profileError) throw profileError;
+
+    // signUp 시 onAuthStateChange가 teachers INSERT 전에 fetchTeacher를 호출해서
+    // teacher가 null이 되는 race condition 방지 — INSERT 완료 후 명시적으로 재조회
+    await refreshTeacher();
 
     toast.success('회원가입이 완료되었습니다!');
     setRegistered({ id: teacherData.id, name: teacherData.name, folder: 'teachers' });
@@ -419,13 +429,17 @@ const Signup = () => {
             <select
               id="clubId"
               name="clubId"
-              required
+              required={activeTab === 'member'}
               value={formData.clubId}
               onChange={handleChange}
               className={inputClass}
               disabled={!!roomInfo}
             >
-              <option value="">클럽을 선택해주세요</option>
+              {activeTab === 'teacher' ? (
+                <option value="">없음 (그 외)</option>
+              ) : (
+                <option value="">클럽을 선택해주세요</option>
+              )}
               {clubs.map((club) => (
                 <option key={club.id} value={club.id}>
                   {club.name} ({club.type === 'sparks' ? 'Sparks' : 'T&T'})
@@ -433,6 +447,27 @@ const Signup = () => {
               ))}
             </select>
           </div>
+
+          {/* 교사 전용: 직책 */}
+          {activeTab === 'teacher' && (
+            <div>
+              <label htmlFor="position" className="block text-sm font-medium text-gray-700">
+                직책 <span className="text-gray-400 font-normal">(선택)</span>
+              </label>
+              <select
+                id="position"
+                name="position"
+                value={formData.position}
+                onChange={handleChange}
+                className={inputClass}
+              >
+                <option value="">선택 안함</option>
+                {POSITIONS.map((pos) => (
+                  <option key={pos} value={pos}>{pos}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <button
             type="submit"
