@@ -90,9 +90,13 @@ export default function QRLandingPage() {
 
         {!session ? (
           <>
-            <p className="text-gray-500 mb-6">로그인 후 체크인됩니다.</p>
-            <Button onClick={() => navigate('/login')} className="w-full">
+            <p className="text-gray-500 mb-6">교사 로그인 또는 클럽원 회원가입을 해주세요.</p>
+            <Button onClick={() => navigate(`/login?redirect=/qr/${roomId}`)} className="w-full">
               로그인
+            </Button>
+            <p className="text-xs text-gray-400 my-3">또는</p>
+            <Button onClick={() => navigate(`/signup?roomId=${roomId}`)} variant="outline" className="w-full">
+              클럽원 회원가입
             </Button>
           </>
         ) : checkedIn ? (

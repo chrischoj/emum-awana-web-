@@ -322,20 +322,48 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardP
 
   async function handleApprove() {
     setLoading(true);
-    const { error } = await supabase
-      .from('members')
-      .update({
+    try {
+      let autoTeamId: string | null = null;
+
+      // QR 가입 멤버: 방의 team_id 조회하여 자동 배정
+      if (member.registered_via_room_id) {
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('team_id')
+          .eq('id', member.registered_via_room_id)
+          .single();
+        if (room?.team_id) {
+          autoTeamId = room.team_id;
+        }
+      }
+
+      const updateData: Record<string, unknown> = {
         enrollment_status: 'active',
         approved_by: teacher?.id || null,
         approved_at: new Date().toISOString(),
-      })
-      .eq('id', member.id);
+      };
 
-    if (error) {
-      toast.error('승인 실패: ' + error.message);
-    } else {
-      toast.success(`${member.name}을(를) 승인했습니다.`);
-      onAction();
+      if (autoTeamId) {
+        updateData.team_id = autoTeamId;
+      }
+
+      const { error } = await supabase
+        .from('members')
+        .update(updateData)
+        .eq('id', member.id);
+
+      if (error) {
+        toast.error('승인 실패: ' + error.message);
+      } else {
+        if (autoTeamId) {
+          toast.success(`${member.name}을(를) 승인하고 팀에 자동 배정했습니다.`);
+        } else {
+          toast.success(`${member.name}을(를) 승인했습니다.`);
+        }
+        onAction();
+      }
+    } catch {
+      toast.error('승인 처리 중 오류 발생');
     }
     setLoading(false);
   }
@@ -397,7 +425,14 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardP
               <Avatar name={member.name} src={member.avatar_url} size="md" />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900">{member.name}</p>
+              <p className="text-sm font-bold text-gray-900">
+                {member.name}
+                {member.registered_via_room_id && (
+                  <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
+                    QR
+                  </span>
+                )}
+              </p>
               {member.birthday && (
                 <p className="text-xs text-gray-500">{formatDate(member.birthday)}</p>
               )}

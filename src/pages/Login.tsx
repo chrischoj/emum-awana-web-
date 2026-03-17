@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,9 @@ const Login = () => {
 
       if (error) throw error;
 
-      navigate('/');
+      const redirect = searchParams.get('redirect');
+      const isValidRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//');
+      navigate(isValidRedirect ? redirect : '/');
       toast.success('로그인되었습니다!');
     } catch (error) {
       console.error('Login error:', error);
@@ -82,7 +85,12 @@ const Login = () => {
           <div className="text-center">
             <button
               type="button"
-              onClick={() => navigate('/signup')}
+              onClick={() => {
+                const redirectParam = searchParams.get('redirect');
+                const qrMatch = redirectParam?.match(/^\/qr\/(.+)$/);
+                const signupPath = qrMatch ? `/signup?roomId=${qrMatch[1]}` : '/signup';
+                navigate(signupPath);
+              }}
               className="text-sm text-indigo-600 hover:text-indigo-500"
             >
               계정이 없으신가요? 회원가입하기

@@ -305,7 +305,7 @@ CREATE POLICY "teams_all_admin" ON teams FOR ALL USING (
 
 -- members: 인증 읽기/쓰기
 CREATE POLICY "members_select" ON members FOR SELECT USING (auth.role() = 'authenticated');
-CREATE POLICY "members_insert" ON members FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "members_insert" ON members FOR INSERT WITH CHECK (true);
 CREATE POLICY "members_update" ON members FOR UPDATE USING (auth.role() = 'authenticated');
 CREATE POLICY "members_delete" ON members FOR DELETE USING (
     EXISTS (SELECT 1 FROM teachers WHERE user_id = auth.uid() AND role = 'admin')

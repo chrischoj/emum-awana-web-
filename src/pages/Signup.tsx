@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 import { AvatarUpload } from '../components/ui/AvatarUpload';
@@ -20,6 +20,9 @@ const initialFormData = {
 
 const Signup = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const qrRoomId = searchParams.get('roomId');
+  const [roomInfo, setRoomInfo] = useState<{ roomId: string; clubId: string; clubName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('teacher');
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
@@ -35,6 +38,27 @@ const Signup = () => {
     };
     fetchClubs();
   }, []);
+
+  useEffect(() => {
+    if (!qrRoomId) return;
+    const fetchRoom = async () => {
+      const { data: room } = await supabase
+        .from('rooms')
+        .select('id, club_id, clubs(name)')
+        .eq('id', qrRoomId)
+        .single();
+      if (room) {
+        setRoomInfo({
+          roomId: room.id,
+          clubId: room.club_id,
+          clubName: (room.clubs as any)?.name || '',
+        });
+        setFormData(prev => ({ ...prev, clubId: room.club_id }));
+        setActiveTab('member');
+      }
+    };
+    fetchRoom();
+  }, [qrRoomId]);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -121,6 +145,7 @@ const Signup = () => {
         enrollment_status: 'pending',
         active: true,
         registered_by: null,
+        registered_via_room_id: roomInfo?.roomId || null,
       })
       .select('id, name')
       .single();
@@ -224,24 +249,26 @@ const Signup = () => {
         </div>
 
         {/* 탭 */}
-        <div className="flex gap-2 mb-6">
-          {([{ key: 'teacher', label: '교사' }, { key: 'member', label: '클럽원' }] as { key: TabType; label: string }[]).map(
-            ({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => handleTabChange(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === key
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          )}
-        </div>
+        {!roomInfo && (
+          <div className="flex gap-2 mb-6">
+            {([{ key: 'teacher', label: '교사' }, { key: 'member', label: '클럽원' }] as { key: TabType; label: string }[]).map(
+              ({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleTabChange(key)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === key
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* 공통: 이메일 */}
@@ -396,6 +423,7 @@ const Signup = () => {
               value={formData.clubId}
               onChange={handleChange}
               className={inputClass}
+              disabled={!!roomInfo}
             >
               <option value="">클럽을 선택해주세요</option>
               {clubs.map((club) => (

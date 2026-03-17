@@ -329,7 +329,7 @@ export default function TeamManagement() {
     setLoading(true);
     const [teamsRes, membersRes] = await Promise.all([
       supabase.from('teams').select('*').order('name'),
-      supabase.from('members').select('*').eq('active', true).order('name'),
+      supabase.from('members').select('*').eq('active', true).eq('enrollment_status', 'active').order('name'),
     ]);
     setAllTeams((teamsRes.data as Team[]) || []);
     setAllMembers((membersRes.data as Member[]) || []);
