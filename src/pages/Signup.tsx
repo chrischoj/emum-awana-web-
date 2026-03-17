@@ -98,28 +98,26 @@ const Signup = () => {
       return;
     }
 
-    // Create teacher profile
-    const { data: teacherData, error: profileError } = await supabase
+    // Create teacher profile — INSERT와 SELECT를 분리하여 RLS SELECT 차단 시에도 가입 진행
+    const { error: insertError } = await supabase
       .from('teachers')
       .insert({
-        user_id: authData.user?.id,
+        user_id: authData.user!.id,
         name: formData.name,
         phone: formData.phone,
         club_id: formData.clubId || null,
         position: formData.position || null,
         role: 'teacher',
-      })
-      .select('id, name')
-      .single();
+      });
 
-    if (profileError) throw profileError;
+    if (insertError) throw insertError;
 
     // signUp 시 onAuthStateChange가 teachers INSERT 전에 fetchTeacher를 호출해서
     // teacher가 null이 되는 race condition 방지 — INSERT 완료 후 userId를 직접 전달하여 재조회
     await refreshTeacher(authData.user!.id);
 
     toast.success('회원가입이 완료되었습니다!');
-    setRegistered({ id: teacherData.id, name: teacherData.name, folder: 'teachers' });
+    setRegistered({ id: authData.user!.id, name: formData.name, folder: 'teachers' });
   };
 
   const handleSubmitMember = async () => {
@@ -191,10 +189,12 @@ const Signup = () => {
   const handleAvatarUpload = async (url: string) => {
     if (!registered) return;
     const table = registered.folder === 'teachers' ? 'teachers' : 'members';
+    // 교사는 user_id, 클럽원은 id로 조회 (교사 가입 시 registered.id에 user_id가 들어감)
+    const idColumn = registered.folder === 'teachers' ? 'user_id' : 'id';
     const { error } = await supabase
       .from(table)
       .update({ avatar_url: url })
-      .eq('id', registered.id);
+      .eq(idColumn, registered.id);
     if (error) {
       toast.error('사진 저장 실패');
       return;
