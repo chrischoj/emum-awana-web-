@@ -12,7 +12,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, name: string, phone?: string, clubId?: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  refreshTeacher: () => Promise<void>;
+  refreshTeacher: (userId?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,9 +69,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function refreshTeacher() {
-    if (user) {
-      await fetchTeacher(user.id);
+  async function refreshTeacher(userId?: string) {
+    const id = userId || user?.id;
+    if (id) {
+      await fetchTeacher(id);
     }
   }
 

@@ -115,8 +115,8 @@ const Signup = () => {
     if (profileError) throw profileError;
 
     // signUp 시 onAuthStateChange가 teachers INSERT 전에 fetchTeacher를 호출해서
-    // teacher가 null이 되는 race condition 방지 — INSERT 완료 후 명시적으로 재조회
-    await refreshTeacher();
+    // teacher가 null이 되는 race condition 방지 — INSERT 완료 후 userId를 직접 전달하여 재조회
+    await refreshTeacher(authData.user!.id);
 
     toast.success('회원가입이 완료되었습니다!');
     setRegistered({ id: teacherData.id, name: teacherData.name, folder: 'teachers' });
