@@ -3,6 +3,8 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { QRCodeCard } from '../../components/QRCodeCard';
+import { Badge } from '../../components/ui/Badge';
+import { Switch } from '../../components/ui/Switch';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import type { Room, Team } from '../../types/awana';
@@ -353,7 +355,11 @@ function RoomCard({ room, teamMap, onQR, onToggle }: RoomCardProps) {
   const teamColor = team?.color || '#6B7280';
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
+      room.active
+        ? 'border-gray-200 shadow-sm'
+        : 'border-gray-100 opacity-50 grayscale hover:opacity-70 hover:grayscale-0'
+    }`}>
       {/* 팀 색상 상단 바 */}
       <div className="h-1.5" style={{ backgroundColor: teamColor }} />
       <div className="p-4">
@@ -375,15 +381,17 @@ function RoomCard({ room, teamMap, onQR, onToggle }: RoomCardProps) {
               )}
             </div>
           </div>
-          <span
-            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-              room.active
-                ? 'bg-green-100 text-green-700'
-                : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            {room.active ? '활성' : '비활성'}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <Badge variant={room.active ? 'success' : 'absent'}>
+              {room.active ? '활성' : '비활성'}
+            </Badge>
+            <Switch
+              checked={room.active}
+              onChange={() => onToggle()}
+              size="sm"
+              label={room.active ? '비활성화' : '활성화'}
+            />
+          </div>
         </div>
         <div className="flex gap-2">
           <button
@@ -391,12 +399,6 @@ function RoomCard({ room, teamMap, onQR, onToggle }: RoomCardProps) {
             className="flex-1 py-2 bg-indigo-50 text-indigo-700 text-sm rounded-lg font-medium hover:bg-indigo-100 transition-colors"
           >
             QR 코드
-          </button>
-          <button
-            onClick={onToggle}
-            className="flex-1 py-2 bg-gray-50 text-gray-700 text-sm rounded-lg font-medium hover:bg-gray-100 transition-colors"
-          >
-            {room.active ? '비활성화' : '활성화'}
           </button>
         </div>
       </div>

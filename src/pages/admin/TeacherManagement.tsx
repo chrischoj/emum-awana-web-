@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { Camera } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { Avatar } from '../../components/ui/Avatar';
+import { Badge } from '../../components/ui/Badge';
+import { Modal } from '../../components/ui/Modal';
+import { AvatarUpload } from '../../components/ui/AvatarUpload';
+import { Switch } from '../../components/ui/Switch';
 import type { Teacher } from '../../types/awana';
 
 // ---- 상수 ----
@@ -24,9 +29,10 @@ interface TeacherCardProps {
   teacher: Teacher;
   clubs: { id: string; name: string; type: string }[];
   onAction: () => void;
+  onAvatarClick: (teacher: Teacher) => void;
 }
 
-function TeacherCard({ teacher, clubs, onAction }: TeacherCardProps) {
+function TeacherCard({ teacher, clubs, onAction, onAvatarClick }: TeacherCardProps) {
   const [loading, setLoading] = useState(false);
 
   async function handleChangePosition(newPosition: string) {
@@ -90,73 +96,85 @@ function TeacherCard({ teacher, clubs, onAction }: TeacherCardProps) {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
+      teacher.active
+        ? 'border-gray-200 shadow-sm'
+        : 'border-gray-100 opacity-50 grayscale hover:opacity-70 hover:grayscale-0'
+    }`}>
       <div className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            <div className="shrink-0">
-              <Avatar name={teacher.name} src={teacher.avatar_url} size="md" />
+        <div className="flex items-center gap-3">
+          {/* 아바타 - 클릭 시 사진 변경 */}
+          <button
+            onClick={() => onAvatarClick(teacher)}
+            className="shrink-0 group relative"
+            title="프로필 사진 변경"
+          >
+            <Avatar name={teacher.name} src={teacher.avatar_url} size="md" />
+            <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+              <Camera className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900">{teacher.name}</p>
-              {teacher.phone && (
-                <p className="text-xs text-gray-500">{teacher.phone}</p>
-              )}
+          </button>
+
+          {/* 이름 + 상태 뱃지 */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-gray-900 truncate">{teacher.name}</p>
+              <Badge variant={teacher.active ? 'success' : 'absent'}>
+                {teacher.active ? '활성' : '비활성'}
+              </Badge>
             </div>
+            {teacher.phone && (
+              <p className="text-xs text-gray-500 mt-0.5">{teacher.phone}</p>
+            )}
           </div>
 
-          {/* 직책 드롭다운 */}
-          <div className="flex items-center gap-2">
+          {/* 직책 드롭다운 + 토글 버튼 */}
+          <div className="flex items-center gap-2 shrink-0">
             {loading ? (
               <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
             ) : (
-              <select
-                value={teacher.position || ''}
-                onChange={(e) => handleChangePosition(e.target.value)}
-                disabled={loading}
-                className="text-xs font-medium text-gray-700 bg-transparent border border-gray-300 rounded-md px-2 py-1 focus:border-indigo-500 focus:outline-none cursor-pointer"
-              >
-                <option value="">선택 안함</option>
-                {POSITIONS.map((pos) => (
-                  <option key={pos} value={pos}>
-                    {pos}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={teacher.position || ''}
+                  onChange={(e) => handleChangePosition(e.target.value)}
+                  disabled={loading}
+                  className="text-xs font-medium text-gray-700 bg-transparent border border-gray-300 rounded-md px-2 py-1 focus:border-indigo-500 focus:outline-none cursor-pointer"
+                >
+                  <option value="">선택 안함</option>
+                  {POSITIONS.map((pos) => (
+                    <option key={pos} value={pos}>
+                      {pos}
+                    </option>
+                  ))}
+                </select>
+                <Switch
+                  checked={teacher.active}
+                  onChange={(checked) => checked ? handleActivate() : handleDeactivate()}
+                  disabled={loading}
+                  size="sm"
+                  label={teacher.active ? '비활성화' : '활성화'}
+                />
+              </>
             )}
           </div>
         </div>
 
-        {/* 상세 정보 */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
-          <span className="inline-flex items-center gap-1">
-            클럽:
-            <select
-              value={teacher.club_id || ''}
-              onChange={(e) => handleChangeClub(e.target.value)}
-              disabled={loading}
-              className="text-xs font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:border-indigo-500 focus:outline-none cursor-pointer py-0 px-0.5"
-            >
-              <option value="">없음(그 외)</option>
-              {clubs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </span>
-
-          <button
-            onClick={teacher.active ? handleDeactivate : handleActivate}
+        {/* 하단: 클럽 선택 */}
+        <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+          <span>클럽:</span>
+          <select
+            value={teacher.club_id || ''}
+            onChange={(e) => handleChangeClub(e.target.value)}
             disabled={loading}
-            className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-              teacher.active
-                ? 'border-gray-300 text-gray-500 hover:border-red-300 hover:text-red-500'
-                : 'border-indigo-300 text-indigo-500 hover:border-indigo-500'
-            }`}
+            className="text-xs font-medium text-gray-700 bg-transparent border-b border-gray-300 focus:border-indigo-500 focus:outline-none cursor-pointer py-0 px-0.5"
           >
-            {teacher.active ? '비활성화' : '활성화'}
-          </button>
+            <option value="">없음(그 외)</option>
+            {clubs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>
@@ -171,6 +189,7 @@ export default function TeacherManagement() {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [filterTab, setFilterTab] = useState<ClubFilterKey>('all');
   const [loading, setLoading] = useState(true);
+  const [editAvatarTeacher, setEditAvatarTeacher] = useState<Teacher | null>(null);
 
   const loadTeachers = async () => {
     const showUnassigned = filterTab === 'unassigned';
@@ -208,6 +227,21 @@ export default function TeacherManagement() {
     setLoading(true);
     loadTeachers().finally(() => setLoading(false));
   }, [filterTab, clubs]);
+
+  const handleTeacherAvatarUpload = async (url: string) => {
+    if (!editAvatarTeacher) return;
+    const { error } = await supabase
+      .from('teachers')
+      .update({ avatar_url: url })
+      .eq('id', editAvatarTeacher.id);
+    if (error) {
+      toast.error('사진 저장 실패');
+    } else {
+      toast.success('프로필 사진이 변경되었습니다');
+      setEditAvatarTeacher(null);
+      loadTeachers();
+    }
+  };
 
   if (loading) {
     return (
@@ -252,10 +286,31 @@ export default function TeacherManagement() {
               teacher={teacher}
               clubs={clubs}
               onAction={loadTeachers}
+              onAvatarClick={setEditAvatarTeacher}
             />
           ))}
         </div>
       )}
+
+      {/* 아바타 업로드 모달 */}
+      <Modal
+        open={!!editAvatarTeacher}
+        onClose={() => setEditAvatarTeacher(null)}
+        title="프로필 사진 변경"
+      >
+        {editAvatarTeacher && (
+          <div className="flex justify-center py-4">
+            <AvatarUpload
+              currentUrl={editAvatarTeacher.avatar_url}
+              name={editAvatarTeacher.name}
+              folder="teachers"
+              entityId={editAvatarTeacher.id}
+              onUpload={handleTeacherAvatarUpload}
+              size="lg"
+            />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
