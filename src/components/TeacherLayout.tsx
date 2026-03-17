@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { LogOut, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { teacherNavItems } from '../config/navigation';
@@ -13,10 +13,10 @@ export default function TeacherLayout() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Top header */}
       <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-white border-b border-gray-200">
-        <div className="flex items-center gap-2">
+        <Link to="/teacher" className="flex items-center gap-2">
           <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
           <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
-        </div>
+        </Link>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('/teacher/profile')}

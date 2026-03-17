@@ -1,5 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, X } from 'lucide-react';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
+import { LogOut, Menu, X, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { adminNavSections } from '../config/navigation';
@@ -29,10 +29,10 @@ export default function AdminLayout() {
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
+          <Link to="/admin" className="flex items-center gap-2">
             <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
             <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
-          </div>
+          </Link>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1 rounded hover:bg-gray-100"
@@ -83,13 +83,22 @@ export default function AdminLayout() {
               <Avatar name={teacher?.name ?? ''} src={teacher?.avatar_url} size="sm" />
               <span className="text-sm text-gray-600 truncate">{teacher?.name ?? '관리자'}</span>
             </button>
-            <button
-              onClick={signOut}
-              className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100"
-              title="로그아웃"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => navigate('/teacher')}
+                className="p-2 text-gray-400 hover:text-indigo-500 rounded-lg hover:bg-gray-100"
+                title="교사 페이지"
+              >
+                <BookOpen className="w-4 h-4" />
+              </button>
+              <button
+                onClick={signOut}
+                className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100"
+                title="로그아웃"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -104,10 +113,10 @@ export default function AdminLayout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="ml-3 flex items-center gap-2">
+          <Link to="/admin" className="ml-3 flex items-center gap-2">
             <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
             <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
-          </div>
+          </Link>
         </header>
 
         <main className="p-4 lg:p-6">
