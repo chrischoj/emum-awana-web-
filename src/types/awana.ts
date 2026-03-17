@@ -6,7 +6,7 @@
 
 export type UserRole = 'admin' | 'teacher' | 'member';
 export type ClubType = 'sparks' | 'tnt';
-export type AttendanceStatus = 'present' | 'late' | 'absent';
+export type AttendanceStatus = 'present' | 'late' | 'absent' | 'none';
 export type ScoringCategory = 'attendance' | 'handbook' | 'uniform' | 'recitation';
 export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memorization' | 'special' | 'custom';
 export type EnrollmentStatus = 'pending' | 'active' | 'inactive';

@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
 import {
   recordAttendance,
   bulkRecordAttendance,
   getAttendanceByDate,
+  getAttendancePoints,
 } from '../../services/attendanceService';
+import { upsertScore } from '../../services/scoringService';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { AttendanceStatus } from '../../types/awana';
 
 const STATUS_CONFIG: Record<AttendanceStatus, { label: string; color: string; bg: string }> = {
@@ -22,7 +26,11 @@ interface MemberAttendanceState {
 }
 
 export default function AttendancePage() {
-  const { currentClub, teams, members } = useClub();
+  const { teacher } = useAuth();
+  const { currentClub, curriculumTemplate, teams, members } = useClub();
+  const { openMemberProfile } = useMemberProfile();
+
+  const attendanceBasePoints = curriculumTemplate?.scoring_categories?.find(c => c.key === 'attendance')?.basePoints ?? 50;
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [attendance, setAttendance] = useState<Record<string, MemberAttendanceState>>({});
   const [loading, setLoading] = useState(true);
@@ -41,9 +49,10 @@ export default function AttendancePage() {
     getAttendanceByDate(selectedDate, currentClub.id)
       .then((records) => {
         for (const rec of records) {
-          if (initial[rec.member_id]) {
+          const status = rec.status || (rec.present ? 'present' : 'absent');
+          if (initial[rec.member_id] && status !== 'none') {
             initial[rec.member_id] = {
-              status: rec.status || (rec.present ? 'present' : 'absent'),
+              status,
               absenceReason: rec.absence_reason || '',
             };
           }
@@ -75,13 +84,27 @@ export default function AttendancePage() {
           absenceReason: nextStatus === 'absent' ? current.absenceReason : undefined,
         }).catch(() => toast.error('저장 실패'));
 
+        // Sync attendance score
+        if (currentClub) {
+          const points = getAttendancePoints(nextStatus, attendanceBasePoints);
+          upsertScore({
+            memberId,
+            clubId: currentClub.id,
+            trainingDate: selectedDate,
+            category: 'attendance',
+            basePoints: points,
+            multiplier: 1,
+            recordedBy: teacher?.id,
+          }).catch(() => {});
+        }
+
         return {
           ...prev,
           [memberId]: { ...current, status: nextStatus },
         };
       });
     },
-    [selectedDate]
+    [selectedDate, currentClub, attendanceBasePoints, teacher]
   );
 
   const handleReasonChange = (memberId: string, reason: string) => {
@@ -110,6 +133,21 @@ export default function AttendancePage() {
         members.map((m) => m.id),
         selectedDate,
         'present'
+      );
+      // Bulk sync attendance scores
+      const points = getAttendancePoints('present', attendanceBasePoints);
+      await Promise.all(
+        members.map((m) =>
+          upsertScore({
+            memberId: m.id,
+            clubId: currentClub.id,
+            trainingDate: selectedDate,
+            category: 'attendance',
+            basePoints: points,
+            multiplier: 1,
+            recordedBy: teacher?.id,
+          }).catch(() => {})
+        )
       );
       const updated: Record<string, MemberAttendanceState> = {};
       for (const m of members) {
@@ -205,8 +243,10 @@ export default function AttendancePage() {
                       style={{ backgroundColor: team.color }}
                     />
                   )}
-                  <Avatar name={member.name} src={member.avatar_url} size="sm" />
-                  <span className="font-medium text-gray-900 text-sm">{member.name}</span>
+                  <button onClick={() => openMemberProfile(member.id)} className="flex items-center gap-2 hover:opacity-80">
+                    <Avatar name={member.name} src={member.avatar_url} size="sm" />
+                    <span className="font-medium text-gray-900 text-sm">{member.name}</span>
+                  </button>
                 </div>
 
                 <button

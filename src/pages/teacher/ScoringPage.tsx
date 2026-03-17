@@ -6,6 +6,7 @@ import { getWeeklyScores, upsertScore } from '../../services/scoringService';
 import { recordAttendance, getAttendancePoints } from '../../services/attendanceService';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member } from '../../types/awana';
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
@@ -33,6 +34,7 @@ function calcTotal(s: Omit<MemberScoreState, 'total'>): number {
 export default function ScoringPage() {
   const { teacher } = useAuth();
   const { currentClub, curriculumTemplate, teams, members } = useClub();
+  const { openMemberProfile } = useMemberProfile();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
@@ -60,7 +62,7 @@ export default function ScoringPage() {
           const rec = memberScores.find((s) => s.category === 'recitation');
 
           const attPoints = att?.total_points ?? 0;
-          const attStatus: AttendanceStatus = attPoints === 50 ? 'present' : attPoints === 25 ? 'late' : 'absent';
+          const attStatus: AttendanceStatus = attPoints >= 50 ? 'present' : 'absent';
 
           const state: Omit<MemberScoreState, 'total'> = {
             attendance: { status: att ? attStatus : 'present', points: att?.total_points ?? 0 },
@@ -237,8 +239,10 @@ export default function ScoringPage() {
                       style={{ backgroundColor: team.color }}
                     />
                   )}
-                  <Avatar name={member.name} src={member.avatar_url} size="sm" />
-                  <span className="font-semibold text-gray-900 text-sm">{member.name}</span>
+                  <button onClick={() => openMemberProfile(member.id)} className="flex items-center gap-2 hover:opacity-80">
+                    <Avatar name={member.name} src={member.avatar_url} size="sm" />
+                    <span className="font-semibold text-gray-900 text-sm">{member.name}</span>
+                  </button>
                 </div>
                 <span className="text-sm font-bold text-indigo-600">{s.total}pt</span>
               </div>

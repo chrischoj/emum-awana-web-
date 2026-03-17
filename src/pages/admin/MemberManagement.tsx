@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { Avatar } from '../../components/ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { Member, EnrollmentStatus } from '../../types/awana';
 
 // ---- 유틸 ----
@@ -294,9 +295,10 @@ interface MemberCardProps {
   clubs: { id: string; name: string; type: string }[];
   onAction: () => void;
   onAvatarClick: (member: Member) => void;
+  onProfileClick: (memberId: string) => void;
 }
 
-function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardProps) {
+function MemberCard({ member, tab, clubs, onAction, onAvatarClick, onProfileClick }: MemberCardProps) {
   const { teacher } = useAuth();
   const [loading, setLoading] = useState(false);
 
@@ -421,18 +423,18 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardP
       <div className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
-            <button onClick={() => onAvatarClick(member)} className="shrink-0">
+            <button onClick={() => onProfileClick(member.id)} className="shrink-0">
               <Avatar name={member.name} src={member.avatar_url} size="md" />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900">
+              <button onClick={() => onProfileClick(member.id)} className="text-sm font-bold text-gray-900 hover:text-indigo-600 transition-colors text-left">
                 {member.name}
                 {member.registered_via_room_id && (
                   <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">
                     QR
                   </span>
                 )}
-              </p>
+              </button>
               {member.birthday && (
                 <p className="text-xs text-gray-500">{formatDate(member.birthday)}</p>
               )}
@@ -497,6 +499,12 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardP
             <span>유니폼: {member.uniform_size}</span>
           )}
           <span>등록일: {formatDate(member.created_at)}</span>
+          <button
+            onClick={() => onAvatarClick(member)}
+            className="inline-flex items-center gap-1 text-indigo-500 hover:text-indigo-700 transition-colors font-medium"
+          >
+            📷 사진변경
+          </button>
         </div>
       </div>
     </div>
@@ -508,6 +516,7 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick }: MemberCardP
 export default function MemberManagement() {
   const { clubs, refreshMembers } = useClub();
   const { teacher } = useAuth();
+  const { openMemberProfile } = useMemberProfile();
 
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [filterClubId, setFilterClubId] = useState<string | null>(null);
@@ -652,6 +661,7 @@ export default function MemberManagement() {
               clubs={clubs}
               onAction={handleAction}
               onAvatarClick={setEditAvatarMember}
+              onProfileClick={openMemberProfile}
             />
           ))}
         </div>

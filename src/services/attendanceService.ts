@@ -106,10 +106,11 @@ export async function incrementLateCount(
   return data as { late_count: number; converted_absences: number };
 }
 
-export function getAttendancePoints(status: AttendanceStatus): number {
+export function getAttendancePoints(status: AttendanceStatus, basePoints = 50): number {
   switch (status) {
-    case 'present': return 50;
-    case 'late': return 25;
+    case 'present': return basePoints;
+    case 'late': return 0;
     case 'absent': return 0;
+    case 'none': return 0;
   }
 }

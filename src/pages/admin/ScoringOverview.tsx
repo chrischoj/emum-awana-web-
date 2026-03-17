@@ -5,6 +5,8 @@ import { useClub } from '../../contexts/ClubContext';
 import { getWeeklyScores } from '../../services/scoringService';
 import { getTeamGameTotals } from '../../services/gameScoreService';
 import { getToday } from '../../lib/utils';
+import { Avatar } from '../../components/ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { WeeklyScore, ScoringCategory, Team, Member } from '../../types/awana';
 
 type SubmissionStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
@@ -36,6 +38,7 @@ interface TeamScoreData {
 interface MemberScoreRow {
   memberId: string;
   memberName: string;
+  avatarUrl: string | null;
   clubName?: string;
   scores: Partial<Record<ScoringCategory, number>>;
   total: number;
@@ -93,6 +96,7 @@ export default function ScoringOverview() {
   const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
   const [rejectingTeam, setRejectingTeam] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { openMemberProfile } = useMemberProfile();
 
   // When viewMode changes to a specific club, update context
   useEffect(() => {
@@ -165,6 +169,7 @@ export default function ScoringOverview() {
           return {
             memberId: m.id,
             memberName: m.name,
+            avatarUrl: m.avatar_url,
             scores,
             total,
           };
@@ -257,6 +262,7 @@ export default function ScoringOverview() {
           return {
             memberId: m.id,
             memberName: m.name,
+            avatarUrl: m.avatar_url,
             clubName: m.club_id ? clubNameMap.get(m.club_id) : undefined,
             scores,
             total,
@@ -533,9 +539,15 @@ export default function ScoringOverview() {
                                 key={row.memberId}
                                 className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
                               >
-                                <td className="px-5 py-2.5 font-medium text-gray-800">
-                                  {row.memberName}
-                                  {row.clubName && <span className="ml-1 text-xs text-gray-400">({row.clubName})</span>}
+                                <td className="px-5 py-2.5">
+                                  <button
+                                    onClick={() => openMemberProfile(row.memberId)}
+                                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                  >
+                                    <Avatar name={row.memberName} src={row.avatarUrl} size="sm" />
+                                    <span className="font-medium text-gray-800">{row.memberName}</span>
+                                    {row.clubName && <span className="text-xs text-gray-400">({row.clubName})</span>}
+                                  </button>
                                 </td>
                                 {CATEGORIES.map((cat) => (
                                   <td key={cat} className="px-3 py-2.5 text-center text-gray-600">

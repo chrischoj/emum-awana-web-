@@ -42,6 +42,16 @@ export async function upsertScore(params: {
   return data as WeeklyScore;
 }
 
+export async function deleteScore(memberId: string, trainingDate: string, category: ScoringCategory): Promise<void> {
+  const { error } = await supabase
+    .from('weekly_scores')
+    .delete()
+    .eq('member_id', memberId)
+    .eq('training_date', trainingDate)
+    .eq('category', category);
+  if (error) throw error;
+}
+
 export async function getMemberScoreSummaries(
   clubId: string,
   trainingDate: string,

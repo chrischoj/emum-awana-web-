@@ -1,17 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
-import { getAttendanceByDate, recordAttendance } from '../../services/attendanceService';
+import { getAttendanceByDate, recordAttendance, getAttendancePoints } from '../../services/attendanceService';
+import { upsertScore } from '../../services/scoringService';
 import { supabase } from '../../lib/supabase';
 import { getToday, cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { Member, Team, AttendanceStatus } from '../../types/awana';
 
 const STATUS_LABEL: Record<AttendanceStatus, string> = { present: '출석', late: '지각', absent: '결석' };
 const STATUS_COLOR: Record<AttendanceStatus, string> = { present: 'bg-green-100 text-green-700', late: 'bg-yellow-100 text-yellow-700', absent: 'bg-red-100 text-red-700' };
 
 export default function MemberAttendancePage() {
+  const { teacher } = useAuth();
   const { clubs } = useClub();
+  const { openMemberProfile } = useMemberProfile();
   const [filterClubId, setFilterClubId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [allMembers, setAllMembers] = useState<Member[]>([]);
@@ -47,7 +52,8 @@ export default function MemberAttendancePage() {
 
         const map: Record<string, AttendanceStatus> = {};
         for (const rec of attendanceRecords) {
-          map[rec.member_id] = rec.status || (rec.present ? 'present' : 'absent');
+          const status = rec.status || (rec.present ? 'present' : 'absent');
+          if (status !== 'none') map[rec.member_id] = status;
         }
         setAttendanceMap(map);
       } catch {
@@ -73,22 +79,42 @@ export default function MemberAttendancePage() {
 
   const handleStatusChange = useCallback(
     (memberId: string) => {
-      const cycle: AttendanceStatus[] = ['present', 'late', 'absent'];
+      const cycle: AttendanceStatus[] = ['present', 'late', 'absent', 'none'];
       setAttendanceMap((prev) => {
         const current = prev[memberId];
-        const nextStatus = current ? cycle[(cycle.indexOf(current) + 1) % 3] : 'present';
+        const idx = current ? cycle.indexOf(current) : -1;
+        const next = cycle[(idx + 1) % cycle.length];
         navigator.vibrate?.(10);
 
         recordAttendance({
           memberId,
           trainingDate: selectedDate,
-          status: nextStatus,
+          status: next,
         }).catch(() => toast.error('저장 실패'));
 
-        return { ...prev, [memberId]: nextStatus };
+        // Sync attendance score
+        const member = allMembers.find((m) => m.id === memberId);
+        if (member?.club_id) {
+          const points = getAttendancePoints(next);
+          upsertScore({
+            memberId,
+            clubId: member.club_id,
+            trainingDate: selectedDate,
+            category: 'attendance',
+            basePoints: points,
+            multiplier: next === 'none' ? 0 : 1,
+            recordedBy: teacher?.id,
+          }).catch(() => {});
+        }
+
+        if (next === 'none') {
+          const { [memberId]: _, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [memberId]: next };
       });
     },
-    [selectedDate]
+    [selectedDate, allMembers, teacher]
   );
 
   return (
@@ -146,10 +172,10 @@ export default function MemberAttendancePage() {
                 return (
                   <tr key={member.id}>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <button onClick={() => openMemberProfile(member.id)} className="flex items-center gap-2 hover:opacity-80">
                         <Avatar name={member.name} src={member.avatar_url} size="sm" />
                         <span className="text-sm font-medium text-gray-900">{member.name}</span>
-                      </div>
+                      </button>
                     </td>
                     {filterClubId === null && (
                       <td className="px-4 py-3">

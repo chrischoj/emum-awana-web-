@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ClubProvider } from './contexts/ClubContext';
+import { MemberProfileProvider } from './contexts/MemberProfileContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminLayout from './components/AdminLayout';
 import TeacherLayout from './components/TeacherLayout';
@@ -105,10 +106,12 @@ function App() {
   return (
     <AuthProvider>
       <ClubProvider>
-        <Router>
-          <Toaster position="top-right" />
-          <AppRoutes />
-        </Router>
+        <MemberProfileProvider>
+          <Router>
+            <Toaster position="top-right" />
+            <AppRoutes />
+          </Router>
+        </MemberProfileProvider>
       </ClubProvider>
     </AuthProvider>
   );
