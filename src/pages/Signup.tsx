@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
@@ -15,10 +15,15 @@ const Signup = () => {
     clubId: '',
   });
 
-  const [clubs, setClubs] = useState([
-    { id: 'sparks', name: '스팍스' },
-    { id: 'tnt', name: '티앤티' },
-  ]);
+  const [clubs, setClubs] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    const fetchClubs = async () => {
+      const { data } = await supabase.from('clubs').select('id, name');
+      if (data) setClubs(data);
+    };
+    fetchClubs();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -50,6 +55,13 @@ const Signup = () => {
 
       if (authError) throw authError;
 
+      // 이미 가입된 이메일인 경우 (Supabase는 보안상 동일 응답을 줌)
+      if (!authData.user?.identities?.length) {
+        toast.error('이미 가입된 이메일입니다. 로그인해주세요.');
+        navigate('/login');
+        return;
+      }
+
       // Create teacher profile
       const { error: profileError } = await supabase
         .from('teachers')
@@ -63,7 +75,7 @@ const Signup = () => {
 
       if (profileError) throw profileError;
 
-      toast.success('회원가입이 완료되었습니다. 로그인해주세요.');
+      toast.success('회원가입이 완료되었습니다. 이메일 확인 후 로그인해주세요.');
       navigate('/login');
     } catch (error) {
       console.error('Signup error:', error);
