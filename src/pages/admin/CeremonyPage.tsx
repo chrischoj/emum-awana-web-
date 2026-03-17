@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { buildAwardsData, buildCeremonyUrl } from '../../services/awardsIntegrationService';
 import { TEAM_NAMES, TEAM_COLORS } from '../../types/awana';
@@ -6,9 +6,8 @@ import type { AwardsData, TeamName } from '../../types/awana';
 
 export default function CeremonyPage() {
   const today = new Date().toISOString().split('T')[0];
-  const monthStart = today.slice(0, 8) + '01';
 
-  const [dateFrom, setDateFrom] = useState(monthStart);
+  const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [data, setData] = useState<AwardsData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,6 +26,15 @@ export default function CeremonyPage() {
       setLoading(false);
     }
   };
+
+  // 페이지 진입 시 자동 집계
+  const didAutoLoad = useRef(false);
+  useEffect(() => {
+    if (!didAutoLoad.current) {
+      didAutoLoad.current = true;
+      handleLoad();
+    }
+  }, []);
 
   const handleCopyUrl = () => {
     if (ceremonyUrl) {

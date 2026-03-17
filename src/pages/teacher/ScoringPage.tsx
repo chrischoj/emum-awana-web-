@@ -5,6 +5,7 @@ import { useClub } from '../../contexts/ClubContext';
 import { getWeeklyScores, upsertScore } from '../../services/scoringService';
 import { recordAttendance, getAttendancePoints } from '../../services/attendanceService';
 import { cn, getToday } from '../../lib/utils';
+import { Avatar } from '../../components/ui/Avatar';
 import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member } from '../../types/awana';
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
@@ -236,6 +237,7 @@ export default function ScoringPage() {
                       style={{ backgroundColor: team.color }}
                     />
                   )}
+                  <Avatar name={member.name} src={member.avatar_url} size="sm" />
                   <span className="font-semibold text-gray-900 text-sm">{member.name}</span>
                 </div>
                 <span className="text-sm font-bold text-indigo-600">{s.total}pt</span>

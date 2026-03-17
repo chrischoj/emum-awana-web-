@@ -1,0 +1,13 @@
+{
+  "session_id": "50af250c-e9c2-41dd-9a3f-0b3c06c7628e",
+  "started_at": "2026-03-17T09:24:37.405Z",
+  "ended_at": "2026-03-17T10:41:20.735Z",
+  "reason": "clear",
+  "agents_spawned": 7,
+  "agents_completed": 0,
+  "modes_used": [
+    "autopilot",
+    "ecomode"
+  ],
+  "duration_ms": 4603330
+}

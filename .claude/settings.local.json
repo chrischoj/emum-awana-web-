@@ -16,7 +16,21 @@
       "Bash(which netlify 2>/dev/null || npx netlify --version 2>/dev/null || echo \"NOT_INSTALLED\")",
       "Bash(npm run build 2>&1 | tail -3)",
       "Bash(netlify deploy --prod --dir=dist --message=\"Initial deploy: Awana Club Management System\" 2>&1)",
-      "Bash(npx tsc --noEmit 2>&1)"
+      "Bash(npx tsc --noEmit 2>&1)",
+      "mcp__plugin_oh-my-claudecode_omc-tools__lsp_diagnostics",
+      "Bash(find /Users/chris.cho/work/study/web_sevice/awana/awana-awaord -type f \\\\\\( -name \"*.png\" -o -name \"*.svg\" -o -name \"*.jpg\" -o -name \"*.ico\" -o -name \"*.webp\" \\\\\\) 2>/dev/null | head -30)",
+      "Bash(npx tsc --noEmit src/pages/admin/MemberManagement.tsx 2>&1 | head -50)",
+      "Bash(npx vite build 2>&1 | tail -15)",
+      "Bash(npx vite build 2>&1 | tail -20)",
+      "Bash(npx vite build 2>&1 | tail -10)",
+      "Bash(npx tsc --noEmit 2>&1 && npx vite build 2>&1 | tail -5)",
+      "Bash(npx vite build 2>&1 | tail -8)",
+      "Bash(npx tsc --noEmit 2>&1 | head -10 && npx vite build 2>&1 | tail -8)",
+      "Bash(curl -s \"https://fvzantauyjcfvzndsqky.supabase.co/rest/v1/members?select=id,name,birthday,enrollment_status,club_id,created_at&order=name.asc,created_at.asc\" \\\\\n  -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\" \\\\\n  -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\" | python3 -m json.tool)",
+      "Bash(curl -s \"https://fvzantauyjcfvzndsqky.supabase.co/rest/v1/clubs?select=id,name,type\" \\\\\n  -H \"apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\" \\\\\n  -H \"Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2emFudGF1eWpjZnZ6bmRzcWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3Mjk2MzYsImV4cCI6MjA4OTMwNTYzNn0.3cT2E6yfZ8LzymqcmpLC-iZcOpyg-u9QVhXwOEVfevM\")",
+      "mcp__plugin_oh-my-claudecode_omc-tools__lsp_diagnostics_directory",
+      "Bash(npx tsc --noEmit 2>&1 | head -10 && npx vite build 2>&1 | tail -5)",
+      "Bash(npx tsc --noEmit --pretty 2>&1 | head -40)"
     ]
   }
 }

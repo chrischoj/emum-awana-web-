@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getMemberBadges } from '../../services/badgeService';
 import { cn } from '../../lib/utils';
+import { Avatar } from '../../components/ui/Avatar';
 import type { Member, WeeklyScore, MemberBadge, Badge, Team } from '../../types/awana';
 
 export default function MemberProfilePage() {
@@ -89,9 +90,7 @@ export default function MemberProfilePage() {
       {/* Profile header */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center text-2xl font-bold text-indigo-700">
-            {member.name[0]}
-          </div>
+          <Avatar name={member.name} src={member.avatar_url} size="lg" />
           <div>
             <h1 className="text-xl font-bold text-gray-900">{member.name}</h1>
             <div className="flex items-center gap-2 mt-1">

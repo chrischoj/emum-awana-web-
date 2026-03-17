@@ -426,3 +426,5 @@ INSERT INTO curriculum_templates (club_type, name, scoring_categories) VALUES
     {"key": "uniform", "label": "단복", "basePoints": 50, "multiplier": false},
     {"key": "recitation", "label": "암송", "basePoints": 100, "multiplier": true, "multiplierLabel": "구절 수"}
 ]'::jsonb);
+
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS position text;

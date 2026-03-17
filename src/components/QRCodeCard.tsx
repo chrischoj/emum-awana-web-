@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface QRCodeCardProps {
@@ -7,6 +8,25 @@ interface QRCodeCardProps {
 }
 
 export function QRCodeCard({ value, title, size = 200 }: QRCodeCardProps) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleDownload = () => {
     const svg = document.querySelector(`[data-qr="${title}"] svg`);
     if (!svg) return;
@@ -32,6 +52,20 @@ export function QRCodeCard({ value, title, size = 200 }: QRCodeCardProps) {
       <div className="inline-block p-4 bg-white rounded-lg border border-gray-100">
         <QRCodeSVG value={value} size={size} level="M" />
       </div>
+
+      {/* URL 표시 + 복사 */}
+      <div className="mt-3 flex items-center gap-2 justify-center">
+        <p className="text-xs text-gray-400 truncate max-w-[200px]" title={value}>
+          {value}
+        </p>
+        <button
+          onClick={handleCopy}
+          className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600 hover:bg-gray-200 flex-shrink-0 transition-colors"
+        >
+          {copied ? '복사됨!' : 'URL 복사'}
+        </button>
+      </div>
+
       <div className="mt-4 flex gap-2 justify-center">
         <button
           onClick={handleDownload}

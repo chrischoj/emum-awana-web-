@@ -35,7 +35,8 @@ const Login = () => {
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
         <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-gray-900">어와나 클럽 관리 시스템</h2>
+          <img src="/eeum-logo.png" alt="이음교회" className="h-16 mx-auto mb-3 object-contain" />
+          <h2 className="text-2xl font-bold text-gray-900">이음 AWANA</h2>
           <p className="mt-2 text-sm text-gray-600">계정으로 로그인해주세요</p>
         </div>
 

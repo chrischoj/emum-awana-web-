@@ -6,11 +6,10 @@
 
 export type UserRole = 'admin' | 'teacher' | 'member';
 export type ClubType = 'sparks' | 'tnt';
-export type OrderStatus = 'pending' | 'approved' | 'completed' | 'cancelled';
-export type AwardType = 'handbook' | 'memorization' | 'attendance' | 'game';
 export type AttendanceStatus = 'present' | 'late' | 'absent';
 export type ScoringCategory = 'attendance' | 'handbook' | 'uniform' | 'recitation';
 export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memorization' | 'special' | 'custom';
+export type EnrollmentStatus = 'pending' | 'active' | 'inactive';
 
 // ---- Core Entities ----
 
@@ -29,7 +28,9 @@ export interface Teacher {
   club_id: string | null;
   name: string;
   phone: string | null;
+  avatar_url: string | null;
   role: UserRole;
+  position: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -44,7 +45,13 @@ export interface Member {
   parent_name: string | null;
   parent_phone: string | null;
   uniform_size: string | null;
+  avatar_url: string | null;
   active: boolean;
+  enrollment_status: EnrollmentStatus;
+  registered_by: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  registered_via_room_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -175,6 +182,7 @@ export interface MemberBadge {
 export interface Room {
   id: string;
   club_id: string;
+  team_id: string | null;
   name: string;
   qr_code_data: string | null;
   active: boolean;
@@ -197,41 +205,6 @@ export interface RoomTeacher {
   room_session_id: string;
   teacher_id: string;
   checked_in_at: string;
-}
-
-// ---- Inventory & Budget (existing) ----
-
-export interface InventoryItem {
-  id: string;
-  name: string;
-  category: string;
-  unit_price: number;
-  current_stock: number;
-  min_stock: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Budget {
-  id: string;
-  category: string;
-  amount: number;
-  fiscal_year: number;
-  remaining: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Order {
-  id: string;
-  inventory_item_id: string;
-  quantity: number;
-  total_price: number;
-  status: OrderStatus;
-  requested_by: string | null;
-  approved_by: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 // ---- Aggregation Types ----
@@ -289,27 +262,3 @@ export interface TrainingSchedule {
   updated_at: string;
 }
 
-// ---- Dalant (existing) ----
-
-export interface DalantTransaction {
-  id: string;
-  member_id: string;
-  amount: number;
-  description: string;
-  transaction_date: string;
-  approved_by: string | null;
-  created_at: string;
-}
-
-// ---- Award (existing) ----
-
-export interface Award {
-  id: string;
-  member_id: string;
-  award_type: AwardType;
-  award_date: string;
-  description: string | null;
-  inventory_item_id: string | null;
-  created_at: string;
-  updated_at: string;
-}

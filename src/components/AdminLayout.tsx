@@ -1,12 +1,14 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LogOut, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { adminNavItems } from '../config/navigation';
+import { adminNavSections } from '../config/navigation';
 import { cn } from '../lib/utils';
+import { Avatar } from './ui/Avatar';
 
 export default function AdminLayout() {
   const { teacher, signOut } = useAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
@@ -27,7 +29,10 @@ export default function AdminLayout() {
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-          <h1 className="text-lg font-bold text-indigo-600">어와나 관리</h1>
+          <div className="flex items-center gap-2">
+            <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
+            <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
+          </div>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1 rounded hover:bg-gray-100"
@@ -36,31 +41,48 @@ export default function AdminLayout() {
           </button>
         </div>
 
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          {adminNavItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/admin'}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                )
-              }
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {item.label}
-            </NavLink>
+        <nav className="flex-1 px-2 py-4 overflow-y-auto">
+          {adminNavSections.map((section, idx) => (
+            <div key={idx} className={idx > 0 ? 'mt-4' : ''}>
+              {section.title && (
+                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  {section.title}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === '/admin'}
+                    onClick={() => setSidebarOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                        isActive
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      )
+                    }
+                  >
+                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
 
         <div className="border-t border-gray-200 p-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600 truncate">{teacher?.name ?? '관리자'}</span>
+            <button
+              onClick={() => navigate('/teacher/profile')}
+              className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors"
+            >
+              <Avatar name={teacher?.name ?? ''} src={teacher?.avatar_url} size="sm" />
+              <span className="text-sm text-gray-600 truncate">{teacher?.name ?? '관리자'}</span>
+            </button>
             <button
               onClick={signOut}
               className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-100"
@@ -82,7 +104,10 @@ export default function AdminLayout() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <h1 className="ml-3 text-lg font-bold text-indigo-600">어와나 관리</h1>
+          <div className="ml-3 flex items-center gap-2">
+            <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
+            <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
+          </div>
         </header>
 
         <main className="p-4 lg:p-6">

@@ -7,6 +7,7 @@ import {
   getAttendanceByDate,
 } from '../../services/attendanceService';
 import { cn, getToday } from '../../lib/utils';
+import { Avatar } from '../../components/ui/Avatar';
 import type { AttendanceStatus } from '../../types/awana';
 
 const STATUS_CONFIG: Record<AttendanceStatus, { label: string; color: string; bg: string }> = {
@@ -204,6 +205,7 @@ export default function AttendancePage() {
                       style={{ backgroundColor: team.color }}
                     />
                   )}
+                  <Avatar name={member.name} src={member.avatar_url} size="sm" />
                   <span className="font-medium text-gray-900 text-sm">{member.name}</span>
                 </div>
 

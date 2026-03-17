@@ -85,7 +85,8 @@ export default function QRLandingPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-sm w-full text-center">
-        <h1 className="text-2xl font-bold text-indigo-600 mb-2">어와나 체크인</h1>
+        <img src="/eeum-logo.png" alt="이음교회" className="h-12 mx-auto mb-3 object-contain" />
+        <h1 className="text-2xl font-bold text-indigo-600 mb-2">이음 AWANA 체크인</h1>
 
         {!session ? (
           <>

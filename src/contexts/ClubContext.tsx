@@ -65,6 +65,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
           .select('*')
           .eq('club_id', currentClub!.id)
           .eq('active', true)
+          .eq('enrollment_status', 'active')
           .order('name'),
       ]);
 
@@ -84,6 +85,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('club_id', currentClub.id)
       .eq('active', true)
+      .eq('enrollment_status', 'active')
       .order('name');
     setMembers((data as Member[]) || []);
   }
