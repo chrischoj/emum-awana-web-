@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Camera } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
 import { Avatar } from '../../components/ui/Avatar';
 import { Badge } from '../../components/ui/Badge';
@@ -185,6 +186,7 @@ function TeacherCard({ teacher, clubs, onAction, onAvatarClick }: TeacherCardPro
 
 export default function TeacherManagement() {
   const { clubs } = useClub();
+  const { teacher: currentTeacher, refreshTeacher } = useAuth();
 
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [filterTab, setFilterTab] = useState<ClubFilterKey>('all');
@@ -240,6 +242,9 @@ export default function TeacherManagement() {
       toast.success('프로필 사진이 변경되었습니다');
       setEditAvatarTeacher(null);
       loadTeachers();
+      if (editAvatarTeacher.id === currentTeacher?.id) {
+        await refreshTeacher();
+      }
     }
   };
 
