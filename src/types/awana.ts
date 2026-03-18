@@ -40,6 +40,7 @@ export interface Member {
   id: string;
   club_id: string | null;
   team_id: string | null;
+  room_id: string | null;
   name: string;
   birthday: string | null;
   parent_name: string | null;
