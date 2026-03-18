@@ -122,3 +122,89 @@ export async function deleteLastGameScore(
     if (error) throw error;
   }
 }
+
+// ============================================
+// Game Score Entry CRUD (개별 항목 수정/삭제)
+// ============================================
+
+/** 개별 게임 점수 항목 수정 */
+export async function updateGameScore(
+  id: string,
+  params: { points?: number; description?: string }
+): Promise<GameScoreEntry> {
+  const updates: Record<string, unknown> = {};
+  if (params.points !== undefined) updates.points = params.points;
+  if (params.description !== undefined) updates.description = params.description || null;
+
+  const { data, error } = await supabase
+    .from('game_score_entries')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as GameScoreEntry;
+}
+
+/** 개별 게임 점수 항목 삭제 */
+export async function deleteGameScore(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('game_score_entries')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// ============================================
+// Game Score Locks (날짜별 잠금)
+// ============================================
+
+export interface GameScoreLock {
+  club_id: string;
+  training_date: string;
+  locked_by: string | null;
+  locked_at: string;
+}
+
+/** 잠금 상태 조회 */
+export async function getGameScoreLock(
+  clubId: string,
+  trainingDate: string
+): Promise<GameScoreLock | null> {
+  const { data, error } = await supabase
+    .from('game_score_locks')
+    .select('*')
+    .eq('club_id', clubId)
+    .eq('training_date', trainingDate)
+    .maybeSingle();
+  if (error) throw error;
+  return data as GameScoreLock | null;
+}
+
+/** 잠금 설정 */
+export async function lockGameScores(
+  clubId: string,
+  trainingDate: string,
+  lockedBy: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('game_score_locks')
+    .upsert(
+      { club_id: clubId, training_date: trainingDate, locked_by: lockedBy, locked_at: new Date().toISOString() },
+      { onConflict: 'club_id,training_date' }
+    );
+  if (error) throw error;
+}
+
+/** 잠금 해제 */
+export async function unlockGameScores(
+  clubId: string,
+  trainingDate: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('game_score_locks')
+    .delete()
+    .eq('club_id', clubId)
+    .eq('training_date', trainingDate);
+  if (error) throw error;
+}

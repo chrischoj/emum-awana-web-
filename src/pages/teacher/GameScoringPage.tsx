@@ -6,18 +6,25 @@ import {
   addGameScoreToMultipleTeams,
   getGameScoresByDate,
   getTeamGameTotals,
-  deleteLastGameScore,
+  updateGameScore,
+  deleteGameScore,
+  getGameScoreLock,
 } from '../../services/gameScoreService';
-import { getSubmissionsByDate } from '../../services/scoringService';
+import type { GameScoreLock } from '../../services/gameScoreService';
+import { supabase } from '../../lib/supabase';
 import { cn, getToday } from '../../lib/utils';
-import type { GameScoreEntry, WeeklyScoreSubmission } from '../../types/awana';
+import type { GameScoreEntry } from '../../types/awana';
 
 const POINT_PRESETS = [50, 100, 200, 400];
 const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수', '보너스', '애교 점수'];
 
 export default function GameScoringPage() {
   const { teacher } = useAuth();
-  const { currentClub, teams } = useClub();
+  const { currentClub, clubs, setCurrentClub, teams } = useClub();
+
+  const sparksClub = clubs.find((c) => c.type === 'sparks');
+  const tntClub = clubs.find((c) => c.type === 'tnt');
+  const hasBothClubs = !!sparksClub && !!tntClub;
   const [selectedDate] = useState(getToday());
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [points, setPoints] = useState(100);
@@ -26,35 +33,48 @@ export default function GameScoringPage() {
   const [recentEntries, setRecentEntries] = useState<GameScoreEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
-  const [teamSubmissions, setTeamSubmissions] = useState<Map<string, WeeklyScoreSubmission>>(new Map());
+  const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
+  const [editPoints, setEditPoints] = useState(0);
+  const [editDescription, setEditDescription] = useState('');
+  const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
+
+  const handleClubSwitch = (club: typeof currentClub) => {
+    if (!club || club.id === currentClub?.id) return;
+    setSelectedTeamIds(new Set());
+    setCurrentClub(club);
+  };
 
   const loadData = useCallback(async () => {
     if (!currentClub) return;
-    const [totals, entries, subs] = await Promise.all([
+    const [totals, entries, lock] = await Promise.all([
       getTeamGameTotals(currentClub.id, selectedDate),
       getGameScoresByDate(currentClub.id, selectedDate),
-      getSubmissionsByDate(currentClub.id, selectedDate),
+      getGameScoreLock(currentClub.id, selectedDate),
     ]);
     setTeamTotals(totals);
     setRecentEntries(entries);
-    const subMap = new Map<string, WeeklyScoreSubmission>();
-    for (const s of subs) subMap.set(s.team_id, s);
-    setTeamSubmissions(subMap);
+    setGameLock(lock);
   }, [currentClub, selectedDate]);
+
+  const isLocked = !!gameLock;
 
   useEffect(() => {
     loadData().catch(() => toast.error('데이터 로드 실패'));
   }, [loadData]);
 
-  const isTeamLocked = (teamId: string) => {
-    const sub = teamSubmissions.get(teamId);
-    return sub?.status === 'submitted' || sub?.status === 'approved';
-  };
-
-  const getTeamSubmissionStatus = (teamId: string) => teamSubmissions.get(teamId);
+  // Realtime: 잠금 상태 변경 감지
+  useEffect(() => {
+    if (!currentClub) return;
+    const channel = supabase
+      .channel(`game-lock-${currentClub.id}-${selectedDate}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, () => {
+        loadData();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [currentClub, selectedDate, loadData]);
 
   const toggleTeam = (teamId: string) => {
-    if (isTeamLocked(teamId)) return;
     setSelectedTeamIds((prev) => {
       const next = new Set(prev);
       if (next.has(teamId)) next.delete(teamId);
@@ -66,6 +86,13 @@ export default function GameScoringPage() {
   const handleSubmit = async () => {
     if (!currentClub || selectedTeamIds.size === 0 || points <= 0) {
       toast.error('팀과 점수를 선택하세요');
+      return;
+    }
+    // 서버 잠금 재확인
+    const lock = await getGameScoreLock(currentClub.id, selectedDate);
+    if (lock) {
+      setGameLock(lock);
+      toast.error('관리자가 점수를 잠금 처리했습니다');
       return;
     }
     setSubmitting(true);
@@ -107,14 +134,36 @@ export default function GameScoringPage() {
     }
   };
 
-  const handleUndo = async () => {
+  const handleDeleteEntry = async (entryId: string) => {
     if (!currentClub) return;
+    const lock = await getGameScoreLock(currentClub.id, selectedDate);
+    if (lock) { setGameLock(lock); toast.error('잠금 상태입니다'); return; }
     try {
-      await deleteLastGameScore(currentClub.id, selectedDate);
-      toast.success('마지막 기록 취소됨');
+      await deleteGameScore(entryId);
+      toast.success('기록 삭제됨');
       await loadData();
     } catch {
-      toast.error('취소 실패');
+      toast.error('삭제 실패');
+    }
+  };
+
+  const handleStartEdit = (entry: GameScoreEntry) => {
+    setEditingEntry(entry);
+    setEditPoints(entry.points);
+    setEditDescription(entry.description || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingEntry || !currentClub) return;
+    const lock = await getGameScoreLock(currentClub.id, selectedDate);
+    if (lock) { setGameLock(lock); setEditingEntry(null); toast.error('잠금 상태입니다'); return; }
+    try {
+      await updateGameScore(editingEntry.id, { points: editPoints, description: editDescription });
+      toast.success('수정됨');
+      setEditingEntry(null);
+      await loadData();
+    } catch {
+      toast.error('수정 실패');
     }
   };
 
@@ -124,6 +173,45 @@ export default function GameScoringPage() {
         <h1 className="text-xl font-bold text-gray-900">게임 점수</h1>
         <span className="text-sm text-gray-500">{selectedDate}</span>
       </div>
+
+      {/* Club type selector (Sparks / T&T) */}
+      {hasBothClubs && (
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => handleClubSwitch(sparksClub)}
+            className={cn(
+              'flex-1 py-2.5 rounded-lg text-sm font-bold transition-all',
+              currentClub?.type === 'sparks'
+                ? 'bg-red-500 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-500'
+            )}
+          >
+            스팍스
+          </button>
+          <button
+            onClick={() => handleClubSwitch(tntClub)}
+            className={cn(
+              'flex-1 py-2.5 rounded-lg text-sm font-bold transition-all',
+              currentClub?.type === 'tnt'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-500'
+            )}
+          >
+            티엔티
+          </button>
+        </div>
+      )}
+
+      {isLocked && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🔒</span>
+            <p className="text-sm text-amber-700 font-medium">
+              관리자가 이 날짜의 게임 점수를 잠금 처리했습니다. 수정할 수 없습니다.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Team score overview */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
@@ -148,27 +236,6 @@ export default function GameScoringPage() {
           ))}
         </div>
       </div>
-
-      {/* 잠금된 팀 안내 */}
-      {teams.some(t => isTeamLocked(t.id)) && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-          <p className="text-xs text-blue-700 font-medium">
-            제출/승인된 팀은 점수를 수정할 수 없습니다. 담임교사가 제출한 팀은 잠금 처리됩니다.
-          </p>
-        </div>
-      )}
-
-      {/* 반려된 팀 안내 */}
-      {teams.filter(t => teamSubmissions.get(t.id)?.status === 'rejected').map(t => {
-        const sub = teamSubmissions.get(t.id)!;
-        return (
-          <div key={t.id} className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-            <p className="text-xs text-red-700 font-medium">
-              {t.name} 팀이 반려되었습니다{sub.rejection_note ? `: ${sub.rejection_note}` : ''}
-            </p>
-          </div>
-        );
-      })}
 
       {/* Score input */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
@@ -203,44 +270,37 @@ export default function GameScoringPage() {
 
         {/* Team selection */}
         <div className="grid grid-cols-4 gap-2 mb-3">
-          {teams.map((team) => {
-            const locked = isTeamLocked(team.id);
-            const sub = getTeamSubmissionStatus(team.id);
-            return (
-              <button
-                key={team.id}
-                onClick={() => toggleTeam(team.id)}
-                disabled={locked}
-                className={cn(
-                  'py-3 rounded-lg text-sm font-bold border-2 transition-all touch-manipulation',
-                  locked
-                    ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-60'
-                    : selectedTeamIds.has(team.id)
-                      ? 'border-current text-white active:scale-95'
-                      : 'border-gray-200 text-gray-600 bg-gray-50 active:scale-95'
-                )}
-                style={
-                  !locked && selectedTeamIds.has(team.id)
-                    ? { backgroundColor: team.color, borderColor: team.color }
-                    : undefined
-                }
-              >
-                {team.name}
-                <div className="text-xs mt-0.5 opacity-70">
-                  {locked
-                    ? (sub?.status === 'approved' ? '승인됨' : '제출됨')
-                    : selectedTeamIds.has(team.id) ? '✓' : ''}
-                </div>
-              </button>
-            );
-          })}
+          {teams.map((team) => (
+            <button
+              key={team.id}
+              onClick={() => !isLocked && toggleTeam(team.id)}
+              disabled={isLocked}
+              className={cn(
+                'py-3 rounded-lg text-sm font-bold border-2 transition-all touch-manipulation',
+                selectedTeamIds.has(team.id)
+                  ? 'border-current text-white active:scale-95'
+                  : 'border-gray-200 text-gray-600 bg-gray-50 active:scale-95'
+              )}
+              style={
+                selectedTeamIds.has(team.id)
+                  ? { backgroundColor: team.color, borderColor: team.color }
+                  : undefined
+              }
+            >
+              {team.name}
+              <div className="text-xs mt-0.5 opacity-70">
+                {selectedTeamIds.has(team.id) ? '✓' : ''}
+              </div>
+            </button>
+          ))}
         </div>
 
         {/* Points */}
         <div className="flex items-center justify-center gap-3 mb-3">
           <button
             onClick={() => setPoints(Math.max(0, points - 50))}
-            className="w-12 h-12 rounded-full bg-gray-100 text-gray-700 text-xl font-bold active:scale-95 touch-manipulation"
+            disabled={isLocked}
+            className="w-12 h-12 rounded-full bg-gray-100 text-gray-700 text-xl font-bold active:scale-95 touch-manipulation disabled:opacity-50"
           >
             −
           </button>
@@ -252,7 +312,8 @@ export default function GameScoringPage() {
           />
           <button
             onClick={() => setPoints(points + 50)}
-            className="w-12 h-12 rounded-full bg-indigo-600 text-white text-xl font-bold active:scale-95 touch-manipulation"
+            disabled={isLocked}
+            className="w-12 h-12 rounded-full bg-indigo-600 text-white text-xl font-bold active:scale-95 touch-manipulation disabled:opacity-50"
           >
             +
           </button>
@@ -262,8 +323,9 @@ export default function GameScoringPage() {
             <button
               key={p}
               onClick={() => setPoints(p)}
+              disabled={isLocked}
               className={cn(
-                'px-4 py-1.5 rounded-full text-sm font-medium',
+                'px-4 py-1.5 rounded-full text-sm font-medium disabled:opacity-50',
                 points === p ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
               )}
             >
@@ -275,7 +337,7 @@ export default function GameScoringPage() {
         {/* Submit */}
         <button
           onClick={handleSubmit}
-          disabled={submitting || selectedTeamIds.size === 0}
+          disabled={submitting || selectedTeamIds.size === 0 || isLocked}
           className="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold text-base disabled:opacity-50 active:scale-[0.98] transition-all touch-manipulation"
         >
           {submitting ? '저장 중...' : `선택된 팀에 ${points}점 부여`}
@@ -286,19 +348,11 @@ export default function GameScoringPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-medium text-gray-500">점수 기록 (오늘)</h2>
-          {recentEntries.length > 0 && (
-            <button
-              onClick={handleUndo}
-              className="text-xs text-red-500 font-medium hover:text-red-700"
-            >
-              실행 취소
-            </button>
-          )}
         </div>
         {recentEntries.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">기록이 없습니다</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-0">
             {recentEntries.slice(0, 10).map((entry) => {
               const team = teams.find((t) => t.id === entry.team_id);
               const time = new Date(entry.created_at).toLocaleTimeString('ko-KR', {
@@ -308,7 +362,7 @@ export default function GameScoringPage() {
               return (
                 <div
                   key={entry.id}
-                  className="flex items-center justify-between text-sm py-1.5 border-b border-gray-50"
+                  className="flex items-center justify-between text-sm py-2 border-b border-gray-50"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-400">{time}</span>
@@ -320,11 +374,27 @@ export default function GameScoringPage() {
                         {team.name}
                       </span>
                     )}
+                    {entry.description && (
+                      <span className="text-xs text-gray-400">{entry.description}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-indigo-600">+{entry.points}</span>
-                    {entry.description && (
-                      <span className="text-xs text-gray-400">{entry.description}</span>
+                    {!isLocked && (
+                      <>
+                        <button
+                          onClick={() => handleStartEdit(entry)}
+                          className="text-xs text-gray-400 hover:text-indigo-600 px-1"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEntry(entry.id)}
+                          className="text-xs text-gray-400 hover:text-red-600 px-1"
+                        >
+                          삭제
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -333,6 +403,50 @@ export default function GameScoringPage() {
           </div>
         )}
       </div>
+
+      {/* Edit modal */}
+      {editingEntry && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">점수 수정</h3>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">점수</label>
+                <input
+                  type="number"
+                  value={editPoints}
+                  onChange={(e) => setEditPoints(Math.max(0, Number(e.target.value)))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">설명</label>
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="게임 설명..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingEntry(null)}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

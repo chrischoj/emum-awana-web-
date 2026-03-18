@@ -24,7 +24,7 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 lg:translate-x-0',
+          'fixed top-0 left-0 z-50 h-dvh w-64 flex flex-col bg-white border-r border-gray-200 transform transition-transform duration-200 lg:translate-x-0',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >

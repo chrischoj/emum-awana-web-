@@ -2,24 +2,17 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
-import { getGameScoresByDate, getTeamGameTotals } from '../../services/gameScoreService';
-import { getSubmissionsByDate, approveSubmission, rejectSubmission } from '../../services/scoringService';
+import { getGameScoresByDate, getTeamGameTotals, updateGameScore, deleteGameScore, getGameScoreLock, lockGameScores, unlockGameScores } from '../../services/gameScoreService';
+import type { GameScoreLock } from '../../services/gameScoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { getToday, cn } from '../../lib/utils';
-import type { GameScoreEntry, Team, WeeklyScoreSubmission, SubmissionStatus } from '../../types/awana';
+import type { GameScoreEntry, Team } from '../../types/awana';
 
 interface ColorTotal {
   name: string;
   color: string;
   total: number;
 }
-
-const STATUS_CONFIG: Record<SubmissionStatus, { label: string; className: string }> = {
-  draft:     { label: '작성중',  className: 'bg-gray-100 text-gray-600' },
-  submitted: { label: '제출됨',  className: 'bg-blue-100 text-blue-700' },
-  approved:  { label: '승인됨',  className: 'bg-green-100 text-green-700' },
-  rejected:  { label: '반려됨',  className: 'bg-red-100 text-red-700' },
-};
 
 export default function GameScoresAdmin() {
   const { currentClub, clubs, setCurrentClub, teams } = useClub();
@@ -31,10 +24,11 @@ export default function GameScoresAdmin() {
   const [entries, setEntries] = useState<GameScoreEntry[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submissions, setSubmissions] = useState<WeeklyScoreSubmission[]>([]);
-  const [rejectingTeam, setRejectingTeam] = useState<string | null>(null);
-  const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [teacherNames, setTeacherNames] = useState<Map<string, string>>(new Map());
+  const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
+  const [editPoints, setEditPoints] = useState(0);
+  const [editDescription, setEditDescription] = useState('');
+  const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
   useEffect(() => {
     if (viewMode !== 'all') {
@@ -55,22 +49,18 @@ export default function GameScoresAdmin() {
     if (!currentClub) return;
     setLoading(true);
     try {
-      const [totals, data, subs] = await Promise.all([
+      const [totals, data, teachersRes, lock] = await Promise.all([
         getTeamGameTotals(currentClub.id, selectedDate),
         getGameScoresByDate(currentClub.id, selectedDate),
-        getSubmissionsByDate(currentClub.id, selectedDate),
+        supabase.from('teachers').select('id, name'),
+        getGameScoreLock(currentClub.id, selectedDate),
       ]);
-      setSubmissions(subs);
-      // 제출/승인된 팀만 필터링
-      const submittedTeamIds = new Set(
-        subs.filter(s => s.status === 'submitted' || s.status === 'approved').map(s => s.team_id)
-      );
-      const filteredTotals: Record<string, number> = {};
-      for (const [tid, total] of Object.entries(totals)) {
-        if (submittedTeamIds.has(tid)) filteredTotals[tid] = total;
-      }
-      setTeamTotals(filteredTotals);
-      setEntries(data.filter(e => submittedTeamIds.has(e.team_id)));
+      setTeamTotals(totals);
+      setEntries(data);
+      const nameMap = new Map<string, string>();
+      for (const t of (teachersRes.data || [])) nameMap.set(t.id, t.name);
+      setTeacherNames(nameMap);
+      setGameLock(lock);
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
@@ -81,24 +71,25 @@ export default function GameScoresAdmin() {
   async function loadAllData() {
     setLoading(true);
     try {
-      const [teamsRes, entriesRes, submissionsRes] = await Promise.all([
+      const [teamsRes, entriesRes, teachersRes] = await Promise.all([
         supabase.from('teams').select('*').order('name'),
         supabase.from('game_score_entries').select('*').eq('training_date', selectedDate).order('created_at', { ascending: false }),
-        supabase.from('weekly_score_submissions').select('*').eq('training_date', selectedDate).in('status', ['submitted', 'approved']),
+        supabase.from('teachers').select('id, name'),
       ]);
 
       const fetchedTeams = (teamsRes.data as Team[]) || [];
       const fetchedEntries = (entriesRes.data as GameScoreEntry[]) || [];
-      const allSubs = (submissionsRes.data as WeeklyScoreSubmission[]) || [];
-      const submittedTeamIds = new Set(allSubs.map(s => s.team_id));
 
       setAllTeams(fetchedTeams);
-      setEntries(fetchedEntries.filter(e => submittedTeamIds.has(e.team_id)));
+      setEntries(fetchedEntries);
+      setGameLock(null); // all view doesn't have per-club lock
 
-      // Aggregate by color — only submitted teams
+      const nameMap = new Map<string, string>();
+      for (const t of (teachersRes.data || [])) nameMap.set(t.id, t.name);
+      setTeacherNames(nameMap);
+
       const colorGroupMap = new Map<string, { color: string; teamIds: string[] }>();
       for (const team of fetchedTeams) {
-        if (!submittedTeamIds.has(team.id)) continue;
         const existing = colorGroupMap.get(team.name);
         if (existing) existing.teamIds.push(team.id);
         else colorGroupMap.set(team.name, { color: team.color, teamIds: [team.id] });
@@ -126,7 +117,7 @@ export default function GameScoresAdmin() {
         if (viewMode === 'all') loadAllData();
         else loadClubData();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_score_submissions' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, () => {
         if (viewMode === 'all') loadAllData();
         else loadClubData();
       })
@@ -134,61 +125,58 @@ export default function GameScoresAdmin() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedDate, viewMode, currentClub, clubs]);
 
-  async function handleApprove(teamId: string) {
+  const handleDeleteEntry = async (entryId: string) => {
+    try {
+      await deleteGameScore(entryId);
+      toast.success('삭제됨');
+      if (viewMode === 'all') await loadAllData();
+      else await loadClubData();
+    } catch {
+      toast.error('삭제 실패');
+    }
+  };
+
+  const handleStartEdit = (entry: GameScoreEntry) => {
+    setEditingEntry(entry);
+    setEditPoints(entry.points);
+    setEditDescription(entry.description || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingEntry) return;
+    try {
+      await updateGameScore(editingEntry.id, { points: editPoints, description: editDescription });
+      toast.success('수정됨');
+      setEditingEntry(null);
+      if (viewMode === 'all') await loadAllData();
+      else await loadClubData();
+    } catch {
+      toast.error('수정 실패');
+    }
+  };
+
+  const handleToggleLock = async () => {
     if (!currentClub || !adminTeacher) return;
-    setActionLoading(teamId);
     try {
-      await approveSubmission({
-        clubId: currentClub.id,
-        teamId,
-        trainingDate: selectedDate,
-        approvedBy: adminTeacher.id,
-      });
-      toast.success('승인됨');
+      if (gameLock) {
+        await unlockGameScores(currentClub.id, selectedDate);
+        toast.success('게임 점수 잠금 해제됨');
+      } else {
+        await lockGameScores(currentClub.id, selectedDate, adminTeacher.id);
+        toast.success('게임 점수 잠금됨');
+      }
       await loadClubData();
     } catch {
-      toast.error('승인 처리 실패');
-    } finally {
-      setActionLoading(null);
+      toast.error('잠금 처리 실패');
     }
-  }
-
-  async function handleReject(teamId: string) {
-    if (!currentClub) return;
-    setActionLoading(teamId);
-    try {
-      await rejectSubmission({
-        clubId: currentClub.id,
-        teamId,
-        trainingDate: selectedDate,
-        rejectionNote: rejectionNotes[teamId] || '',
-      });
-      toast.success('반려됨');
-      setRejectingTeam(null);
-      setRejectionNotes(prev => { const n = { ...prev }; delete n[teamId]; return n; });
-      await loadClubData();
-    } catch {
-      toast.error('반려 처리 실패');
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  const getTeamSubmission = (teamId: string) => submissions.find(s => s.team_id === teamId);
+  };
 
   const clubMap = new Map(clubs.map((c) => [c.id, c.name]));
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">게임 점수 관리</h1>
-          {viewMode !== 'all' && submissions.filter(s => s.status === 'submitted').length > 0 && (
-            <p className="text-sm text-blue-600 mt-0.5">
-              {submissions.filter(s => s.status === 'submitted').length}개 팀이 승인 대기 중입니다
-            </p>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold text-gray-900">게임 점수 관리</h1>
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('all')}
@@ -208,6 +196,40 @@ export default function GameScoresAdmin() {
         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
       </div>
 
+      {viewMode !== 'all' && (
+        <div className={cn(
+          'flex items-center justify-between p-3 rounded-xl mb-4 border',
+          gameLock
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-green-50 border-green-200'
+        )}>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{gameLock ? '🔒' : '🔓'}</span>
+            <div>
+              <p className={cn('text-sm font-medium', gameLock ? 'text-amber-700' : 'text-green-700')}>
+                {gameLock ? '점수가 잠겨있습니다' : '점수 입력 가능 상태'}
+              </p>
+              {gameLock && (
+                <p className="text-xs text-amber-600">
+                  {new Date(gameLock.locked_at).toLocaleString('ko-KR')} 잠금
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={handleToggleLock}
+            className={cn(
+              'px-4 py-1.5 rounded-lg text-sm font-medium transition-colors',
+              gameLock
+                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            )}
+          >
+            {gameLock ? '잠금 해제' : '잠금'}
+          </button>
+        </div>
+      )}
+
       {/* Team/Color totals */}
       {viewMode === 'all' ? (
         <div className="grid grid-cols-4 gap-3 mb-6">
@@ -220,78 +242,12 @@ export default function GameScoresAdmin() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 mb-6 lg:grid-cols-4">
-          {teams.filter(team => teamTotals[team.id] !== undefined).map((team) => {
-            const sub = getTeamSubmission(team.id);
-            const status = sub?.status ?? 'draft';
-            const statusCfg = STATUS_CONFIG[status];
-            return (
-              <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-4" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-bold" style={{ color: team.color }}>{team.name}</p>
-                  <span className={cn('text-xs px-2 py-0.5 rounded-full font-medium', statusCfg.className)}>
-                    {statusCfg.label}
-                  </span>
-                </div>
-                <p className="text-2xl font-bold text-center">{(teamTotals[team.id] || 0).toLocaleString()}</p>
-                {status === 'submitted' && (
-                  <div className="mt-3 pt-3 border-t border-gray-100">
-                    {rejectingTeam === team.id ? (
-                      <>
-                        <textarea
-                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
-                          rows={2}
-                          placeholder="반려 사유 입력..."
-                          value={rejectionNotes[team.id] || ''}
-                          onChange={(e) => setRejectionNotes(prev => ({ ...prev, [team.id]: e.target.value }))}
-                        />
-                        <div className="flex gap-1.5 mt-2">
-                          <button
-                            onClick={() => handleReject(team.id)}
-                            disabled={actionLoading === team.id}
-                            className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-                          >
-                            {actionLoading === team.id ? '처리중...' : '반려 확인'}
-                          </button>
-                          <button
-                            onClick={() => setRejectingTeam(null)}
-                            className="flex-1 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          >
-                            취소
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex gap-1.5">
-                        <button
-                          onClick={() => handleApprove(team.id)}
-                          disabled={actionLoading === team.id}
-                          className="flex-1 py-1 rounded-lg text-xs font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
-                        >
-                          {actionLoading === team.id ? '처리중...' : '승인'}
-                        </button>
-                        <button
-                          onClick={() => setRejectingTeam(team.id)}
-                          className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200"
-                        >
-                          반려
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {status === 'rejected' && sub?.rejection_note && (
-                  <div className="mt-2 pt-2 border-t border-gray-100">
-                    <p className="text-xs text-red-500">반려 사유: {sub.rejection_note}</p>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {teams.filter(team => teamTotals[team.id] !== undefined).length === 0 && (
-            <div className="col-span-full text-center py-8">
-              <p className="text-gray-400 text-sm">아직 제출된 팀이 없습니다</p>
+          {teams.map((team) => (
+            <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-4" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
+              <p className="text-sm font-bold" style={{ color: team.color }}>{team.name}</p>
+              <p className="text-2xl font-bold text-center mt-1">{(teamTotals[team.id] || 0).toLocaleString()}</p>
             </div>
-          )}
+          ))}
         </div>
       )}
 
@@ -301,13 +257,14 @@ export default function GameScoresAdmin() {
         {loading ? (
           <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" /></div>
         ) : entries.length === 0 ? (
-          <p className="text-gray-400 text-center py-4 text-sm">제출된 팀의 기록이 없습니다</p>
+          <p className="text-gray-400 text-center py-4 text-sm">기록이 없습니다</p>
         ) : (
           <div className="space-y-2">
             {entries.map((entry) => {
               const team = viewMode === 'all'
                 ? allTeams.find((t) => t.id === entry.team_id)
                 : teams.find((t) => t.id === entry.team_id);
+              const teacherName = entry.recorded_by ? teacherNames.get(entry.recorded_by) : null;
               return (
                 <div key={entry.id} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm">
                   <div className="flex items-center gap-2">
@@ -317,14 +274,55 @@ export default function GameScoresAdmin() {
                     )}
                     {team && <span className="px-2 py-0.5 rounded text-xs font-medium text-white" style={{ backgroundColor: team.color }}>{team.name}</span>}
                     {entry.description && <span className="text-gray-500">{entry.description}</span>}
+                    {teacherName && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{teacherName}</span>
+                    )}
                   </div>
-                  <span className="font-bold text-indigo-600">+{entry.points}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-indigo-600">+{entry.points}</span>
+                    <button onClick={() => handleStartEdit(entry)} className="text-xs text-gray-400 hover:text-indigo-600 px-1">수정</button>
+                    <button onClick={() => handleDeleteEntry(entry.id)} className="text-xs text-gray-400 hover:text-red-600 px-1">삭제</button>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Edit modal */}
+      {editingEntry && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">점수 수정</h3>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">점수</label>
+                <input
+                  type="number"
+                  value={editPoints}
+                  onChange={(e) => setEditPoints(Math.max(0, Number(e.target.value)))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">설명</label>
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="게임 설명..."
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditingEntry(null)} className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium">취소</button>
+              <button onClick={handleSaveEdit} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,6 +11,16 @@ import { Avatar } from '../../components/ui/Avatar';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { WeeklyScore, ScoringCategory, Team, Member, SubmissionStatus, WeeklyScoreSubmission, ScoreEditHistory } from '../../types/awana';
 
+interface SubTeamData {
+  teamId: string;
+  clubId: string;
+  clubName: string;
+  handbookTotal: number;
+  gameTotal: number;
+  grandTotal: number;
+  submission: WeeklyScoreSubmission | null;
+}
+
 interface TeamScoreData {
   teamId: string;
   teamName: string;
@@ -20,6 +30,7 @@ interface TeamScoreData {
   grandTotal: number;
   submission: WeeklyScoreSubmission | null;
   memberScores: MemberScoreRow[];
+  subTeams?: SubTeamData[];
 }
 
 interface MemberScoreRow {
@@ -193,12 +204,19 @@ export default function ScoringOverview() {
         };
       });
 
-      // 관리자에게는 제출/승인된 팀만 표시 (draft는 숨김)
-      const filtered = result.filter(t => {
-        const status = t.submission?.status;
-        return status === 'submitted' || status === 'approved';
+      // 상태 우선순위 정렬: 승인대기 → 반려됨 → 승인됨 → 미제출
+      const statusOrder: Record<string, number> = {
+        submitted: 0,
+        rejected: 1,
+        approved: 2,
+        draft: 3,
+      };
+      result.sort((a, b) => {
+        const sa = a.submission?.status ?? 'none';
+        const sb = b.submission?.status ?? 'none';
+        return (statusOrder[sa] ?? 4) - (statusOrder[sb] ?? 4);
       });
-      setTeamScores(filtered);
+      setTeamScores(result);
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
@@ -215,7 +233,7 @@ export default function ScoringOverview() {
         supabase.from('members').select('*').eq('active', true).eq('enrollment_status', 'active').order('name'),
         supabase.from('weekly_scores').select('*').eq('training_date', selectedDate),
         supabase.from('game_score_entries').select('*').eq('training_date', selectedDate),
-        supabase.from('weekly_score_submissions').select('*').eq('training_date', selectedDate).in('status', ['submitted', 'approved']),
+        supabase.from('weekly_score_submissions').select('*').eq('training_date', selectedDate),
       ]);
 
       const allTeams = (teamsRes.data as Team[]) || [];
@@ -224,18 +242,26 @@ export default function ScoringOverview() {
       const allGameEntries = (gameRes.data as { team_id: string; points: number }[]) || [];
       const allSubmissions = (submissionsRes.data as WeeklyScoreSubmission[]) || [];
 
-      // 제출된 team_id Set
-      const submittedTeamIds = new Set(allSubmissions.map(s => s.team_id));
+      // submission 맵 (team_id -> submission)
+      const submissionMap = new Map<string, WeeklyScoreSubmission>();
+      for (const s of allSubmissions) {
+        submissionMap.set(s.team_id, s);
+      }
 
       const memberTeamMap = new Map<string, string>();
       for (const m of allMembers) {
         if (m.team_id) memberTeamMap.set(m.id, m.team_id);
       }
 
-      // Group teams by color name — only include submitted teams
+      // team_id -> club_id 맵
+      const teamClubMap = new Map<string, string>();
+      for (const team of allTeams) {
+        teamClubMap.set(team.id, team.club_id);
+      }
+
+      // Group ALL teams by color name (not just submitted)
       const colorGroups = new Map<string, { color: string; teamIds: string[] }>();
       for (const team of allTeams) {
-        if (!submittedTeamIds.has(team.id)) continue;
         const existing = colorGroups.get(team.name);
         if (existing) {
           existing.teamIds.push(team.id);
@@ -244,12 +270,12 @@ export default function ScoringOverview() {
         }
       }
 
-      // Handbook scores per team (only submitted teams)
+      // Handbook scores per team (모든 팀)
       const teamHandbookMap = new Map<string, number>();
       const memberScoreMap = new Map<string, Partial<Record<ScoringCategory, number>>>();
       for (const score of allScores) {
         const teamId = memberTeamMap.get(score.member_id);
-        if (teamId && submittedTeamIds.has(teamId)) {
+        if (teamId) {
           teamHandbookMap.set(teamId, (teamHandbookMap.get(teamId) || 0) + score.total_points);
           if (!memberScoreMap.has(score.member_id)) {
             memberScoreMap.set(score.member_id, {});
@@ -258,15 +284,13 @@ export default function ScoringOverview() {
         }
       }
 
-      // Game totals per team (only submitted teams)
+      // Game totals per team (모든 팀)
       const teamGameMap = new Map<string, number>();
       for (const entry of allGameEntries) {
-        if (submittedTeamIds.has(entry.team_id)) {
-          teamGameMap.set(entry.team_id, (teamGameMap.get(entry.team_id) || 0) + entry.points);
-        }
+        teamGameMap.set(entry.team_id, (teamGameMap.get(entry.team_id) || 0) + entry.points);
       }
 
-      // Build color-aggregated TeamScoreData
+      // Build color-aggregated TeamScoreData with subTeams
       const clubNameMap = new Map(clubs.map((c) => [c.id, c.name]));
       const result: TeamScoreData[] = [];
       for (const [colorName, { color, teamIds }] of colorGroups) {
@@ -288,6 +312,20 @@ export default function ScoringOverview() {
         const handbookTotal = teamIds.reduce((sum, tid) => sum + (teamHandbookMap.get(tid) || 0), 0);
         const gameTotal = teamIds.reduce((sum, tid) => sum + (teamGameMap.get(tid) || 0), 0);
 
+        // subTeams: 각 클럽별 개별 데이터
+        const subTeams: SubTeamData[] = teamIds.map((tid) => {
+          const clubId = teamClubMap.get(tid) || '';
+          return {
+            teamId: tid,
+            clubId,
+            clubName: clubNameMap.get(clubId) || '알 수 없음',
+            handbookTotal: teamHandbookMap.get(tid) || 0,
+            gameTotal: teamGameMap.get(tid) || 0,
+            grandTotal: (teamHandbookMap.get(tid) || 0) + (teamGameMap.get(tid) || 0),
+            submission: submissionMap.get(tid) || null,
+          };
+        });
+
         result.push({
           teamId: colorName,
           teamName: colorName,
@@ -297,6 +335,7 @@ export default function ScoringOverview() {
           grandTotal: handbookTotal + gameTotal,
           submission: null,
           memberScores: memberRows,
+          subTeams,
         });
       }
 
@@ -351,6 +390,46 @@ export default function ScoringOverview() {
       setRejectingTeam(null);
       setRejectionNotes((prev) => { const n = { ...prev }; delete n[teamScore.teamId]; return n; });
       await loadData();
+    } catch {
+      toast.error('반려 처리 실패');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleAllViewApprove(sub: SubTeamData) {
+    if (!adminTeacher) return;
+    setActionLoading(sub.teamId);
+    try {
+      await approveSubmission({
+        clubId: sub.clubId,
+        teamId: sub.teamId,
+        trainingDate: selectedDate,
+        approvedBy: adminTeacher.id,
+      });
+      toast.success(`승인됨`);
+      await loadAllData(false);
+    } catch {
+      toast.error('승인 처리 실패');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleAllViewReject(sub: SubTeamData) {
+    setActionLoading(sub.teamId);
+    try {
+      const note = rejectionNotes[sub.teamId] || '';
+      await rejectSubmission({
+        clubId: sub.clubId,
+        teamId: sub.teamId,
+        trainingDate: selectedDate,
+        rejectionNote: note,
+      });
+      toast.success(`반려됨`);
+      setRejectingTeam(null);
+      setRejectionNotes((prev) => { const n = { ...prev }; delete n[sub.teamId]; return n; });
+      await loadAllData(false);
     } catch {
       toast.error('반려 처리 실패');
     } finally {
@@ -420,6 +499,13 @@ export default function ScoringOverview() {
   }
 
   const submittedCount = teamScores.filter((t) => t.submission?.status === 'submitted').length;
+  const unsubmittedCount = teamScores.filter((t) => !t.submission || t.submission.status === 'draft').length;
+
+  // all 뷰용 전체 통계
+  const allSubTeams = teamScores.flatMap((t) => t.subTeams || []);
+  const allSubmittedCount = allSubTeams.filter((s) => s.submission?.status === 'submitted').length;
+  const allApprovedCount = allSubTeams.filter((s) => s.submission?.status === 'approved').length;
+  const allUnsubmittedCount = allSubTeams.filter((s) => !s.submission || s.submission.status === 'draft').length;
 
   return (
     <div>
@@ -437,8 +523,27 @@ export default function ScoringOverview() {
               <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />
             </button>
           </div>
-          {submittedCount > 0 && (
-            <p className="text-sm text-blue-600 mt-0.5">{submittedCount}개 팀이 승인 대기 중입니다</p>
+          {viewMode === 'all' ? (
+            <>
+              {allSubmittedCount > 0 && (
+                <p className="text-sm text-blue-600 mt-0.5">승인 대기 {allSubmittedCount}팀 · 승인됨 {allApprovedCount}팀 · 미제출 {allUnsubmittedCount}팀</p>
+              )}
+              {allSubmittedCount === 0 && allApprovedCount > 0 && (
+                <p className="text-sm text-green-600 mt-0.5">전체 {allApprovedCount}팀 승인 완료 · 미제출 {allUnsubmittedCount}팀</p>
+              )}
+              {allSubmittedCount === 0 && allApprovedCount === 0 && allUnsubmittedCount > 0 && (
+                <p className="text-sm text-gray-400 mt-0.5">전체 {allUnsubmittedCount}팀 미제출</p>
+              )}
+            </>
+          ) : (
+            <>
+              {submittedCount > 0 && (
+                <p className="text-sm text-blue-600 mt-0.5">{submittedCount}개 팀이 승인 대기 중입니다</p>
+              )}
+              {unsubmittedCount > 0 && (
+                <p className="text-sm text-gray-400 mt-0.5">{unsubmittedCount}개 팀이 아직 제출하지 않았습니다</p>
+              )}
+            </>
           )}
         </div>
         <div className="flex gap-2">
@@ -480,107 +585,294 @@ export default function ScoringOverview() {
         </div>
       ) : teamScores.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-gray-400 text-sm">아직 제출된 팀이 없습니다</p>
+          <p className="text-gray-400 text-sm">{viewMode === 'all' ? '등록된 팀이 없습니다' : '아직 제출된 팀이 없습니다'}</p>
         </div>
       ) : (
         <>
           {/* 팀별 점수 카드 */}
-          <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
-            {teamScores.map((t) => {
-              const status = t.submission?.status ?? 'draft';
-              const statusCfg = STATUS_CONFIG[status];
+          {(() => {
+            const renderTeamCard = (t: TeamScoreData) => {
+              const status = t.submission?.status ?? null;
+              const statusCfg = status ? STATUS_CONFIG[status] : null;
+              const hasSubTeams = (t.subTeams?.length ?? 0) > 0;
+              const isUnsubmitted = hasSubTeams ? false : (!status || status === 'draft');
+
               return (
                 <div
                   key={t.teamId}
-                  className="bg-white rounded-xl border border-gray-200 p-5"
+                  className={cn(
+                    'bg-white rounded-xl border p-5 transition-all',
+                    isUnsubmitted && 'opacity-50 grayscale',
+                    status === 'rejected' && 'border-red-200 bg-red-50/30',
+                    !isUnsubmitted && status !== 'rejected' && 'border-gray-200',
+                  )}
                   style={{ borderTopColor: t.teamColor, borderTopWidth: 3 }}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <p className="font-bold text-sm" style={{ color: t.teamColor }}>{t.teamName}</p>
-                    {viewMode !== 'all' && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg.className}`}>
-                        {statusCfg.label}
-                      </span>
+                    {!hasSubTeams && (
+                      <>
+                        {statusCfg && !isUnsubmitted && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg.className}`}>
+                            {statusCfg.label}
+                          </span>
+                        )}
+                        {isUnsubmitted && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-400">
+                            미제출
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
 
-                  <div className="space-y-1.5 text-sm text-gray-600 mb-3">
-                    <div className="flex justify-between">
-                      <span>핸드북</span>
-                      <span className="font-medium text-gray-800">{t.handbookTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>게임</span>
-                      <span className="font-medium text-gray-800">{t.gameTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between pt-1.5 border-t border-gray-100">
-                      <span className="font-semibold text-gray-700">총합</span>
-                      <span className="font-bold text-lg" style={{ color: t.teamColor }}>
-                        {t.grandTotal.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
+                  {isUnsubmitted ? (
+                    <p className="text-xs text-gray-400 text-center py-4">아직 제출되지 않았습니다</p>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5 text-sm text-gray-600 mb-3">
+                        <div className="flex justify-between">
+                          <span>핸드북</span>
+                          <span className="font-medium text-gray-800">{t.handbookTotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>게임</span>
+                          <span className="font-medium text-gray-800">{t.gameTotal.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between pt-1.5 border-t border-gray-100">
+                          <span className="font-semibold text-gray-700">총합</span>
+                          <span className="font-bold text-lg" style={{ color: t.teamColor }}>
+                            {t.grandTotal.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
 
-                  {/* 승인/반려 버튼 (submitted 상태일 때만) */}
-                  {status === 'submitted' && (
-                    <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
-                      {rejectingTeam === t.teamId ? (
-                        <>
-                          <textarea
-                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
-                            rows={2}
-                            placeholder="반려 사유 입력..."
-                            value={rejectionNotes[t.teamId] || ''}
-                            onChange={(e) =>
-                              setRejectionNotes((prev) => ({ ...prev, [t.teamId]: e.target.value }))
-                            }
-                          />
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() => handleReject(t)}
-                              disabled={actionLoading === t.teamId}
-                              className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-                            >
-                              {actionLoading === t.teamId ? '처리중...' : '반려 확인'}
-                            </button>
-                            <button
-                              onClick={() => setRejectingTeam(null)}
-                              className="flex-1 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
-                            >
-                              취소
-                            </button>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => handleApprove(t)}
-                            disabled={actionLoading === t.teamId}
-                            className="flex-1 py-1 rounded-lg text-xs font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
-                          >
-                            {actionLoading === t.teamId ? '처리중...' : '승인'}
-                          </button>
-                          <button
-                            onClick={() => setRejectingTeam(t.teamId)}
-                            className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200"
-                          >
-                            반려
-                          </button>
+                      {/* 승인/반려 버튼 (submitted 상태일 때만, 개별 클럽 뷰) */}
+                      {status === 'submitted' && !hasSubTeams && (
+                        <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
+                          {rejectingTeam === t.teamId ? (
+                            <>
+                              <textarea
+                                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+                                rows={2}
+                                placeholder="반려 사유 입력..."
+                                value={rejectionNotes[t.teamId] || ''}
+                                onChange={(e) =>
+                                  setRejectionNotes((prev) => ({ ...prev, [t.teamId]: e.target.value }))
+                                }
+                              />
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => handleReject(t)}
+                                  disabled={actionLoading === t.teamId}
+                                  className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                                >
+                                  {actionLoading === t.teamId ? '처리중...' : '반려 확인'}
+                                </button>
+                                <button
+                                  onClick={() => setRejectingTeam(null)}
+                                  className="flex-1 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                >
+                                  취소
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleApprove(t)}
+                                disabled={actionLoading === t.teamId}
+                                className="flex-1 py-1 rounded-lg text-xs font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                              >
+                                {actionLoading === t.teamId ? '처리중...' : '승인'}
+                              </button>
+                              <button
+                                onClick={() => setRejectingTeam(t.teamId)}
+                                className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200"
+                              >
+                                반려
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
-                    </div>
-                  )}
 
-                  {/* 반려된 경우 메모 표시 */}
-                  {status === 'rejected' && t.submission?.rejection_note && (
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                      <p className="text-xs text-red-500">반려 사유: {t.submission.rejection_note}</p>
-                    </div>
+                      {/* 반려된 경우 메모 표시 (개별 클럽 뷰) */}
+                      {status === 'rejected' && t.submission?.rejection_note && !hasSubTeams && (
+                        <div className="mt-2 pt-2 border-t border-gray-100">
+                          <p className="text-xs text-red-500">반려 사유: {t.submission.rejection_note}</p>
+                        </div>
+                      )}
+
+                      {/* 클럽별 개별 현황 (all 뷰) */}
+                      {t.subTeams && t.subTeams.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                          {t.subTeams.map((sub) => {
+                            const subStatus = sub.submission?.status ?? null;
+                            const subStatusCfg = subStatus ? STATUS_CONFIG[subStatus] : null;
+                            const isSubUnsubmitted = !subStatus || subStatus === 'draft';
+                            return (
+                              <div
+                                key={sub.teamId}
+                                className={cn(
+                                  'rounded-lg p-2.5 text-xs',
+                                  isSubUnsubmitted && 'bg-gray-50 opacity-60',
+                                  subStatus === 'rejected' && 'bg-red-50',
+                                  subStatus === 'submitted' && 'bg-blue-50',
+                                  subStatus === 'approved' && 'bg-green-50',
+                                )}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-semibold text-gray-700">{sub.clubName}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500">
+                                      {sub.grandTotal.toLocaleString()}점
+                                    </span>
+                                    {subStatusCfg && !isSubUnsubmitted ? (
+                                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${subStatusCfg.className}`}>
+                                        {subStatusCfg.label}
+                                      </span>
+                                    ) : (
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400">
+                                        미제출
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* 승인/반려 버튼 */}
+                                {subStatus === 'submitted' && (
+                                  <div className="mt-1.5">
+                                    {rejectingTeam === sub.teamId ? (
+                                      <div className="space-y-1.5">
+                                        <textarea
+                                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+                                          rows={2}
+                                          placeholder="반려 사유 입력..."
+                                          value={rejectionNotes[sub.teamId] || ''}
+                                          onChange={(e) =>
+                                            setRejectionNotes((prev) => ({ ...prev, [sub.teamId]: e.target.value }))
+                                          }
+                                        />
+                                        <div className="flex gap-1">
+                                          <button
+                                            onClick={() => handleAllViewReject(sub)}
+                                            disabled={actionLoading === sub.teamId}
+                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                                          >
+                                            {actionLoading === sub.teamId ? '처리중...' : '반려 확인'}
+                                          </button>
+                                          <button
+                                            onClick={() => setRejectingTeam(null)}
+                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                          >
+                                            취소
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => handleAllViewApprove(sub)}
+                                          disabled={actionLoading === sub.teamId}
+                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                                        >
+                                          {actionLoading === sub.teamId ? '처리중...' : '승인'}
+                                        </button>
+                                        <button
+                                          onClick={() => setRejectingTeam(sub.teamId)}
+                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-red-100 text-red-600 hover:bg-red-200"
+                                        >
+                                          반려
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* 반려 사유 */}
+                                {subStatus === 'rejected' && sub.submission?.rejection_note && (
+                                  <p className="text-[10px] text-red-500 mt-1">사유: {sub.submission.rejection_note}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );
-            })}
-          </div>
+            };
+
+            return viewMode !== 'all' ? (
+              <div className="space-y-6 mb-6">
+                {/* 승인 대기 섹션 */}
+                {teamScores.filter(t => t.submission?.status === 'submitted').length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      <h3 className="text-sm font-semibold text-blue-700">
+                        승인 대기 ({teamScores.filter(t => t.submission?.status === 'submitted').length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => t.submission?.status === 'submitted').map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 반려됨 섹션 */}
+                {teamScores.filter(t => t.submission?.status === 'rejected').length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-red-500" />
+                      <h3 className="text-sm font-semibold text-red-700">
+                        반려됨 ({teamScores.filter(t => t.submission?.status === 'rejected').length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => t.submission?.status === 'rejected').map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 승인됨 섹션 */}
+                {teamScores.filter(t => t.submission?.status === 'approved').length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-green-500" />
+                      <h3 className="text-sm font-semibold text-green-700">
+                        승인됨 ({teamScores.filter(t => t.submission?.status === 'approved').length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => t.submission?.status === 'approved').map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 미제출 섹션 */}
+                {teamScores.filter(t => !t.submission || t.submission.status === 'draft').length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-gray-300" />
+                      <h3 className="text-sm font-semibold text-gray-400">
+                        미제출 ({teamScores.filter(t => !t.submission || t.submission.status === 'draft').length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => !t.submission || t.submission.status === 'draft').map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
+                {teamScores.map(renderTeamCard)}
+              </div>
+            );
+          })()}
 
           {/* 멤버별 상세 테이블 */}
           <div className="space-y-3">
@@ -601,6 +893,9 @@ export default function ScoringOverview() {
                       <span className="text-sm text-gray-500">
                         ({t.memberScores.length}명)
                       </span>
+                      {(!t.submission || t.submission.status === 'draft') && viewMode !== 'all' && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium">미제출</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-bold" style={{ color: t.teamColor }}>
