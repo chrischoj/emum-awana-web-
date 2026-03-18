@@ -13,6 +13,10 @@ import {
 import type { GameScoreLock } from '../../services/gameScoreService';
 import { supabase } from '../../lib/supabase';
 import { cn, getToday } from '../../lib/utils';
+import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useSessionCache } from '../../hooks/useSessionCache';
+import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import type { GameScoreEntry } from '../../types/awana';
 
 const POINT_PRESETS = [50, 100, 200, 400];
@@ -21,6 +25,8 @@ const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수
 export default function GameScoringPage() {
   const { teacher } = useAuth();
   const { currentClub, clubs, setCurrentClub, teams } = useClub();
+  const { isOffline } = useNetworkStatus();
+  const { enqueue, pendingCount } = useOfflineQueue();
 
   const sparksClub = clubs.find((c) => c.type === 'sparks');
   const tntClub = clubs.find((c) => c.type === 'tnt');
@@ -38,6 +44,10 @@ export default function GameScoringPage() {
   const [editDescription, setEditDescription] = useState('');
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
+  const gameCacheKey = `game-${currentClub?.id}-${selectedDate}`;
+  const { restore: restoreGameTotals } = useSessionCache(gameCacheKey + '-totals', teamTotals, Object.keys(teamTotals).length > 0);
+  const { restore: restoreGameEntries } = useSessionCache(gameCacheKey + '-entries', recentEntries, recentEntries.length > 0);
+
   const handleClubSwitch = (club: typeof currentClub) => {
     if (!club || club.id === currentClub?.id) return;
     setSelectedTeamIds(new Set());
@@ -46,20 +56,29 @@ export default function GameScoringPage() {
 
   const loadData = useCallback(async () => {
     if (!currentClub) return;
-    const [totals, entries, lock] = await Promise.all([
-      getTeamGameTotals(currentClub.id, selectedDate),
-      getGameScoresByDate(currentClub.id, selectedDate),
-      getGameScoreLock(currentClub.id, selectedDate),
-    ]);
-    setTeamTotals(totals);
-    setRecentEntries(entries);
-    setGameLock(lock);
-  }, [currentClub, selectedDate]);
+    try {
+      const [totals, entries, lock] = await Promise.all([
+        getTeamGameTotals(currentClub.id, selectedDate),
+        getGameScoresByDate(currentClub.id, selectedDate),
+        getGameScoreLock(currentClub.id, selectedDate),
+      ]);
+      setTeamTotals(totals);
+      setRecentEntries(entries);
+      setGameLock(lock);
+    } catch {
+      // 오프라인: 캐시에서 복원
+      const cachedTotals = restoreGameTotals();
+      const cachedEntries = restoreGameEntries();
+      if (cachedTotals && Object.keys(cachedTotals).length > 0) setTeamTotals(cachedTotals);
+      if (cachedEntries && cachedEntries.length > 0) setRecentEntries(cachedEntries);
+      if (navigator.onLine) toast.error('데이터 로드 실패');
+    }
+  }, [currentClub, selectedDate, restoreGameTotals, restoreGameEntries]);
 
-  const isLocked = !!gameLock;
+  const isLocked = isOffline ? false : !!gameLock;
 
   useEffect(() => {
-    loadData().catch(() => toast.error('데이터 로드 실패'));
+    loadData();
   }, [loadData]);
 
   // Realtime: 잠금 상태 변경 감지
@@ -88,7 +107,49 @@ export default function GameScoringPage() {
       toast.error('팀과 점수를 선택하세요');
       return;
     }
-    // 서버 잠금 재확인
+
+    // 로컬 낙관적 업데이트 (오프라인/온라인 모두 즉시 반영)
+    const applyLocal = () => {
+      navigator.vibrate?.(20);
+      setTeamTotals((prev) => {
+        const next = { ...prev };
+        for (const tid of selectedTeamIds) {
+          next[tid] = (next[tid] || 0) + points;
+        }
+        return next;
+      });
+      // 로컬 기록 추가 (오프라인에서도 기록 확인 가능)
+      const now = new Date().toISOString();
+      const newEntries: GameScoreEntry[] = Array.from(selectedTeamIds).map((tid) => ({
+        id: `local-${Date.now()}-${tid}`,
+        team_id: tid,
+        club_id: currentClub!.id,
+        training_date: selectedDate,
+        points,
+        description: description || null,
+        recorded_by: teacher?.id || null,
+        created_at: now,
+      }));
+      setRecentEntries((prev) => [...newEntries, ...prev]);
+    };
+
+    if (isOffline) {
+      applyLocal();
+      enqueue('addGameScore', {
+        teamIds: Array.from(selectedTeamIds),
+        clubId: currentClub.id,
+        trainingDate: selectedDate,
+        points,
+        description: description || undefined,
+        recordedBy: teacher?.id,
+      });
+      toast.success(`${selectedTeamIds.size}팀에 ${points}점 부여! (오프라인)`);
+      setSelectedTeamIds(new Set());
+      setDescription('');
+      return;
+    }
+
+    // 온라인: 서버 잠금 재확인
     const lock = await getGameScoreLock(currentClub.id, selectedDate);
     if (lock) {
       setGameLock(lock);
@@ -105,7 +166,6 @@ export default function GameScoringPage() {
         description: description || undefined,
         recordedBy: teacher?.id,
       });
-      navigator.vibrate?.(20);
 
       // Flash animation
       for (const tid of selectedTeamIds) {
@@ -114,21 +174,13 @@ export default function GameScoringPage() {
       }
       setFlashTeamId(null);
 
-      // Optimistic update
-      setTeamTotals((prev) => {
-        const next = { ...prev };
-        for (const tid of selectedTeamIds) {
-          next[tid] = (next[tid] || 0) + points;
-        }
-        return next;
-      });
-
+      applyLocal();
       toast.success(`${selectedTeamIds.size}팀에 ${points}점 부여!`);
       setSelectedTeamIds(new Set());
       setDescription('');
       await loadData();
     } catch {
-      toast.error('점수 부여 실패');
+      if (navigator.onLine) toast.error('점수 부여 실패');
     } finally {
       setSubmitting(false);
     }
@@ -136,6 +188,16 @@ export default function GameScoringPage() {
 
   const handleDeleteEntry = async (entryId: string) => {
     if (!currentClub) return;
+    if (isOffline) {
+      // 오프라인: 로컬에서만 제거
+      const entry = recentEntries.find(e => e.id === entryId);
+      if (entry) {
+        setRecentEntries(prev => prev.filter(e => e.id !== entryId));
+        setTeamTotals(prev => ({ ...prev, [entry.team_id]: (prev[entry.team_id] || 0) - entry.points }));
+        toast.success('기록 삭제됨 (오프라인)');
+      }
+      return;
+    }
     const lock = await getGameScoreLock(currentClub.id, selectedDate);
     if (lock) { setGameLock(lock); toast.error('잠금 상태입니다'); return; }
     try {
@@ -143,7 +205,7 @@ export default function GameScoringPage() {
       toast.success('기록 삭제됨');
       await loadData();
     } catch {
-      toast.error('삭제 실패');
+      if (navigator.onLine) toast.error('삭제 실패');
     }
   };
 
@@ -155,6 +217,19 @@ export default function GameScoringPage() {
 
   const handleSaveEdit = async () => {
     if (!editingEntry || !currentClub) return;
+
+    if (isOffline) {
+      // 오프라인: 로컬에서만 수정
+      const diff = editPoints - editingEntry.points;
+      setRecentEntries(prev => prev.map(e =>
+        e.id === editingEntry.id ? { ...e, points: editPoints, description: editDescription } : e
+      ));
+      setTeamTotals(prev => ({ ...prev, [editingEntry.team_id]: (prev[editingEntry.team_id] || 0) + diff }));
+      toast.success('수정됨 (오프라인)');
+      setEditingEntry(null);
+      return;
+    }
+
     const lock = await getGameScoreLock(currentClub.id, selectedDate);
     if (lock) { setGameLock(lock); setEditingEntry(null); toast.error('잠금 상태입니다'); return; }
     try {
@@ -163,12 +238,14 @@ export default function GameScoringPage() {
       setEditingEntry(null);
       await loadData();
     } catch {
-      toast.error('수정 실패');
+      if (navigator.onLine) toast.error('수정 실패');
     }
   };
 
   return (
     <div className="pb-4">
+      {isOffline && <OfflineBanner pendingCount={pendingCount} />}
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">게임 점수</h1>
         <span className="text-sm text-gray-500">{selectedDate}</span>

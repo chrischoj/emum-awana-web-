@@ -8,6 +8,7 @@ import { upsertScore } from '../../services/scoringService';
 import { supabase } from '../../lib/supabase';
 import { getToday, cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { Member, Team, AttendanceStatus } from '../../types/awana';
 
@@ -219,7 +220,7 @@ export default function MemberAttendancePage() {
       </div>
 
       <div className="flex items-center gap-4 mb-4">
-        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
         <div className="flex gap-2 text-sm">
           <span className="px-2 py-1 bg-green-100 text-green-700 rounded">출석 {counts.present}</span>
           <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">지각 {counts.late}</span>

@@ -8,6 +8,7 @@ import { getWeeklyScores, getSubmissionsByDate, approveSubmission, rejectSubmiss
 import { getTeamGameTotals } from '../../services/gameScoreService';
 import { getToday, cn } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { WeeklyScore, ScoringCategory, Team, Member, SubmissionStatus, WeeklyScoreSubmission, ScoreEditHistory } from '../../types/awana';
 
@@ -571,11 +572,10 @@ export default function ScoringOverview() {
 
       {/* 날짜 선택 */}
       <div className="mb-5">
-        <input
-          type="date"
+        <DatePickerWithToday
           value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          onChange={setSelectedDate}
+          className="focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
       </div>
 

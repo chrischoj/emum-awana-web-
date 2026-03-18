@@ -7,6 +7,7 @@ import type { GameScoreLock } from '../../services/gameScoreService';
 import { useAuth } from '../../contexts/AuthContext';
 import { getToday, cn } from '../../lib/utils';
 import type { GameScoreEntry, Team } from '../../types/awana';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 
 interface ColorTotal {
   name: string;
@@ -193,7 +194,7 @@ export default function GameScoresAdmin() {
       </div>
 
       <div className="mb-4">
-        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
       </div>
 
       {viewMode !== 'all' && (

@@ -12,7 +12,12 @@ import {
 import { upsertScore } from '../../services/scoringService';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useSessionCache } from '../../hooks/useSessionCache';
+import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import type { AttendanceStatus } from '../../types/awana';
 
 const STATUS_CONFIG: Record<AttendanceStatus, { label: string; color: string; bg: string }> = {
@@ -31,6 +36,8 @@ export default function AttendancePage() {
   const { currentClub, curriculumTemplate, teams, members } = useClub();
   const { openMemberProfile } = useMemberProfile();
   const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned } = useTeacherAssignment();
+  const { isOffline } = useNetworkStatus();
+  const { enqueue, pendingCount } = useOfflineQueue();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
   const visibleTeams = isUnassigned ? teams : teams.filter(t => assignedTeamIds.includes(t.id));
@@ -47,6 +54,9 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<Record<string, MemberAttendanceState>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AttendanceStatus | 'all'>('all');
+
+  const attCacheKey = `attendance-${currentClub?.id}-${selectedDate}`;
+  const { restore: restoreAttendance } = useSessionCache(attCacheKey, attendance, Object.keys(attendance).length > 0);
 
   const baseMembers = isUnassigned ? members : assignedMembers;
 
@@ -74,8 +84,14 @@ export default function AttendancePage() {
         setAttendance(initial);
       })
       .catch(() => {
-        setAttendance(initial);
-        toast.error('출석 데이터 로드 실패');
+        // 오프라인: 캐시에서 복원, 없으면 기본값 사용
+        const cached = restoreAttendance();
+        if (cached && Object.keys(cached).length > 0) {
+          setAttendance(cached);
+        } else {
+          setAttendance(initial);
+          if (navigator.onLine) toast.error('출석 데이터 로드 실패');
+        }
       })
       .finally(() => setLoading(false));
   }, [currentClub, selectedDate, members]);
@@ -91,26 +107,35 @@ export default function AttendancePage() {
         const nextStatus = cycle[(idx + 1) % 3];
         navigator.vibrate?.(10);
 
-        // Sync to backend
-        recordAttendance({
+        const attParams = {
           memberId,
           trainingDate: selectedDate,
           status: nextStatus,
           absenceReason: nextStatus === 'absent' ? current.absenceReason : undefined,
-        }).catch(() => toast.error('저장 실패'));
+        };
+        const scoreParams = currentClub ? {
+          memberId,
+          clubId: currentClub.id,
+          trainingDate: selectedDate,
+          category: 'attendance' as const,
+          basePoints: getAttendancePoints(nextStatus, attendanceBasePoints),
+          multiplier: 1,
+          recordedBy: teacher?.id,
+        } : null;
 
-        // Sync attendance score
-        if (currentClub) {
-          const points = getAttendancePoints(nextStatus, attendanceBasePoints);
-          upsertScore({
-            memberId,
-            clubId: currentClub.id,
-            trainingDate: selectedDate,
-            category: 'attendance',
-            basePoints: points,
-            multiplier: 1,
-            recordedBy: teacher?.id,
-          }).catch(() => {});
+        if (isOffline) {
+          enqueue('recordAttendance', attParams);
+          if (scoreParams) enqueue('upsertScore', scoreParams);
+        } else {
+          recordAttendance(attParams).catch(() => {
+            if (!navigator.onLine) enqueue('recordAttendance', attParams);
+            else toast.error('저장 실패');
+          });
+          if (scoreParams) {
+            upsertScore(scoreParams).catch(() => {
+              if (!navigator.onLine) enqueue('upsertScore', scoreParams);
+            });
+          }
         }
 
         return {
@@ -119,7 +144,7 @@ export default function AttendancePage() {
         };
       });
     },
-    [selectedDate, currentClub, attendanceBasePoints, teacher, isReadOnly]
+    [selectedDate, currentClub, attendanceBasePoints, teacher, isReadOnly, isOffline, enqueue]
   );
 
   const handleReasonChange = (memberId: string, reason: string) => {
@@ -132,25 +157,46 @@ export default function AttendancePage() {
   const handleReasonBlur = (memberId: string) => {
     const entry = attendance[memberId];
     if (entry?.status === 'absent') {
-      recordAttendance({
+      const params = {
         memberId,
         trainingDate: selectedDate,
-        status: 'absent',
+        status: 'absent' as const,
         absenceReason: entry.absenceReason,
-      }).catch(() => toast.error('사유 저장 실패'));
+      };
+      if (isOffline) {
+        enqueue('recordAttendance', params);
+      } else {
+        recordAttendance(params).catch(() => {
+          if (!navigator.onLine) enqueue('recordAttendance', params);
+          else toast.error('사유 저장 실패');
+        });
+      }
     }
   };
 
   const handleBulkPresent = async () => {
     if (!currentClub) return;
     if (isReadOnly) return;
+
+    // 로컬 state는 항상 업데이트 (오프라인이든 온라인이든)
+    const updated: Record<string, MemberAttendanceState> = {};
+    for (const m of baseMembers) {
+      updated[m.id] = { status: 'present', absenceReason: '' };
+    }
+    setAttendance(updated);
+    navigator.vibrate?.(20);
+
+    if (isOffline) {
+      toast.success('전체 출석 처리됨 (오프라인)');
+      return;
+    }
+
     try {
       await bulkRecordAttendance(
         baseMembers.map((m) => m.id),
         selectedDate,
         'present'
       );
-      // Bulk sync attendance scores
       const points = getAttendancePoints('present', attendanceBasePoints);
       await Promise.all(
         baseMembers.map((m) =>
@@ -165,15 +211,9 @@ export default function AttendancePage() {
           }).catch(() => {})
         )
       );
-      const updated: Record<string, MemberAttendanceState> = {};
-      for (const m of baseMembers) {
-        updated[m.id] = { status: 'present', absenceReason: '' };
-      }
-      setAttendance(updated);
-      navigator.vibrate?.(20);
       toast.success('전체 출석 처리됨');
     } catch {
-      toast.error('일괄 출석 실패');
+      if (navigator.onLine) toast.error('일괄 출석 실패');
     }
   };
 
@@ -202,13 +242,14 @@ export default function AttendancePage() {
 
   return (
     <div className="pb-4">
+      {isOffline && <OfflineBanner pendingCount={pendingCount} />}
+
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">출석</h1>
-        <input
-          type="date"
+        <DatePickerWithToday
           value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+          onChange={setSelectedDate}
+          className="px-2 py-1"
         />
       </div>
 

@@ -7,8 +7,13 @@ import { recordAttendance, getAttendancePoints, getAttendanceByDate } from '../.
 import { supabase } from '../../lib/supabase';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useTeacherAssignment } from '../../hooks/useTeacherAssignment';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useSessionCache } from '../../hooks/useSessionCache';
+import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member, SubmissionStatus } from '../../types/awana';
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
@@ -38,11 +43,16 @@ export default function ScoringPage() {
   const { currentClub, curriculumTemplate, teams, members } = useClub();
   const { openMemberProfile } = useMemberProfile();
   const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned, primaryAssignments, temporaryAssignments } = useTeacherAssignment();
+  const { isOffline, onReconnect } = useNetworkStatus();
+  const { enqueue, pendingCount } = useOfflineQueue();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
   const [loading, setLoading] = useState(true);
   const [recitationMemberId, setRecitationMemberId] = useState<string | null>(null);
+
+  const cacheKey = `scoring-${currentClub?.id}-${selectedDate}`;
+  const { restore: restoreScores } = useSessionCache(cacheKey, scores, Object.keys(scores).length > 0);
   const pendingSyncs = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [submission, setSubmission] = useState<{ status: SubmissionStatus; rejectionNote?: string | null } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -94,12 +104,18 @@ export default function ScoringPage() {
         }
         setScores(scoreMap);
       } catch {
-        toast.error('점수 로드 실패');
+        // 네트워크 실패 시 캐시에서 복원
+        const cached = restoreScores();
+        if (cached && Object.keys(cached).length > 0) {
+          setScores(cached);
+        } else if (navigator.onLine) {
+          toast.error('점수 로드 실패');
+        }
       } finally {
         if (showLoading) setLoading(false);
       }
     },
-    [currentClub, selectedDate, members]
+    [currentClub, selectedDate, members, restoreScores]
   );
 
   useEffect(() => {
@@ -146,41 +162,68 @@ export default function ScoringPage() {
       .catch(() => setSubmission(null));
   }, [currentClub, selectedTeamId, selectedDate]);
 
-  // Debounced sync to Supabase
+  // Debounced sync to Supabase (오프라인 시 큐에 저장)
   const syncScore = useCallback(
     (memberId: string, category: ScoringCategory, basePoints: number, multiplier: number) => {
       if (!currentClub) return;
+      const params = {
+        memberId,
+        clubId: currentClub.id,
+        trainingDate: selectedDate,
+        category,
+        basePoints,
+        multiplier,
+        recordedBy: teacher?.id,
+      };
+
+      if (isOffline) {
+        enqueue('upsertScore', params);
+        return;
+      }
+
       const key = `${memberId}-${category}`;
       const existing = pendingSyncs.current.get(key);
       if (existing) clearTimeout(existing);
 
       const timeout = setTimeout(() => {
-        upsertScore({
-          memberId,
-          clubId: currentClub.id,
-          trainingDate: selectedDate,
-          category,
-          basePoints,
-          multiplier,
-          recordedBy: teacher?.id,
-        }).catch(() => toast.error('점수 저장 실패'));
+        upsertScore(params).catch(() => {
+          if (navigator.onLine) toast.error('점수 저장 실패');
+          else enqueue('upsertScore', params);
+        });
         pendingSyncs.current.delete(key);
       }, 500);
       pendingSyncs.current.set(key, timeout);
     },
-    [currentClub, selectedDate, teacher]
+    [currentClub, selectedDate, teacher, isOffline, enqueue]
   );
 
   const syncAttendance = useCallback(
     (memberId: string, status: AttendanceStatus) => {
-      recordAttendance({
+      const params = {
         memberId,
         trainingDate: selectedDate,
         status,
-      }).catch(() => toast.error('출석 저장 실패'));
+      };
+
+      if (isOffline) {
+        enqueue('recordAttendance', params);
+        return;
+      }
+
+      recordAttendance(params).catch(() => {
+        if (navigator.onLine) toast.error('출석 저장 실패');
+        else enqueue('recordAttendance', params);
+      });
     },
-    [selectedDate]
+    [selectedDate, isOffline, enqueue]
   );
+
+  // 온라인 복귀 시 전체 데이터 재동기화
+  useEffect(() => {
+    return onReconnect(() => {
+      loadScores(false);
+    });
+  }, [onReconnect, loadScores]);
 
   const handleAttendanceTap = (memberId: string) => {
     if (isLocked) return;
@@ -338,14 +381,15 @@ export default function ScoringPage() {
 
   return (
     <div className="pb-20">
+      {isOffline && <OfflineBanner pendingCount={pendingCount} />}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">점수 입력</h1>
-        <input
-          type="date"
+        <DatePickerWithToday
           value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+          onChange={setSelectedDate}
+          className="px-2 py-1"
         />
       </div>
 

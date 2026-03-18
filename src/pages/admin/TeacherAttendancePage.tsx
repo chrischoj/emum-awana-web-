@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
+import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useClub } from '../../contexts/ClubContext';
 import type { Teacher, TeacherAttendanceRecord } from '../../types/awana';
 
@@ -85,7 +86,7 @@ export default function TeacherAttendancePage() {
           <h1 className="text-2xl font-bold text-gray-900">교사 출석부</h1>
           <p className="text-sm text-gray-500 mt-1">출석: {presentCount}/{filteredTeachers.length}</p>
         </div>
-        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+        <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
