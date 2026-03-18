@@ -25,6 +25,14 @@ const CLUB_FILTER_TABS: { key: ClubFilterKey; label: string }[] = [
   { key: 'unassigned', label: '그 외' },
 ];
 
+// ---- 유틸 ----
+
+function clubTypeLabel(clubId: string, clubs: { id: string; type: string }[]): string {
+  const club = clubs.find((c) => c.id === clubId);
+  if (!club) return '';
+  return club.type === 'sparks' ? '스팍스' : 'T&T';
+}
+
 // ---- 교사 카드 ----
 
 interface TeacherCardProps {
@@ -186,24 +194,28 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
           {assignments.length === 0 ? (
             <span className="text-xs text-gray-400 italic">미배정</span>
           ) : (
-            assignments.map((a) => (
-              <span
-                key={a.id}
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                  a.assignment_type === 'primary' ? 'text-white' : 'border'
-                }`}
-                style={
-                  a.assignment_type === 'primary'
-                    ? { backgroundColor: a.team_color }
-                    : { borderColor: a.team_color, color: a.team_color }
-                }
-              >
-                {a.team_name} {a.assignment_type === 'primary' ? '담임' : '지원'}
-                {a.assignment_type === 'temporary' && a.end_date && (
-                  <span className="opacity-70">(~{a.end_date})</span>
-                )}
-              </span>
-            ))
+            assignments.map((a) => {
+              const typeTag = clubTypeLabel(a.club_id, clubs);
+              return (
+                <span
+                  key={a.id}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    a.assignment_type === 'primary' ? 'text-white' : 'border'
+                  }`}
+                  style={
+                    a.assignment_type === 'primary'
+                      ? { backgroundColor: a.team_color }
+                      : { borderColor: a.team_color, color: a.team_color }
+                  }
+                >
+                  {typeTag && <span className="opacity-70">[{typeTag}]</span>}
+                  {a.team_name} {a.assignment_type === 'primary' ? '담임' : '지원'}
+                  {a.assignment_type === 'temporary' && a.end_date && (
+                    <span className="opacity-70">(~{a.end_date})</span>
+                  )}
+                </span>
+              );
+            })
           )}
           <button
             onClick={() => onManageAssignment(teacher)}
@@ -467,6 +479,13 @@ export default function TeacherManagement() {
                     <div key={a.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: a.team_color }} />
+                        <span className={`text-[10px] px-1 py-0.5 rounded font-semibold ${
+                          clubs.find(c => c.id === a.club_id)?.type === 'sparks'
+                            ? 'bg-red-50 text-red-600'
+                            : 'bg-blue-50 text-blue-600'
+                        }`}>
+                          {clubTypeLabel(a.club_id, clubs)}
+                        </span>
                         <span className="text-sm font-medium">{a.room_name}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${
                           a.assignment_type === 'primary' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
@@ -506,10 +525,14 @@ export default function TeacherManagement() {
                 >
                   <option value="">교실 선택</option>
                   {allRooms
-                    .filter(r => r.club_id === assignmentTeacher.club_id)
-                    .map((room) => (
-                      <option key={room.id} value={room.id}>{room.name}</option>
-                    ))
+                    .filter(r => !assignmentTeacher.club_id || r.club_id === assignmentTeacher.club_id)
+                    .map((room) => {
+                      const club = clubs.find(c => c.id === room.club_id);
+                      const label = !assignmentTeacher.club_id && club
+                        ? `[${club.name}] ${room.name}`
+                        : room.name;
+                      return <option key={room.id} value={room.id}>{label}</option>;
+                    })
                   }
                 </select>
                 <div className="flex gap-2">

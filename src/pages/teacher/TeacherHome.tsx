@@ -16,7 +16,7 @@ interface TeamSubmissionInfo {
 
 export default function TeacherHome() {
   const { teacher } = useAuth();
-  const { currentClub, teams } = useClub();
+  const { currentClub, clubs, teams } = useClub();
   const {
     assignedTeamIds,
     assignedMembers,
@@ -97,26 +97,36 @@ export default function TeacherHome() {
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {primaryAssignments.map((a) => (
-                <span
-                  key={a.id}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white"
-                  style={{ backgroundColor: a.team_color }}
-                >
-                  <span className="w-2 h-2 rounded-full bg-white/50" />
-                  {a.team_name} 팀 담임
-                </span>
-              ))}
-              {temporaryAssignments.map((a) => (
-                <span
-                  key={a.id}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2"
-                  style={{ borderColor: a.team_color, color: a.team_color }}
-                >
-                  {a.team_name} 팀 지원
-                  {a.end_date && <span className="text-xs opacity-70">(~{a.end_date})</span>}
-                </span>
-              ))}
+              {primaryAssignments.map((a) => {
+                const clubType = clubs.find(c => c.id === a.club_id)?.type;
+                const typeTag = clubType === 'sparks' ? '스팍스' : clubType === 'tnt' ? 'T&T' : '';
+                return (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium text-white"
+                    style={{ backgroundColor: a.team_color }}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white/50" />
+                    {typeTag && <span className="opacity-70">[{typeTag}]</span>}
+                    {a.team_name} 팀 담임
+                  </span>
+                );
+              })}
+              {temporaryAssignments.map((a) => {
+                const clubType = clubs.find(c => c.id === a.club_id)?.type;
+                const typeTag = clubType === 'sparks' ? '스팍스' : clubType === 'tnt' ? 'T&T' : '';
+                return (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2"
+                    style={{ borderColor: a.team_color, color: a.team_color }}
+                  >
+                    {typeTag && <span className="opacity-70">[{typeTag}]</span>}
+                    {a.team_name} 팀 지원
+                    {a.end_date && <span className="text-xs opacity-70">(~{a.end_date})</span>}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

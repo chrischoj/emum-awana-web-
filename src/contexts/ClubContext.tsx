@@ -32,11 +32,11 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       const clubList = (data as Club[]) || [];
       setClubs(clubList);
 
-      if (clubList.length > 0 && !currentClub) {
+      if (clubList.length > 0) {
         let targetClubId: string | null = null;
 
-        // For non-admin teachers, check their room assignment first
-        if (teacher && role !== 'admin') {
+        // Check teacher's room assignment first (including admin)
+        if (teacher) {
           try {
             const { data: assignments } = await supabase
               .from('active_teacher_assignments')
@@ -60,7 +60,12 @@ export function ClubProvider({ children }: { children: ReactNode }) {
         const matchedClub = targetClubId
           ? clubList.find(c => c.id === targetClubId)
           : null;
-        setCurrentClub(matchedClub || clubList[0]);
+        const resolved = matchedClub || clubList[0];
+
+        // Only update if club actually changed (avoid infinite re-render)
+        if (!currentClub || currentClub.id !== resolved.id) {
+          setCurrentClub(resolved);
+        }
       }
       setLoading(false);
     }
