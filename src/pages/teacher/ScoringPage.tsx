@@ -18,9 +18,10 @@ import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member, Submission
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
 const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
-  present: '출석', late: '지각', absent: '결석',
+  none: '미입력', present: '출석', late: '지각', absent: '결석',
 };
 const ATTENDANCE_COLORS: Record<AttendanceStatus, string> = {
+  none: 'bg-gray-50 text-gray-500 border-gray-300',
   present: 'bg-green-100 text-green-800 border-green-400',
   late: 'bg-yellow-100 text-yellow-800 border-yellow-400',
   absent: 'bg-red-100 text-red-800 border-red-400',
@@ -94,7 +95,7 @@ export default function ScoringPage() {
           const rec = memberScores.find((s) => s.category === 'recitation');
 
           // Use actual status from member_attendance table
-          const attStatus = attStatusMap[member.id] ?? 'present';
+          const attStatus = attStatusMap[member.id] ?? 'none';
 
           const state: Omit<MemberScoreState, 'total'> = {
             attendance: { status: attStatus, points: att?.total_points ?? 0 },
@@ -457,7 +458,7 @@ export default function ScoringPage() {
           <p className={`text-sm font-medium ${
             submission.status === 'submitted' ? 'text-blue-700' : 'text-green-700'
           }`}>
-            {submission.status === 'submitted' ? '제출 완료 - 승인 대기 중' : '승인 완료'}
+            {submission.status === 'submitted' ? '제출 완료 - 승인 대기 중 (수정 불가)' : '승인 완료 (수정 불가)'}
           </p>
         </div>
       )}

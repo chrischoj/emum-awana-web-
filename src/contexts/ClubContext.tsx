@@ -76,12 +76,22 @@ export function ClubProvider({ children }: { children: ReactNode }) {
     }
   }, [authLoading, teacher, role]);
 
-  // When currentClub changes, reload template, teams, members
+  // When currentClub changes OR auth state changes, reload template, teams, members
+  // teacher를 의존성에 포함: 로그인/로그아웃 시 RLS 인증 상태가 바뀌므로 재조회 필요
   useEffect(() => {
     if (!currentClub) {
       setCurriculumTemplate(null);
       setTeams([]);
       setMembers([]);
+      return;
+    }
+
+    // 미인증 상태에서는 RLS로 조회 실패하므로 스킵
+    if (!teacher) {
+      setCurriculumTemplate(null);
+      setTeams([]);
+      setMembers([]);
+      setLoading(false);
       return;
     }
 
@@ -115,7 +125,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
     }
 
     loadClubData();
-  }, [currentClub]);
+  }, [currentClub, teacher]);
 
   async function refreshMembers() {
     if (!currentClub) return;

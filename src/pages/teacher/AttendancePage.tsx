@@ -9,7 +9,7 @@ import {
   getAttendanceByDate,
   getAttendancePoints,
 } from '../../services/attendanceService';
-import { upsertScore } from '../../services/scoringService';
+import { upsertScore, getSubmissionsByDate } from '../../services/scoringService';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
@@ -18,9 +18,10 @@ import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useSessionCache } from '../../hooks/useSessionCache';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
-import type { AttendanceStatus } from '../../types/awana';
+import type { AttendanceStatus, SubmissionStatus } from '../../types/awana';
 
 const STATUS_CONFIG: Record<AttendanceStatus, { label: string; color: string; bg: string }> = {
+  none: { label: '미입력', color: 'text-gray-500', bg: 'bg-gray-50 border-gray-300' },
   present: { label: '출석', color: 'text-green-700', bg: 'bg-green-100 border-green-400' },
   late: { label: '지각', color: 'text-yellow-700', bg: 'bg-yellow-100 border-yellow-400' },
   absent: { label: '결석', color: 'text-red-700', bg: 'bg-red-100 border-red-400' },
@@ -54,6 +55,7 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<Record<string, MemberAttendanceState>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AttendanceStatus | 'all'>('all');
+  const [teamSubmissions, setTeamSubmissions] = useState<Record<string, SubmissionStatus>>({});
 
   const attCacheKey = `attendance-${currentClub?.id}-${selectedDate}`;
   const { restore: restoreAttendance } = useSessionCache(attCacheKey, attendance, Object.keys(attendance).length > 0);
@@ -69,7 +71,7 @@ export default function AttendancePage() {
 
     const initial: Record<string, MemberAttendanceState> = {};
     for (const m of baseMembers) {
-      initial[m.id] = { status: 'present', absenceReason: '' };
+      initial[m.id] = { status: 'none', absenceReason: '' };
     }
 
     getAttendanceByDate(selectedDate, currentClub.id)
@@ -98,9 +100,31 @@ export default function AttendancePage() {
       .finally(() => setLoading(false));
   }, [currentClub, selectedDate, members]);
 
+  // 팀별 제출 상태 로드
+  useEffect(() => {
+    if (!currentClub) return;
+    getSubmissionsByDate(currentClub.id, selectedDate)
+      .then((subs) => {
+        const map: Record<string, SubmissionStatus> = {};
+        for (const sub of subs) {
+          map[sub.team_id] = sub.status;
+        }
+        setTeamSubmissions(map);
+      })
+      .catch(() => setTeamSubmissions({}));
+  }, [currentClub, selectedDate]);
+
+  const isMemberLocked = useCallback((memberId: string) => {
+    if (isReadOnly) return true;
+    const member = baseMembers.find(m => m.id === memberId);
+    if (!member?.team_id) return false;
+    const status = teamSubmissions[member.team_id];
+    return status === 'submitted' || status === 'approved';
+  }, [isReadOnly, baseMembers, teamSubmissions]);
+
   const handleStatusChange = useCallback(
     (memberId: string) => {
-      if (isReadOnly) return;
+      if (isMemberLocked(memberId)) return;
       const cycle: AttendanceStatus[] = ['present', 'late', 'absent'];
       setAttendance((prev) => {
         const current = prev[memberId];
@@ -146,7 +170,7 @@ export default function AttendancePage() {
         };
       });
     },
-    [selectedDate, currentClub, attendanceBasePoints, teacher, isReadOnly, isOffline, enqueue]
+    [selectedDate, currentClub, attendanceBasePoints, teacher, isMemberLocked, isOffline, enqueue]
   );
 
   const handleReasonChange = (memberId: string, reason: string) => {
@@ -180,10 +204,20 @@ export default function AttendancePage() {
     if (!currentClub) return;
     if (isReadOnly) return;
 
-    // 로컬 state는 항상 업데이트 (오프라인이든 온라인이든)
+    const unlockedMembers = baseMembers.filter(m => !isMemberLocked(m.id));
+    if (unlockedMembers.length === 0) {
+      toast.error('모든 학급이 승인 완료 상태입니다');
+      return;
+    }
+
+    // 로컬 state 업데이트 (잠긴 멤버는 기존 상태 유지)
     const updated: Record<string, MemberAttendanceState> = {};
     for (const m of baseMembers) {
-      updated[m.id] = { status: 'present', absenceReason: '' };
+      if (isMemberLocked(m.id)) {
+        updated[m.id] = attendance[m.id] || { status: 'none', absenceReason: '' };
+      } else {
+        updated[m.id] = { status: 'present', absenceReason: '' };
+      }
     }
     setAttendance(updated);
     navigator.vibrate?.(20);
@@ -195,13 +229,13 @@ export default function AttendancePage() {
 
     try {
       await bulkRecordAttendance(
-        baseMembers.map((m) => m.id),
+        unlockedMembers.map((m) => m.id),
         selectedDate,
         'present'
       );
       const points = getAttendancePoints('present', attendanceBasePoints);
       await Promise.all(
-        baseMembers.map((m) =>
+        unlockedMembers.map((m) =>
           upsertScore({
             memberId: m.id,
             clubId: currentClub.id,
@@ -220,7 +254,7 @@ export default function AttendancePage() {
   };
 
   // Counts
-  const counts = { present: 0, late: 0, absent: 0 };
+  const counts: Record<AttendanceStatus, number> = { none: 0, present: 0, late: 0, absent: 0 };
   for (const m of baseMembers) {
     const entry = attendance[m.id];
     if (entry) counts[entry.status]++;
@@ -298,6 +332,21 @@ export default function AttendancePage() {
         )
       )}
 
+      {/* Lock banner */}
+      {selectedTeamId && (teamSubmissions[selectedTeamId] === 'submitted' || teamSubmissions[selectedTeamId] === 'approved') && (
+        <div className={cn(
+          'mb-3 p-3 rounded-lg border',
+          teamSubmissions[selectedTeamId] === 'submitted' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
+        )}>
+          <p className={cn(
+            'text-sm font-medium',
+            teamSubmissions[selectedTeamId] === 'submitted' ? 'text-blue-700' : 'text-green-700'
+          )}>
+            {teamSubmissions[selectedTeamId] === 'submitted' ? '제출 완료 - 승인 대기 중 (수정 불가)' : '승인 완료 (수정 불가)'}
+          </p>
+        </div>
+      )}
+
       {/* Bulk action + filter */}
       <div className="flex items-center justify-between mb-3">
         <button
@@ -312,6 +361,7 @@ export default function AttendancePage() {
       <div className="flex gap-2 mb-4 overflow-x-auto">
         {[
           { key: 'all' as const, label: '전체', count: baseMembers.length },
+          { key: 'none' as const, label: '미입력', count: counts.none },
           { key: 'present' as const, label: '출석', count: counts.present },
           { key: 'late' as const, label: '지각', count: counts.late },
           { key: 'absent' as const, label: '결석', count: counts.absent },
@@ -358,12 +408,12 @@ export default function AttendancePage() {
 
                 <button
                   onClick={() => handleStatusChange(member.id)}
-                  disabled={isReadOnly}
+                  disabled={isMemberLocked(member.id)}
                   className={cn(
                     'px-4 py-2 rounded-lg border-2 text-sm font-bold transition-all active:scale-95 touch-manipulation min-w-[72px]',
                     config.bg,
                     config.color,
-                    isReadOnly && 'opacity-60 cursor-not-allowed'
+                    isMemberLocked(member.id) && 'opacity-60 cursor-not-allowed'
                   )}
                 >
                   {config.label}

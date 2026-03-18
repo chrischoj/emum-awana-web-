@@ -4,14 +4,34 @@ import { TEAM_NAMES } from '../types/awana';
 
 const AWARDS_BASE_URL = 'https://awana-awards.netlify.app';
 
+/** 승인된 제출의 team_id+training_date 쌍을 조회 */
+async function getApprovedPairs(
+  clubId: string,
+  dateFrom: string,
+  dateTo: string
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('weekly_score_submissions')
+    .select('team_id, training_date')
+    .eq('club_id', clubId)
+    .eq('status', 'approved')
+    .gte('training_date', dateFrom)
+    .lte('training_date', dateTo);
+
+  return new Set((data || []).map(s => `${s.team_id}:${s.training_date}`));
+}
+
 export async function getTeamHandbookTotals(
   clubId: string,
   dateFrom: string,
   dateTo: string
 ): Promise<Record<string, number>> {
+  const approvedSet = await getApprovedPairs(clubId, dateFrom, dateTo);
+  if (approvedSet.size === 0) return {};
+
   const { data: scores, error } = await supabase
     .from('weekly_scores')
-    .select('member_id, total_points')
+    .select('member_id, total_points, training_date')
     .eq('club_id', clubId)
     .gte('training_date', dateFrom)
     .lte('training_date', dateTo);
@@ -32,7 +52,7 @@ export async function getTeamHandbookTotals(
   const teamTotals: Record<string, number> = {};
   for (const score of scores || []) {
     const teamId = memberTeamMap.get(score.member_id);
-    if (teamId) {
+    if (teamId && approvedSet.has(`${teamId}:${score.training_date}`)) {
       teamTotals[teamId] = (teamTotals[teamId] || 0) + (score.total_points || 0);
     }
   }
@@ -44,9 +64,12 @@ export async function getTeamGameTotals(
   dateFrom: string,
   dateTo: string
 ): Promise<Record<string, number>> {
+  const approvedSet = await getApprovedPairs(clubId, dateFrom, dateTo);
+  if (approvedSet.size === 0) return {};
+
   const { data, error } = await supabase
     .from('game_score_entries')
-    .select('team_id, points')
+    .select('team_id, points, training_date')
     .eq('club_id', clubId)
     .gte('training_date', dateFrom)
     .lte('training_date', dateTo);
@@ -55,7 +78,9 @@ export async function getTeamGameTotals(
 
   const totals: Record<string, number> = {};
   for (const entry of data || []) {
-    totals[entry.team_id] = (totals[entry.team_id] || 0) + entry.points;
+    if (approvedSet.has(`${entry.team_id}:${entry.training_date}`)) {
+      totals[entry.team_id] = (totals[entry.team_id] || 0) + entry.points;
+    }
   }
   return totals;
 }

@@ -51,6 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchTeacher(userId: string) {
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('teachers')
