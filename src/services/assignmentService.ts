@@ -115,6 +115,31 @@ export async function deleteAssignment(assignmentId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** 모든 방의 배정 교사를 한 번에 조회 (N+1 쿼리 방지) */
+export async function getAllRoomAssignmentsBatch(): Promise<Map<string, (ActiveTeacherAssignment & { teacher_name: string; teacher_avatar_url?: string | null })[]>> {
+  const [assignRes, teacherRes] = await Promise.all([
+    supabase.from('active_teacher_assignments').select('*'),
+    supabase.from('teachers').select('id, name, avatar_url'),
+  ]);
+
+  const teacherMap = new Map((teacherRes.data || []).map(t => [t.id, t]));
+  const result = new Map<string, (ActiveTeacherAssignment & { teacher_name: string; teacher_avatar_url?: string | null })[]>();
+
+  for (const assignment of (assignRes.data || []) as ActiveTeacherAssignment[]) {
+    const teacher = teacherMap.get(assignment.teacher_id);
+    const enriched = {
+      ...assignment,
+      teacher_name: teacher?.name || '알 수 없음',
+      teacher_avatar_url: teacher?.avatar_url || null,
+    };
+    const existing = result.get(assignment.room_id) || [];
+    existing.push(enriched);
+    result.set(assignment.room_id, existing);
+  }
+
+  return result;
+}
+
 /** 배정 수정 */
 export async function updateAssignment(
   assignmentId: string,

@@ -15,6 +15,8 @@ import type { Member, Team, AttendanceStatus } from '../../types/awana';
 const STATUS_LABEL: Record<AttendanceStatus, string> = { present: '출석', late: '지각', absent: '결석' };
 const STATUS_COLOR: Record<AttendanceStatus, string> = { present: 'bg-green-100 text-green-700', late: 'bg-yellow-100 text-yellow-700', absent: 'bg-red-100 text-red-700' };
 
+const ATTENDANCE_CACHE_KEY = 'awana_member_attendance_cache';
+
 export default function MemberAttendancePage() {
   const { teacher } = useAuth();
   const { clubs } = useClub();
@@ -28,7 +30,26 @@ export default function MemberAttendancePage() {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async (showLoading = true) => {
-    if (showLoading) setLoading(true);
+    // 캐시로 즉시 표시 (최초 로딩 시만)
+    if (showLoading) {
+      try {
+        const cached = localStorage.getItem(ATTENDANCE_CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.filterClubId === filterClubId) {
+            setAllMembers(parsed.members || []);
+            setAllTeams(parsed.teams || []);
+            setLoading(false);
+          } else {
+            setLoading(true);
+          }
+        } else {
+          setLoading(true);
+        }
+      } catch {
+        setLoading(true);
+      }
+    }
     try {
       let memberQuery = supabase
         .from('members')
@@ -49,8 +70,17 @@ export default function MemberAttendancePage() {
         getAttendanceByDate(selectedDate, filterClubId ?? undefined),
       ]);
 
-      setAllMembers((membersRes.data as Member[]) || []);
-      setAllTeams((teamsRes.data as Team[]) || []);
+      const newMembers = (membersRes.data as Member[]) || [];
+      const newTeams = (teamsRes.data as Team[]) || [];
+      setAllMembers(newMembers);
+      setAllTeams(newTeams);
+
+      // 캐시 업데이트
+      try {
+        localStorage.setItem(ATTENDANCE_CACHE_KEY, JSON.stringify({
+          members: newMembers, teams: newTeams, filterClubId, timestamp: Date.now(),
+        }));
+      } catch { /* ignore */ }
 
       const map: Record<string, { status: AttendanceStatus; absenceReason: string }> = {};
       for (const rec of attendanceRecords) {

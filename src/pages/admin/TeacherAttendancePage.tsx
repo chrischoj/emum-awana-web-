@@ -21,13 +21,15 @@ export default function TeacherAttendancePage() {
     async function load() {
       setLoading(true);
       try {
-        const { data: teacherData } = await supabase.from('teachers').select('*').eq('active', true).order('name');
-        setTeachers((teacherData as Teacher[]) || []);
+        const [teacherRes, attRes] = await Promise.all([
+          supabase.from('teachers').select('*').eq('active', true).order('name'),
+          supabase.from('teacher_attendance').select('*').eq('training_date', selectedDate),
+        ]);
+        setTeachers((teacherRes.data as Teacher[]) || []);
 
-        const { data: attData } = await supabase.from('teacher_attendance').select('*').eq('training_date', selectedDate);
         const attMap: Record<string, boolean> = {};
         const noteMap: Record<string, string> = {};
-        for (const rec of (attData as TeacherAttendanceRecord[]) || []) {
+        for (const rec of (attRes.data as TeacherAttendanceRecord[]) || []) {
           attMap[rec.teacher_id] = rec.present;
           noteMap[rec.teacher_id] = rec.note || '';
         }

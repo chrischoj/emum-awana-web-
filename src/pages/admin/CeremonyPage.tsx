@@ -4,14 +4,69 @@ import { buildAwardsData, buildCeremonyUrl } from '../../services/awardsIntegrat
 import { TEAM_NAMES, TEAM_COLORS } from '../../types/awana';
 import type { AwardsData, TeamName } from '../../types/awana';
 
+const toLocalDateStr = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export default function CeremonyPage() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
 
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
   const [data, setData] = useState<AwardsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [ceremonyUrl, setCeremonyUrl] = useState<string | null>(null);
+
+  const setPreset = (preset: string) => {
+    const now = new Date();
+    const todayStr = toLocalDateStr(now);
+    let from = todayStr;
+    let to = todayStr;
+
+    switch (preset) {
+      case 'today':
+        break;
+      case 'yesterday': {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        from = to = toLocalDateStr(d);
+        break;
+      }
+      case 'thisWeek': {
+        const day = now.getDay(); // 0=Sun
+        const diff = day === 0 ? 6 : day - 1; // Monday start
+        const mon = new Date(now);
+        mon.setDate(mon.getDate() - diff);
+        from = toLocalDateStr(mon);
+        to = todayStr;
+        break;
+      }
+      case 'lastWeek': {
+        const day = now.getDay();
+        const diff = day === 0 ? 6 : day - 1;
+        const mon = new Date(now);
+        mon.setDate(mon.getDate() - diff - 7);
+        const sun = new Date(mon);
+        sun.setDate(sun.getDate() + 6);
+        from = toLocalDateStr(mon);
+        to = toLocalDateStr(sun);
+        break;
+      }
+      case 'thisMonth': {
+        from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        to = todayStr;
+        break;
+      }
+      case 'lastMonth': {
+        const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lmEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+        from = toLocalDateStr(lm);
+        to = toLocalDateStr(lmEnd);
+        break;
+      }
+    }
+    setDateFrom(from);
+    setDateTo(to);
+  };
 
   const handleLoad = async () => {
     setLoading(true);
@@ -75,6 +130,24 @@ export default function CeremonyPage() {
 
       {/* Date range */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+        <div className="flex flex-wrap gap-2 mb-3">
+          {[
+            { key: 'today', label: '오늘' },
+            { key: 'yesterday', label: '어제' },
+            { key: 'thisWeek', label: '이번 주' },
+            { key: 'lastWeek', label: '지난 주' },
+            { key: 'thisMonth', label: '이번 달' },
+            { key: 'lastMonth', label: '지난 달' },
+          ].map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className="px-3 py-1.5 text-xs font-medium rounded-full border border-gray-300 text-gray-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-4 mb-4">
           <div>
             <label className="block text-xs text-gray-500 mb-1">시작일</label>

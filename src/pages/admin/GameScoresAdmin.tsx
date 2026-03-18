@@ -34,7 +34,7 @@ export default function GameScoresAdmin() {
   useEffect(() => {
     if (viewMode !== 'all') {
       const club = clubs.find((c) => c.id === viewMode);
-      if (club) setCurrentClub(club);
+      if (club && club.id !== currentClub?.id) setCurrentClub(club);
     }
   }, [viewMode, clubs]);
 

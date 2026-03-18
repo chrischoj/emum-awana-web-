@@ -522,6 +522,15 @@ function ClubSection({ club, clubTeams, clubMembers, clubRooms, allTeams, allRoo
 
 // ---- 메인 페이지 ----
 
+const TEAM_MGMT_CACHE_KEY = 'awana_team_mgmt_cache';
+
+interface TeamMgmtCache {
+  teams: Team[];
+  members: Member[];
+  rooms: Room[];
+  timestamp: number;
+}
+
 export default function TeamManagement() {
   const { clubs } = useClub();
   const [allTeams, setAllTeams] = useState<Team[]>([]);
@@ -535,16 +544,41 @@ export default function TeamManagement() {
   }, []);
 
   async function loadData() {
-    setLoading(true);
+    // 캐시가 있으면 즉시 표시 (스피너 방지)
+    try {
+      const cached = localStorage.getItem(TEAM_MGMT_CACHE_KEY);
+      if (cached) {
+        const parsed: TeamMgmtCache = JSON.parse(cached);
+        setAllTeams(parsed.teams);
+        setAllMembers(parsed.members);
+        setAllRooms(parsed.rooms);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    } catch {
+      setLoading(true);
+    }
+
     const [teamsRes, membersRes, roomsRes] = await Promise.all([
       supabase.from('teams').select('*').order('name'),
       supabase.from('members').select('*').eq('active', true).eq('enrollment_status', 'active').order('name'),
       supabase.from('rooms').select('*').eq('active', true).order('name'),
     ]);
-    setAllTeams((teamsRes.data as Team[]) || []);
-    setAllMembers((membersRes.data as Member[]) || []);
-    setAllRooms((roomsRes.data as Room[]) || []);
+    const newTeams = (teamsRes.data as Team[]) || [];
+    const newMembers = (membersRes.data as Member[]) || [];
+    const newRooms = (roomsRes.data as Room[]) || [];
+    setAllTeams(newTeams);
+    setAllMembers(newMembers);
+    setAllRooms(newRooms);
     setLoading(false);
+
+    // 캐시 업데이트
+    try {
+      localStorage.setItem(TEAM_MGMT_CACHE_KEY, JSON.stringify({
+        teams: newTeams, members: newMembers, rooms: newRooms, timestamp: Date.now(),
+      }));
+    } catch { /* ignore */ }
   }
 
   function optimisticUpdateMember(memberId: string, updates: Partial<Member>) {

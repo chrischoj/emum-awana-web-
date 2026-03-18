@@ -290,9 +290,17 @@ export default function TeacherManagement() {
     setAllRooms((data as Room[]) || []);
   };
 
+  // 최초 로드: assignments와 rooms는 한 번만
+  useEffect(() => {
+    if (clubs.length > 0) {
+      Promise.all([loadAssignments(), loadRooms()]);
+    }
+  }, [clubs]);
+
+  // 교사 목록은 탭 변경 시 재로드
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadTeachers(), loadAssignments(), loadRooms()]).finally(() => setLoading(false));
+    loadTeachers().finally(() => setLoading(false));
   }, [filterTab, clubs]);
 
   // Realtime 구독

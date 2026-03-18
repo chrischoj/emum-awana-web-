@@ -9,7 +9,7 @@ import { Switch } from '../../components/ui/Switch';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Avatar } from '../../components/ui/Avatar';
-import { getRoomAssignments } from '../../services/assignmentService';
+import { getAllRoomAssignmentsBatch } from '../../services/assignmentService';
 import type { Room, Team, ActiveTeacherAssignment } from '../../types/awana';
 
 type RoomTeacherInfo = ActiveTeacherAssignment & { teacher_name: string; teacher_avatar_url?: string | null };
@@ -48,19 +48,13 @@ export default function RoomManagement() {
     setAllTeams((data as Team[]) || []);
   };
 
-  const loadRoomAssignments = async (rooms: Room[]) => {
-    const assignmentMap = new Map<string, RoomTeacherInfo[]>();
-    for (const room of rooms) {
-      try {
-        const teachers = await getRoomAssignments(room.id);
-        if (teachers.length > 0) {
-          assignmentMap.set(room.id, teachers as RoomTeacherInfo[]);
-        }
-      } catch {
-        // skip errors for individual rooms
-      }
+  const loadRoomAssignments = async () => {
+    try {
+      const assignmentMap = await getAllRoomAssignmentsBatch();
+      setRoomAssignments(assignmentMap as Map<string, RoomTeacherInfo[]>);
+    } catch {
+      // skip errors
     }
-    setRoomAssignments(assignmentMap);
   };
 
   useEffect(() => {
@@ -73,7 +67,7 @@ export default function RoomManagement() {
       .channel('admin-rooms')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => loadRooms())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teacher_assignments' }, () => {
-        if (allRooms.length > 0) loadRoomAssignments(allRooms);
+        if (allRooms.length > 0) loadRoomAssignments();
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -89,7 +83,7 @@ export default function RoomManagement() {
   // allRooms가 변경되면 배정 로드
   useEffect(() => {
     if (allRooms.length > 0) {
-      loadRoomAssignments(allRooms);
+      loadRoomAssignments();
     }
   }, [allRooms]);
 

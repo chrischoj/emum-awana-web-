@@ -169,6 +169,9 @@ export function ClubProvider({ children }: { children: ReactNode }) {
 
   // Manual club change handler - loads clubData immediately
   const setCurrentClub = useCallback(async (club: Club | null) => {
+    // 같은 클럽이면 불필요한 재쿼리 방지
+    if (club && currentClub && club.id === currentClub.id) return;
+
     setCurrentClubState(club);
 
     if (!club || !teacher) {
@@ -217,7 +220,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       members: newMembers,
       timestamp: Date.now(),
     });
-  }, [teacher, clubs]);
+  }, [teacher, clubs, currentClub]);
 
   const refreshMembers = useCallback(async () => {
     if (!currentClub) return;

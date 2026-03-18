@@ -93,7 +93,7 @@ export default function ScoringOverview() {
   useEffect(() => {
     if (viewMode !== 'all') {
       const club = clubs.find((c) => c.id === viewMode);
-      if (club) setCurrentClub(club);
+      if (club && club.id !== currentClub?.id) setCurrentClub(club);
     }
   }, [viewMode, clubs]);
 
@@ -104,7 +104,7 @@ export default function ScoringOverview() {
     } else if (currentClub && currentClub.id === viewMode) {
       loadData();
     }
-  }, [viewMode, currentClub, selectedDate, members, clubs]);
+  }, [viewMode, currentClub, selectedDate, clubs]);
 
   // Realtime 구독
   useEffect(() => {
