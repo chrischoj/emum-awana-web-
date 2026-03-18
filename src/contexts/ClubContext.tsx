@@ -165,7 +165,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
     }
 
     loadAll();
-  }, [authLoading, clubsFetched, teacher, role]);
+  }, [authLoading, clubsFetched, teacher]);
 
   // Manual club change handler - loads clubData immediately
   const setCurrentClub = useCallback(async (club: Club | null) => {

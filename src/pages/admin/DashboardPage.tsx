@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
@@ -161,8 +161,40 @@ function MiniProgress({ value, color }: { value: number; color: string }) {
   );
 }
 
+// --- localStorage 캐시 (stale-while-revalidate) ---
+const DASHBOARD_CACHE_KEY = 'awana_dashboard_cache';
+
+interface DashboardCache {
+  teachers: Teacher[];
+  assignments: ActiveTeacherAssignment[];
+  rooms: Room[];
+  stats: Stats;
+  attendance: AttendanceBreakdown;
+  timestamp: number;
+}
+
+function loadDashboardCache(): DashboardCache | null {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as DashboardCache;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardCache(data: DashboardCache) {
+  try {
+    localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats>({
+  // 캐시 복원
+  const cachedRef = useRef(loadDashboardCache());
+  const cache = cachedRef.current;
+
+  const [stats, setStats] = useState<Stats>(cache?.stats || {
     activeMembers: 0,
     totalMembers: 0,
     teachers: 0,
@@ -170,36 +202,85 @@ export default function DashboardPage() {
     attendanceLate: 0,
     attendanceAbsent: 0,
   });
-  const [attendance, setAttendance] = useState<AttendanceBreakdown>({
+  const [attendance, setAttendance] = useState<AttendanceBreakdown>(cache?.attendance || {
     present: 0,
     late: 0,
     absent: 0,
     unrecorded: 0,
     hasData: false,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cache);
   const roomStatus = useRealtimeRoomStatus();
   const { clubs, members, teams, currentClub, setCurrentClub } = useClub();
   const { openMemberProfile } = useMemberProfile();
 
   // 교사/배정/교실 데이터
-  const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
-  const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>([]);
-  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [allTeachers, setAllTeachers] = useState<Teacher[]>(cache?.teachers || []);
+  const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>(cache?.assignments || []);
+  const [allRooms, setAllRooms] = useState<Room[]>(cache?.rooms || []);
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
   const [allRoomsExpanded, setAllRoomsExpanded] = useState(true);
   const [allTeachersExpanded, setAllTeachersExpanded] = useState(true);
 
+  // --- 최적화 1: 단일 useEffect + Promise.all (7→6 쿼리, teachers COUNT 제거) ---
   useEffect(() => {
-    Promise.all([
-      supabase.from('teachers').select('*').eq('active', true).order('name'),
-      supabase.from('active_teacher_assignments').select('*'),
-      supabase.from('rooms').select('*').eq('active', true).order('name'),
-    ]).then(([t, a, r]) => {
-      setAllTeachers((t.data as Teacher[]) || []);
-      setAllAssignments((a.data as ActiveTeacherAssignment[]) || []);
-      setAllRooms((r.data as Room[]) || []);
-    }).catch(() => {});
+    async function loadDashboard() {
+      const today = getToday();
+      const [teachersRes, assignmentsRes, roomsRes, activeMembersRes, totalMembersRes, attendanceRes] = await Promise.all([
+        supabase.from('teachers').select('*').eq('active', true).order('name'),
+        supabase.from('active_teacher_assignments').select('*'),
+        supabase.from('rooms').select('*').eq('active', true).order('name'),
+        supabase.from('members').select('id', { count: 'exact', head: true }).eq('active', true).eq('enrollment_status', 'active'),
+        supabase.from('members').select('id', { count: 'exact', head: true }).eq('active', true),
+        supabase.from('member_attendance').select('status').eq('training_date', today),
+      ]);
+
+      const teachersList = (teachersRes.data as Teacher[]) || [];
+      const assignmentsList = (assignmentsRes.data as ActiveTeacherAssignment[]) || [];
+      const roomsList = (roomsRes.data as Room[]) || [];
+
+      setAllTeachers(teachersList);
+      setAllAssignments(assignmentsList);
+      setAllRooms(roomsList);
+
+      const activeMembers = activeMembersRes.count ?? 0;
+      const totalMembers = totalMembersRes.count ?? 0;
+
+      const records = attendanceRes.data ?? [];
+      const presentCount = records.filter((r) => r.status === 'present').length;
+      const lateCount = records.filter((r) => r.status === 'late').length;
+      const absentCount = records.filter((r) => r.status === 'absent').length;
+      const unrecordedCount = Math.max(0, activeMembers - presentCount - lateCount - absentCount);
+
+      setStats({
+        activeMembers,
+        totalMembers,
+        teachers: teachersList.length,
+        attendancePresent: presentCount,
+        attendanceLate: lateCount,
+        attendanceAbsent: absentCount,
+      });
+
+      setAttendance({
+        present: presentCount,
+        late: lateCount,
+        absent: absentCount,
+        unrecorded: unrecordedCount,
+        hasData: records.length > 0,
+      });
+
+      saveDashboardCache({
+        teachers: teachersList,
+        assignments: assignmentsList,
+        rooms: roomsList,
+        stats: { activeMembers, totalMembers, teachers: teachersList.length, attendancePresent: presentCount, attendanceLate: lateCount, attendanceAbsent: absentCount },
+        attendance: { present: presentCount, late: lateCount, absent: absentCount, unrecorded: unrecordedCount, hasData: records.length > 0 },
+        timestamp: Date.now(),
+      });
+
+      setLoading(false);
+    }
+    loadDashboard();
   }, []);
 
   const toggleSection = (id: string) => {
@@ -211,8 +292,9 @@ export default function DashboardPage() {
     });
   };
 
-  // 학급별 멤버 그룹핑 (현재 클럽 기준)
-  const clubRooms = allRooms
+  // --- 최적화 2: useMemo 적용 ---
+
+  const clubRooms = useMemo(() => allRooms
     .filter(r => currentClub && r.club_id === currentClub.id)
     .map(r => {
       const team = teams.find(t => t.id === r.team_id);
@@ -228,132 +310,56 @@ export default function DashboardPage() {
         .filter((x): x is { teacher: Teacher; assignmentType: string } => !!x);
       return { ...r, team, members: roomMembers, teachers: roomTeachers };
     })
-    .filter(r => r.members.length > 0);
+    .filter(r => r.members.length > 0), [allRooms, currentClub, teams, members, allAssignments, allTeachers]);
 
   const hasRooms = clubRooms.length > 0;
-  const roomMatchedIds = new Set(clubRooms.flatMap(r => r.members.map(m => m.id)));
-  const noRoomMembers = members.filter(m => !roomMatchedIds.has(m.id));
 
-  // 팀별 멤버 그룹핑 (학급 없는 클럽용 fallback)
-  const teamGroups = teams.map(team => ({
+  const { roomMatchedIds, noRoomMembers } = useMemo(() => {
+    const ids = new Set(clubRooms.flatMap(r => r.members.map(m => m.id)));
+    return { roomMatchedIds: ids, noRoomMembers: members.filter(m => !ids.has(m.id)) };
+  }, [clubRooms, members]);
+
+  const teamGroups = useMemo(() => teams.map(team => ({
     ...team,
     members: members.filter(m => m.team_id === team.id),
-  })).filter(t => t.members.length > 0);
-  const unassignedMembers = members.filter(m => !m.team_id);
+  })).filter(t => t.members.length > 0), [teams, members]);
 
-  // 팀별 담임 교사 맵
-  const teamTeacherMap = new Map<string, { teacher: Teacher; assignmentType: string }[]>();
-  for (const a of allAssignments) {
-    const t = allTeachers.find(tc => tc.id === a.teacher_id);
-    if (t) {
-      const existing = teamTeacherMap.get(a.team_id) || [];
-      existing.push({ teacher: t, assignmentType: a.assignment_type });
-      teamTeacherMap.set(a.team_id, existing);
+  const unassignedMembers = useMemo(() => members.filter(m => !m.team_id), [members]);
+
+  const teamTeacherMap = useMemo(() => {
+    const map = new Map<string, { teacher: Teacher; assignmentType: string }[]>();
+    for (const a of allAssignments) {
+      const t = allTeachers.find(tc => tc.id === a.teacher_id);
+      if (t) {
+        const existing = map.get(a.team_id) || [];
+        existing.push({ teacher: t, assignmentType: a.assignment_type });
+        map.set(a.team_id, existing);
+      }
     }
-  }
+    return map;
+  }, [allAssignments, allTeachers]);
 
-  // 교사 카테고리 그룹핑
-  const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
-  const teachersByCategory: { key: string; label: string; teachers: Teacher[] }[] = [];
-  for (const cat of TEACHER_CATEGORIES) {
-    const matched = allTeachers.filter(t => getTeacherCategory(t.position) === cat.key);
-    if (matched.length > 0) teachersByCategory.push({ key: cat.key, label: cat.label, teachers: matched });
-  }
-  const assignedRegular = allTeachers.filter(t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
-  if (assignedRegular.length > 0) teachersByCategory.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegular });
-  const unassignedRegular = allTeachers.filter(t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
-  if (unassignedRegular.length > 0) teachersByCategory.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
-
-  useEffect(() => {
-    async function loadStats() {
-      const today = getToday();
-
-      const [activeMembersRes, totalMembersRes, teachersRes, attendanceRes] =
-        await Promise.all([
-          // 1. 진짜 활성 클럽원: active=true AND enrollment_status='active'
-          supabase
-            .from('members')
-            .select('id', { count: 'exact', head: true })
-            .eq('active', true)
-            .eq('enrollment_status', 'active'),
-          // 2. 전체 클럽원: active=true (pending 포함)
-          supabase
-            .from('members')
-            .select('id', { count: 'exact', head: true })
-            .eq('active', true),
-          // 3. 교사
-          supabase
-            .from('teachers')
-            .select('id', { count: 'exact', head: true })
-            .eq('active', true),
-          // 4. 오늘 출석 기록 전체 (status 기준)
-          supabase
-            .from('member_attendance')
-            .select('status')
-            .eq('training_date', today),
-        ]);
-
-      const activeMembers = activeMembersRes.count ?? 0;
-      const totalMembers = totalMembersRes.count ?? 0;
-      const teachers = teachersRes.count ?? 0;
-
-      // 출석 상태별 집계
-      const records = attendanceRes.data ?? [];
-      const presentCount = records.filter((r) => r.status === 'present').length;
-      const lateCount = records.filter((r) => r.status === 'late').length;
-      const absentCount = records.filter((r) => r.status === 'absent').length;
-      const unrecordedCount = Math.max(
-        0,
-        activeMembers - presentCount - lateCount - absentCount
-      );
-
-      setStats({
-        activeMembers,
-        totalMembers,
-        teachers,
-        attendancePresent: presentCount,
-        attendanceLate: lateCount,
-        attendanceAbsent: absentCount,
-      });
-
-      setAttendance({
-        present: presentCount,
-        late: lateCount,
-        absent: absentCount,
-        unrecorded: unrecordedCount,
-        hasData: records.length > 0,
-      });
-
-      setLoading(false);
+  const teachersByCategory = useMemo(() => {
+    const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
+    const result: { key: string; label: string; teachers: Teacher[] }[] = [];
+    for (const cat of TEACHER_CATEGORIES) {
+      const matched = allTeachers.filter(t => getTeacherCategory(t.position) === cat.key);
+      if (matched.length > 0) result.push({ key: cat.key, label: cat.label, teachers: matched });
     }
+    const assignedRegular = allTeachers.filter(t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
+    if (assignedRegular.length > 0) result.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegular });
+    const unassignedRegular = allTeachers.filter(t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
+    if (unassignedRegular.length > 0) result.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
+    return result;
+  }, [allAssignments, allTeachers]);
 
-    loadStats();
-  }, []);
-
-  // 출석률: 분모는 activeMembers (enrollment_status='active' AND active=true)
-  const attendanceRate =
-    stats.activeMembers > 0
-      ? Math.round((stats.attendancePresent / stats.activeMembers) * 100)
-      : 0;
-
-  const attendanceColor =
-    attendanceRate >= 70
-      ? '#22c55e'
-      : attendanceRate >= 40
-        ? '#f59e0b'
-        : '#ef4444';
-
-  const attendanceTextColor =
-    attendanceRate >= 70
-      ? 'text-green-600'
-      : attendanceRate >= 40
-        ? 'text-amber-500'
-        : 'text-red-500';
-
-  const memberRatio =
-    stats.totalMembers > 0
-      ? Math.round((stats.activeMembers / stats.totalMembers) * 100)
-      : 0;
+  const { attendanceRate, attendanceColor, attendanceTextColor, memberRatio } = useMemo(() => {
+    const rate = stats.activeMembers > 0 ? Math.round((stats.attendancePresent / stats.activeMembers) * 100) : 0;
+    const color = rate >= 70 ? '#22c55e' : rate >= 40 ? '#f59e0b' : '#ef4444';
+    const textColor = rate >= 70 ? 'text-green-600' : rate >= 40 ? 'text-amber-500' : 'text-red-500';
+    const ratio = stats.totalMembers > 0 ? Math.round((stats.activeMembers / stats.totalMembers) * 100) : 0;
+    return { attendanceRate: rate, attendanceColor: color, attendanceTextColor: textColor, memberRatio: ratio };
+  }, [stats]);
 
   // 스켈레톤 플레이스홀더
   if (loading) {
