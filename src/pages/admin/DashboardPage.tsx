@@ -4,7 +4,8 @@ import { useClub } from '../../contexts/ClubContext';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
-import type { Member } from '../../types/awana';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { Member, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
 
 interface Stats {
   activeMembers: number;
@@ -104,6 +105,50 @@ function DashboardFaceTile({ member, teamColor, onTap }: { member: Member; teamC
   );
 }
 
+const TEACHER_CATEGORIES: { key: string; label: string; positions: string[] }[] = [
+  { key: 'admin', label: '행정', positions: ['조정관', '감독관', '서기', '회계'] },
+  { key: 'game', label: '게임디렉터', positions: ['게임디렉터'] },
+  { key: 'support', label: '보조 교사', positions: ['보조 교사'] },
+];
+
+function getTeacherCategory(position: string | null): string {
+  if (!position) return 'other';
+  for (const cat of TEACHER_CATEGORIES) {
+    if (cat.positions.includes(position)) return cat.key;
+  }
+  return 'other';
+}
+
+function DashboardTeacherTile({ teacher, badges }: { teacher: Teacher; badges?: { label: string; color: string }[] }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = teacher.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-0">
+      {teacher.avatar_url && !imgError ? (
+        <img src={teacher.avatar_url} alt={teacher.name} className="w-full aspect-square rounded-2xl object-cover shadow-sm ring-2 ring-indigo-200" onError={() => setImgError(true)} />
+      ) : (
+        <div className="w-full aspect-square rounded-2xl flex items-center justify-center bg-gradient-to-br from-indigo-400 to-purple-500 shadow-sm ring-2 ring-indigo-200">
+          <span className="text-2xl font-bold text-white">{initials}</span>
+        </div>
+      )}
+      <span className="text-xs font-medium text-gray-700 text-center truncate w-full">{teacher.name}</span>
+      {teacher.position && (
+        <span className="text-[10px] text-gray-400 text-center truncate w-full -mt-0.5">{teacher.position}</span>
+      )}
+      {/* 담임 뱃지 - 이름 아래 표시 */}
+      {badges && badges.length > 0 && (
+        <div className="flex flex-wrap justify-center gap-0.5 w-full">
+          {badges.map((b, i) => (
+            <span key={i} className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white leading-tight" style={{ backgroundColor: b.color }}>
+              {b.label}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 미니 프로그레스 바
 function MiniProgress({ value, color }: { value: number; color: string }) {
   return (
@@ -137,12 +182,87 @@ export default function DashboardPage() {
   const { clubs, members, teams, currentClub, setCurrentClub } = useClub();
   const { openMemberProfile } = useMemberProfile();
 
-  // 팀별 멤버 그룹핑
+  // 교사/배정/교실 데이터
+  const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>([]);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
+  const [allRoomsExpanded, setAllRoomsExpanded] = useState(true);
+  const [allTeachersExpanded, setAllTeachersExpanded] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('teachers').select('*').eq('active', true).order('name'),
+      supabase.from('active_teacher_assignments').select('*'),
+      supabase.from('rooms').select('*').eq('active', true).order('name'),
+    ]).then(([t, a, r]) => {
+      setAllTeachers((t.data as Teacher[]) || []);
+      setAllAssignments((a.data as ActiveTeacherAssignment[]) || []);
+      setAllRooms((r.data as Room[]) || []);
+    }).catch(() => {});
+  }, []);
+
+  const toggleSection = (id: string) => {
+    setOpenSectionIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // 학급별 멤버 그룹핑 (현재 클럽 기준)
+  const clubRooms = allRooms
+    .filter(r => currentClub && r.club_id === currentClub.id)
+    .map(r => {
+      const team = teams.find(t => t.id === r.team_id);
+      const roomMembers = members.filter(m =>
+        m.room_id === r.id || (!m.room_id && m.team_id === r.team_id)
+      );
+      const roomTeachers = allAssignments
+        .filter(a => a.room_id === r.id)
+        .map(a => {
+          const t = allTeachers.find(tc => tc.id === a.teacher_id);
+          return t ? { teacher: t, assignmentType: a.assignment_type } : null;
+        })
+        .filter((x): x is { teacher: Teacher; assignmentType: string } => !!x);
+      return { ...r, team, members: roomMembers, teachers: roomTeachers };
+    })
+    .filter(r => r.members.length > 0);
+
+  const hasRooms = clubRooms.length > 0;
+  const roomMatchedIds = new Set(clubRooms.flatMap(r => r.members.map(m => m.id)));
+  const noRoomMembers = members.filter(m => !roomMatchedIds.has(m.id));
+
+  // 팀별 멤버 그룹핑 (학급 없는 클럽용 fallback)
   const teamGroups = teams.map(team => ({
     ...team,
     members: members.filter(m => m.team_id === team.id),
   })).filter(t => t.members.length > 0);
   const unassignedMembers = members.filter(m => !m.team_id);
+
+  // 팀별 담임 교사 맵
+  const teamTeacherMap = new Map<string, { teacher: Teacher; assignmentType: string }[]>();
+  for (const a of allAssignments) {
+    const t = allTeachers.find(tc => tc.id === a.teacher_id);
+    if (t) {
+      const existing = teamTeacherMap.get(a.team_id) || [];
+      existing.push({ teacher: t, assignmentType: a.assignment_type });
+      teamTeacherMap.set(a.team_id, existing);
+    }
+  }
+
+  // 교사 카테고리 그룹핑
+  const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
+  const teachersByCategory: { key: string; label: string; teachers: Teacher[] }[] = [];
+  for (const cat of TEACHER_CATEGORIES) {
+    const matched = allTeachers.filter(t => getTeacherCategory(t.position) === cat.key);
+    if (matched.length > 0) teachersByCategory.push({ key: cat.key, label: cat.label, teachers: matched });
+  }
+  const assignedRegular = allTeachers.filter(t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
+  if (assignedRegular.length > 0) teachersByCategory.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegular });
+  const unassignedRegular = allTeachers.filter(t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
+  if (unassignedRegular.length > 0) teachersByCategory.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
 
   useEffect(() => {
     async function loadStats() {
@@ -493,7 +613,17 @@ export default function DashboardPage() {
       <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-gray-700">우리 아이들 한눈에 보기</h2>
-          <span className="text-xs text-gray-400">{members.length}명</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400">{members.length}명</span>
+            {(hasRooms || teamGroups.length > 1) && (
+              <button
+                onClick={() => setAllRoomsExpanded(prev => !prev)}
+                className="text-xs text-indigo-500 font-medium hover:text-indigo-700 transition-colors"
+              >
+                {allRoomsExpanded ? '전체 접기' : '전체 펼치기'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* 클럽 탭 */}
@@ -516,43 +646,230 @@ export default function DashboardPage() {
         )}
 
         {members.length > 0 ? (
-          <div className="space-y-5">
-            {teamGroups.map(team => (
-              <div key={team.id}>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: team.color }} />
-                  <span className="text-xs font-semibold text-gray-600">{team.name} 팀</span>
-                  <span className="text-xs text-gray-400">({team.members.length}명)</span>
-                </div>
-                <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {team.members.map(member => (
-                    <DashboardFaceTile
-                      key={member.id}
-                      member={member}
-                      teamColor={team.color}
-                      onTap={() => openMemberProfile(member.id)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-            {unassignedMembers.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-gray-400" />
-                  <span className="text-xs font-semibold text-gray-600">미배정</span>
-                  <span className="text-xs text-gray-400">({unassignedMembers.length}명)</span>
-                </div>
-                <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                  {unassignedMembers.map(member => (
-                    <DashboardFaceTile
-                      key={member.id}
-                      member={member}
-                      onTap={() => openMemberProfile(member.id)}
-                    />
-                  ))}
-                </div>
-              </div>
+          <div className="space-y-3">
+            {/* 학급이 있는 클럽: 학급별 그룹핑 */}
+            {hasRooms ? (
+              <>
+                {clubRooms.map(roomData => {
+                  const isOpen = allRoomsExpanded || openSectionIds.has(roomData.id);
+                  return (
+                    <div key={roomData.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                      <button
+                        onClick={() => {
+                          if (allRoomsExpanded) {
+                            // 전체 펼침 모드에서 개별 클릭 → 개별 모드로 전환
+                            setAllRoomsExpanded(false);
+                            // 이 항목만 빼고 나머지 전부 열기
+                            const allIds = new Set(clubRooms.map(r => r.id));
+                            allIds.delete(roomData.id);
+                            if (noRoomMembers.length > 0) allIds.add('no-room-dashboard');
+                            setOpenSectionIds(allIds);
+                          } else {
+                            toggleSection(roomData.id);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: roomData.team?.color }} />
+                          <span className="text-sm font-semibold text-gray-800">{roomData.name}</span>
+                          <span className="text-xs text-gray-400">({roomData.members.length}명)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {/* 담임 교사 미니 아바타 */}
+                          {roomData.teachers.length > 0 && (
+                            <div className="flex -space-x-1.5">
+                              {roomData.teachers.slice(0, 3).map(({ teacher: t }) => {
+                                const ini = t.name.slice(0, 1);
+                                return t.avatar_url ? (
+                                  <img key={t.id} src={t.avatar_url} alt={t.name} className="w-6 h-6 rounded-full object-cover ring-2 ring-white" />
+                                ) : (
+                                  <div key={t.id} className="w-6 h-6 rounded-full bg-indigo-100 ring-2 ring-white flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-indigo-600">{ini}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                        </div>
+                      </button>
+                      {isOpen && (
+                        <div className="p-3">
+                          {/* 담임 교사 정보 */}
+                          {roomData.teachers.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {roomData.teachers.map(({ teacher: t, assignmentType }) => (
+                                <div key={t.id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-indigo-50 text-xs">
+                                  <span className="font-medium text-indigo-700">{t.name}</span>
+                                  <span className="text-indigo-400">{assignmentType === 'primary' ? '담임' : '지원'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            {roomData.members.map(member => (
+                              <DashboardFaceTile
+                                key={member.id}
+                                member={member}
+                                teamColor={roomData.team?.color}
+                                onTap={() => openMemberProfile(member.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* 학급 미배정 멤버 */}
+                {noRoomMembers.length > 0 && (
+                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => {
+                        if (allRoomsExpanded) {
+                          setAllRoomsExpanded(false);
+                          const allIds = new Set(clubRooms.map(r => r.id));
+                          setOpenSectionIds(allIds);
+                        } else {
+                          toggleSection('no-room-dashboard');
+                        }
+                      }}
+                      className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-gray-300 flex-shrink-0" />
+                        <span className="text-sm font-semibold text-gray-600">학급 미배정</span>
+                        <span className="text-xs text-gray-400">({noRoomMembers.length}명)</span>
+                      </div>
+                      {(allRoomsExpanded || openSectionIds.has('no-room-dashboard'))
+                        ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                        : <ChevronRight className="w-4 h-4 text-gray-400" />
+                      }
+                    </button>
+                    {(allRoomsExpanded || openSectionIds.has('no-room-dashboard')) && (
+                      <div className="p-3">
+                        <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {noRoomMembers.map(member => {
+                            const team = teams.find(t => t.id === member.team_id);
+                            return (
+                              <DashboardFaceTile
+                                key={member.id}
+                                member={member}
+                                teamColor={team?.color}
+                                onTap={() => openMemberProfile(member.id)}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* 학급 없는 클럽 (스팍스 등): 팀별 그룹핑 */
+              <>
+                {teamGroups.map(team => {
+                  const isOpen = allRoomsExpanded || openSectionIds.has(team.id);
+                  const tTeachers = teamTeacherMap.get(team.id) || [];
+                  return (
+                    <div key={team.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                      <button
+                        onClick={() => {
+                          if (allRoomsExpanded) {
+                            setAllRoomsExpanded(false);
+                            const allIds = new Set(teamGroups.map(t => t.id));
+                            allIds.delete(team.id);
+                            setOpenSectionIds(allIds);
+                          } else {
+                            toggleSection(team.id);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                          <span className="text-sm font-semibold text-gray-800">{team.name} 팀</span>
+                          <span className="text-xs text-gray-400">({team.members.length}명)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {tTeachers.length > 0 && (
+                            <div className="flex -space-x-1.5">
+                              {tTeachers.slice(0, 3).map(({ teacher: t }) => {
+                                const ini = t.name.slice(0, 1);
+                                return t.avatar_url ? (
+                                  <img key={t.id} src={t.avatar_url} alt={t.name} className="w-6 h-6 rounded-full object-cover ring-2 ring-white" />
+                                ) : (
+                                  <div key={t.id} className="w-6 h-6 rounded-full bg-indigo-100 ring-2 ring-white flex items-center justify-center">
+                                    <span className="text-[10px] font-bold text-indigo-600">{ini}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                        </div>
+                      </button>
+                      {isOpen && (
+                        <div className="p-3">
+                          {tTeachers.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {tTeachers.map(({ teacher: t, assignmentType }) => (
+                                <div key={t.id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-indigo-50 text-xs">
+                                  <span className="font-medium text-indigo-700">{t.name}</span>
+                                  <span className="text-indigo-400">{assignmentType === 'primary' ? '담임' : '지원'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            {team.members.map(member => (
+                              <DashboardFaceTile
+                                key={member.id}
+                                member={member}
+                                teamColor={team.color}
+                                onTap={() => openMemberProfile(member.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {unassignedMembers.length > 0 && (
+                  <div className="rounded-xl border border-gray-100 overflow-hidden">
+                    <button
+                      onClick={() => toggleSection('unassigned-team')}
+                      className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-gray-300 flex-shrink-0" />
+                        <span className="text-sm font-semibold text-gray-600">팀 미배정</span>
+                        <span className="text-xs text-gray-400">({unassignedMembers.length}명)</span>
+                      </div>
+                      {openSectionIds.has('unassigned-team')
+                        ? <ChevronDown className="w-4 h-4 text-gray-400" />
+                        : <ChevronRight className="w-4 h-4 text-gray-400" />
+                      }
+                    </button>
+                    {openSectionIds.has('unassigned-team') && (
+                      <div className="p-3">
+                        <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {unassignedMembers.map(member => (
+                            <DashboardFaceTile
+                              key={member.id}
+                              member={member}
+                              onTap={() => openMemberProfile(member.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -562,16 +879,80 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* 실시간 활동 피드 */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">실시간 활동 피드</h2>
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-3">
-            <span className="text-2xl">📋</span>
+      {/* 우리 선생님들 */}
+      {allTeachers.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-gray-700">우리 선생님들</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{allTeachers.length}명</span>
+              {teachersByCategory.length > 1 && (
+                <button
+                  onClick={() => setAllTeachersExpanded(prev => !prev)}
+                  className="text-xs text-indigo-500 font-medium hover:text-indigo-700 transition-colors"
+                >
+                  {allTeachersExpanded ? '전체 접기' : '전체 펼치기'}
+                </button>
+              )}
+            </div>
           </div>
-          <p className="text-sm text-gray-400">활동이 시작되면 여기에 표시됩니다.</p>
+          <div className="space-y-3">
+            {teachersByCategory.map(cat => {
+              const catSectionId = `teacher-cat-${cat.key}`;
+              const isCatOpen = allTeachersExpanded || openSectionIds.has(catSectionId);
+              return (
+                <div key={cat.key} className="rounded-xl border border-gray-100 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      if (allTeachersExpanded) {
+                        setAllTeachersExpanded(false);
+                        const allIds = new Set(teachersByCategory.map(c => `teacher-cat-${c.key}`));
+                        allIds.delete(catSectionId);
+                        setOpenSectionIds(prev => {
+                          const next = new Set(prev);
+                          for (const id of allIds) next.add(id);
+                          return next;
+                        });
+                      } else {
+                        toggleSection(catSectionId);
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-700">{cat.label}</span>
+                      <span className="text-xs text-gray-400">({cat.teachers.length}명)</span>
+                    </div>
+                    {isCatOpen ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                  </button>
+                  {isCatOpen && (
+                    <div className="p-3">
+                      <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        {cat.teachers.map(t => {
+                          const teacherAssigns = allAssignments.filter(a => a.teacher_id === t.id);
+                          const badges: { label: string; color: string }[] = [];
+                          for (const a of teacherAssigns) {
+                            const roomName = allRooms.find(r => r.id === a.room_id)?.name;
+                            if (roomName) {
+                              badges.push({
+                                label: a.assignment_type === 'primary' ? `${roomName} 담임` : `${roomName} 지원`,
+                                color: a.team_color || '#6366f1',
+                              });
+                            }
+                          }
+                          return (
+                            <DashboardTeacherTile key={t.id} teacher={t} badges={badges} />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
