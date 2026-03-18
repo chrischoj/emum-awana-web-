@@ -58,7 +58,9 @@ export default function AttendancePage() {
   const attCacheKey = `attendance-${currentClub?.id}-${selectedDate}`;
   const { restore: restoreAttendance } = useSessionCache(attCacheKey, attendance, Object.keys(attendance).length > 0);
 
-  const baseMembers = isUnassigned ? members : assignedMembers;
+  const baseMembers = isUnassigned
+    ? (isReadOnly ? members : [])  // 일반교사 미배정: 열람용 전체, admin 미배정: 빈 목록
+    : assignedMembers;
 
   // Initialize all members as unset
   useEffect(() => {
@@ -283,10 +285,17 @@ export default function AttendancePage() {
 
       {/* Unassigned banner */}
       {isUnassigned && (
-        <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-sm text-amber-700 font-medium">반 배정 후 입력이 가능합니다</p>
-          <p className="text-xs text-amber-600 mt-0.5">현재 열람 전용 모드입니다</p>
-        </div>
+        isReadOnly ? (
+          <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-700 font-medium">반 배정 후 입력이 가능합니다</p>
+            <p className="text-xs text-amber-600 mt-0.5">현재 열람 전용 모드입니다</p>
+          </div>
+        ) : (
+          <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-700 font-medium">내 학급 없음</p>
+            <p className="text-xs text-blue-600 mt-0.5">관리 메뉴에서 학급을 배정한 후 출석을 입력할 수 있습니다</p>
+          </div>
+        )
       )}
 
       {/* Bulk action + filter */}

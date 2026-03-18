@@ -108,9 +108,11 @@ export default function TeacherHome() {
     assignedTeamIds,
     assignedMembers,
     isUnassigned,
+    isReadOnly,
     primaryAssignments,
     temporaryAssignments,
     loading: assignmentLoading,
+    error: assignmentError,
   } = useTeacherAssignment();
 
   const [teamSubmissions, setTeamSubmissions] = useState<TeamSubmissionInfo[]>([]);
@@ -120,6 +122,7 @@ export default function TeacherHome() {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
   const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>([]);
   const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [dataLoadError, setDataLoadError] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -130,7 +133,7 @@ export default function TeacherHome() {
       setAllTeachers((teachersRes.data as Teacher[]) || []);
       setAllAssignments((assignmentsRes.data as ActiveTeacherAssignment[]) || []);
       setAllRooms((roomsRes.data as Room[]) || []);
-    }).catch(() => { setAllTeachers([]); setAllAssignments([]); setAllRooms([]); });
+    }).catch(() => { setAllTeachers([]); setAllAssignments([]); setAllRooms([]); setDataLoadError(true); });
   }, []);
 
   // 팀별 담임 교사 맵: teamId -> Teacher[]
@@ -327,14 +330,35 @@ export default function TeacherHome() {
         {currentClub?.name ?? '클럽 미선택'} · {new Date().toLocaleDateString('ko-KR')}
       </p>
 
+      {/* 네트워크 에러 */}
+      {(assignmentError || dataLoadError) && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex flex-col items-start gap-2">
+          <p className="text-sm font-medium text-red-700">데이터를 불러올 수 없습니다</p>
+          <p className="text-xs text-red-500">인터넷 연결을 확인한 후 다시 시도해주세요</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs font-medium text-red-600 bg-red-100 px-3 py-1.5 rounded-lg active:bg-red-200 transition-colors"
+          >
+            새로고침
+          </button>
+        </div>
+      )}
+
       {/* 담당 팀 정보 */}
-      {!assignmentLoading && (
+      {!assignmentLoading && !(assignmentError || dataLoadError) && (
         <div className="mb-6">
           {isUnassigned ? (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-700 font-medium">미배정 상태 (열람 전용)</p>
-              <p className="text-xs text-amber-600 mt-0.5">관리자에게 반 배정을 요청하세요</p>
-            </div>
+            isReadOnly ? (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-700 font-medium">미배정 상태 (열람 전용)</p>
+                <p className="text-xs text-amber-600 mt-0.5">관리자에게 반 배정을 요청하세요</p>
+              </div>
+            ) : (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700 font-medium">내 학급 없음</p>
+                <p className="text-xs text-blue-600 mt-0.5">현재 배정된 학급이 없습니다. 관리 메뉴에서 배정할 수 있습니다.</p>
+              </div>
+            )
           ) : (
             <div className="flex flex-wrap gap-2">
               {primaryAssignments.map((a) => {
@@ -376,7 +400,7 @@ export default function TeacherHome() {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500">{isUnassigned ? '전체 클럽원' : '내 팀원'}</p>
-          <p className="text-2xl font-bold text-gray-900">{assignedMembers.length}</p>
+          <p className="text-2xl font-bold text-gray-900">{isUnassigned ? allMembers.length : assignedMembers.length}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500">담당 팀</p>
@@ -388,7 +412,7 @@ export default function TeacherHome() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h2 className="font-semibold text-gray-900 mb-3">오늘의 할 일</h2>
         <div className="space-y-2">
-          {!isUnassigned && teamSubmissions.length > 0 ? (
+          {teamSubmissions.length > 0 ? (
             teamSubmissions.map((ts) => {
               const statusInfo = getStatusLabel(ts.status, ts.hasScores);
               return (

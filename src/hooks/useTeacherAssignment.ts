@@ -6,12 +6,14 @@ import type { ActiveTeacherAssignment, TeacherAssignmentInfo } from '../types/aw
 
 export function useTeacherAssignment(): TeacherAssignmentInfo & {
   loading: boolean;
+  error: boolean;
   refresh: () => Promise<void>;
 } {
   const { teacher, role } = useAuth();
   const { members, teams, currentClub } = useClub();
   const [assignments, setAssignments] = useState<ActiveTeacherAssignment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const loadAssignments = useCallback(async () => {
     if (!teacher) {
@@ -21,11 +23,13 @@ export function useTeacherAssignment(): TeacherAssignmentInfo & {
 
     try {
       setLoading(true);
+      setError(false);
       const data = await getActiveAssignments(teacher.id);
       setAssignments(data);
     } catch (err) {
       console.error('Failed to load teacher assignments:', err);
       setAssignments([]);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -45,15 +49,15 @@ export function useTeacherAssignment(): TeacherAssignmentInfo & {
     const roomIds = [...new Set(clubAssignments.map(a => a.room_id))];
     const hasAssignments = teamIds.length > 0;
 
-    // 관리자: 배정 있으면 배정 기반, 없으면 전체 접근
+    // 관리자: 배정 없으면 미배정이지만, 전체 팀 접근 가능 + 읽기전용 아님
     if (role === 'admin' && !hasAssignments) {
       return {
         assignedTeamIds: teams.map(t => t.id),
         assignedRoomIds: [],
         primaryAssignments: [],
         temporaryAssignments: [],
-        assignedMembers: members,
-        isUnassigned: false,
+        assignedMembers: [],
+        isUnassigned: true,
         isReadOnly: false,
       };
     }
@@ -78,6 +82,7 @@ export function useTeacherAssignment(): TeacherAssignmentInfo & {
   return {
     ...info,
     loading,
+    error,
     refresh: loadAssignments,
   };
 }
