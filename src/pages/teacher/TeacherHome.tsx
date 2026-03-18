@@ -147,15 +147,24 @@ export default function TeacherHome() {
   // 배정된 교사 ID 세트
   const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
 
-  // 미배정 교사 카테고리별
-  const unassignedTeachers = allTeachers.filter(t => !assignedTeacherIds.has(t.id));
-  const teachersByCategory = TEACHER_CATEGORIES.map(cat => ({
-    ...cat,
-    teachers: unassignedTeachers.filter(t => getTeacherCategory(t.position) === cat.key),
-  })).filter(cat => cat.teachers.length > 0);
-  const otherUnassigned = unassignedTeachers.filter(t => getTeacherCategory(t.position) === 'other');
-  if (otherUnassigned.length > 0) {
-    teachersByCategory.push({ key: 'other', label: '담임 교사 (미배정)', positions: [], teachers: otherUnassigned });
+  // 모든 교사를 카테고리별로 그룹핑 (본인 제외)
+  const otherTeachersList = allTeachers.filter(t => t.id !== teacher?.id);
+  const assignedRegularTeachers = otherTeachersList.filter(
+    t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other'
+  );
+  const teachersByCategory: { key: string; label: string; teachers: Teacher[] }[] = [];
+  for (const cat of TEACHER_CATEGORIES) {
+    const matched = otherTeachersList.filter(t => getTeacherCategory(t.position) === cat.key);
+    if (matched.length > 0) teachersByCategory.push({ key: cat.key, label: cat.label, teachers: matched });
+  }
+  if (assignedRegularTeachers.length > 0) {
+    teachersByCategory.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegularTeachers });
+  }
+  const unassignedRegular = otherTeachersList.filter(
+    t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other'
+  );
+  if (unassignedRegular.length > 0) {
+    teachersByCategory.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
   }
 
   // 다른 클럽 멤버/팀 로드 (currentClub 외의 클럽들)
@@ -209,7 +218,7 @@ export default function TeacherHome() {
     .filter(t => t.members.length > 0);
 
   const hasOtherKids = sameClubOtherTeams.length > 0 || otherClubData.length > 0;
-  const hasTeacherSection = teachersByCategory.length > 0;
+  const hasTeacherSection = teachersByCategory.length > 0 || otherTeachersList.length > 0;
 
   // T&T 학급별 그룹핑 헬퍼
   const isCurrentClubTnT = currentClub?.type === 'tnt';
