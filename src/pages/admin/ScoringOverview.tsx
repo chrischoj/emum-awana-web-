@@ -193,7 +193,12 @@ export default function ScoringOverview() {
         };
       });
 
-      setTeamScores(result);
+      // 관리자에게는 제출/승인된 팀만 표시 (draft는 숨김)
+      const filtered = result.filter(t => {
+        const status = t.submission?.status;
+        return status === 'submitted' || status === 'approved';
+      });
+      setTeamScores(filtered);
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
@@ -205,26 +210,32 @@ export default function ScoringOverview() {
     if (clubs.length === 0) return;
     if (showLoading) setLoading(true);
     try {
-      const [teamsRes, membersRes, scoresRes, gameRes] = await Promise.all([
+      const [teamsRes, membersRes, scoresRes, gameRes, submissionsRes] = await Promise.all([
         supabase.from('teams').select('*').order('name'),
         supabase.from('members').select('*').eq('active', true).eq('enrollment_status', 'active').order('name'),
         supabase.from('weekly_scores').select('*').eq('training_date', selectedDate),
         supabase.from('game_score_entries').select('*').eq('training_date', selectedDate),
+        supabase.from('weekly_score_submissions').select('*').eq('training_date', selectedDate).in('status', ['submitted', 'approved']),
       ]);
 
       const allTeams = (teamsRes.data as Team[]) || [];
       const allMembers = (membersRes.data as Member[]) || [];
       const allScores = (scoresRes.data as WeeklyScore[]) || [];
       const allGameEntries = (gameRes.data as { team_id: string; points: number }[]) || [];
+      const allSubmissions = (submissionsRes.data as WeeklyScoreSubmission[]) || [];
+
+      // 제출된 team_id Set
+      const submittedTeamIds = new Set(allSubmissions.map(s => s.team_id));
 
       const memberTeamMap = new Map<string, string>();
       for (const m of allMembers) {
         if (m.team_id) memberTeamMap.set(m.id, m.team_id);
       }
 
-      // Group teams by color name
+      // Group teams by color name — only include submitted teams
       const colorGroups = new Map<string, { color: string; teamIds: string[] }>();
       for (const team of allTeams) {
+        if (!submittedTeamIds.has(team.id)) continue;
         const existing = colorGroups.get(team.name);
         if (existing) {
           existing.teamIds.push(team.id);
@@ -233,24 +244,26 @@ export default function ScoringOverview() {
         }
       }
 
-      // Handbook scores per team
+      // Handbook scores per team (only submitted teams)
       const teamHandbookMap = new Map<string, number>();
       const memberScoreMap = new Map<string, Partial<Record<ScoringCategory, number>>>();
       for (const score of allScores) {
         const teamId = memberTeamMap.get(score.member_id);
-        if (teamId) {
+        if (teamId && submittedTeamIds.has(teamId)) {
           teamHandbookMap.set(teamId, (teamHandbookMap.get(teamId) || 0) + score.total_points);
+          if (!memberScoreMap.has(score.member_id)) {
+            memberScoreMap.set(score.member_id, {});
+          }
+          memberScoreMap.get(score.member_id)![score.category] = score.total_points;
         }
-        if (!memberScoreMap.has(score.member_id)) {
-          memberScoreMap.set(score.member_id, {});
-        }
-        memberScoreMap.get(score.member_id)![score.category] = score.total_points;
       }
 
-      // Game totals per team
+      // Game totals per team (only submitted teams)
       const teamGameMap = new Map<string, number>();
       for (const entry of allGameEntries) {
-        teamGameMap.set(entry.team_id, (teamGameMap.get(entry.team_id) || 0) + entry.points);
+        if (submittedTeamIds.has(entry.team_id)) {
+          teamGameMap.set(entry.team_id, (teamGameMap.get(entry.team_id) || 0) + entry.points);
+        }
       }
 
       // Build color-aggregated TeamScoreData
@@ -464,6 +477,10 @@ export default function ScoringOverview() {
       {loading ? (
         <div className="flex justify-center py-16">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+        </div>
+      ) : teamScores.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-gray-400 text-sm">아직 제출된 팀이 없습니다</p>
         </div>
       ) : (
         <>

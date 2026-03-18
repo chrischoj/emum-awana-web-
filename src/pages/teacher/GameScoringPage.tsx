@@ -8,8 +8,9 @@ import {
   getTeamGameTotals,
   deleteLastGameScore,
 } from '../../services/gameScoreService';
+import { getSubmissionsByDate } from '../../services/scoringService';
 import { cn, getToday } from '../../lib/utils';
-import type { GameScoreEntry } from '../../types/awana';
+import type { GameScoreEntry, WeeklyScoreSubmission } from '../../types/awana';
 
 const POINT_PRESETS = [50, 100, 200, 400];
 const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수', '보너스', '애교 점수'];
@@ -25,22 +26,35 @@ export default function GameScoringPage() {
   const [recentEntries, setRecentEntries] = useState<GameScoreEntry[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
+  const [teamSubmissions, setTeamSubmissions] = useState<Map<string, WeeklyScoreSubmission>>(new Map());
 
   const loadData = useCallback(async () => {
     if (!currentClub) return;
-    const [totals, entries] = await Promise.all([
+    const [totals, entries, subs] = await Promise.all([
       getTeamGameTotals(currentClub.id, selectedDate),
       getGameScoresByDate(currentClub.id, selectedDate),
+      getSubmissionsByDate(currentClub.id, selectedDate),
     ]);
     setTeamTotals(totals);
     setRecentEntries(entries);
+    const subMap = new Map<string, WeeklyScoreSubmission>();
+    for (const s of subs) subMap.set(s.team_id, s);
+    setTeamSubmissions(subMap);
   }, [currentClub, selectedDate]);
 
   useEffect(() => {
     loadData().catch(() => toast.error('데이터 로드 실패'));
   }, [loadData]);
 
+  const isTeamLocked = (teamId: string) => {
+    const sub = teamSubmissions.get(teamId);
+    return sub?.status === 'submitted' || sub?.status === 'approved';
+  };
+
+  const getTeamSubmissionStatus = (teamId: string) => teamSubmissions.get(teamId);
+
   const toggleTeam = (teamId: string) => {
+    if (isTeamLocked(teamId)) return;
     setSelectedTeamIds((prev) => {
       const next = new Set(prev);
       if (next.has(teamId)) next.delete(teamId);
@@ -135,6 +149,27 @@ export default function GameScoringPage() {
         </div>
       </div>
 
+      {/* 잠금된 팀 안내 */}
+      {teams.some(t => isTeamLocked(t.id)) && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+          <p className="text-xs text-blue-700 font-medium">
+            제출/승인된 팀은 점수를 수정할 수 없습니다. 담임교사가 제출한 팀은 잠금 처리됩니다.
+          </p>
+        </div>
+      )}
+
+      {/* 반려된 팀 안내 */}
+      {teams.filter(t => teamSubmissions.get(t.id)?.status === 'rejected').map(t => {
+        const sub = teamSubmissions.get(t.id)!;
+        return (
+          <div key={t.id} className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+            <p className="text-xs text-red-700 font-medium">
+              {t.name} 팀이 반려되었습니다{sub.rejection_note ? `: ${sub.rejection_note}` : ''}
+            </p>
+          </div>
+        );
+      })}
+
       {/* Score input */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
         <h2 className="text-sm font-medium text-gray-500 mb-3">점수 부여</h2>
@@ -168,28 +203,37 @@ export default function GameScoringPage() {
 
         {/* Team selection */}
         <div className="grid grid-cols-4 gap-2 mb-3">
-          {teams.map((team) => (
-            <button
-              key={team.id}
-              onClick={() => toggleTeam(team.id)}
-              className={cn(
-                'py-3 rounded-lg text-sm font-bold border-2 transition-all active:scale-95 touch-manipulation',
-                selectedTeamIds.has(team.id)
-                  ? 'border-current text-white'
-                  : 'border-gray-200 text-gray-600 bg-gray-50'
-              )}
-              style={
-                selectedTeamIds.has(team.id)
-                  ? { backgroundColor: team.color, borderColor: team.color }
-                  : undefined
-              }
-            >
-              {team.name}
-              <div className="text-xs mt-0.5 opacity-70">
-                {selectedTeamIds.has(team.id) ? '✓' : ''}
-              </div>
-            </button>
-          ))}
+          {teams.map((team) => {
+            const locked = isTeamLocked(team.id);
+            const sub = getTeamSubmissionStatus(team.id);
+            return (
+              <button
+                key={team.id}
+                onClick={() => toggleTeam(team.id)}
+                disabled={locked}
+                className={cn(
+                  'py-3 rounded-lg text-sm font-bold border-2 transition-all touch-manipulation',
+                  locked
+                    ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed opacity-60'
+                    : selectedTeamIds.has(team.id)
+                      ? 'border-current text-white active:scale-95'
+                      : 'border-gray-200 text-gray-600 bg-gray-50 active:scale-95'
+                )}
+                style={
+                  !locked && selectedTeamIds.has(team.id)
+                    ? { backgroundColor: team.color, borderColor: team.color }
+                    : undefined
+                }
+              >
+                {team.name}
+                <div className="text-xs mt-0.5 opacity-70">
+                  {locked
+                    ? (sub?.status === 'approved' ? '승인됨' : '제출됨')
+                    : selectedTeamIds.has(team.id) ? '✓' : ''}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Points */}
