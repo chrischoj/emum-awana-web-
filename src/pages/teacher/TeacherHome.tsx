@@ -4,9 +4,10 @@ import { useClub } from '../../contexts/ClubContext';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useTeacherAssignment } from '../../hooks/useTeacherAssignment';
 import { getSubmissionsByDate, getWeeklyScores } from '../../services/scoringService';
+import { supabase } from '../../lib/supabase';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { SubmissionStatus, Member } from '../../types/awana';
+import type { SubmissionStatus, Member, Team, Club } from '../../types/awana';
 
 function getGradientClass(color?: string): string {
   const map: Record<string, string> = {
@@ -68,24 +69,65 @@ export default function TeacherHome() {
   } = useTeacherAssignment();
 
   const [teamSubmissions, setTeamSubmissions] = useState<TeamSubmissionInfo[]>([]);
-  const [openTeamIds, setOpenTeamIds] = useState<Set<string>>(new Set());
+  const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
 
-  // 다른 반 아이들: 전체 멤버에서 내 팀 멤버 제외
+  // 다른 클럽 멤버/팀 로드 (currentClub 외의 클럽들)
+  const [otherClubData, setOtherClubData] = useState<
+    { club: Club; teams: (Team & { members: Member[] })[] }[]
+  >([]);
+
+  useEffect(() => {
+    if (!currentClub || clubs.length <= 1) {
+      setOtherClubData([]);
+      return;
+    }
+    const otherClubIds = clubs.filter(c => c.id !== currentClub.id).map(c => c.id);
+    if (otherClubIds.length === 0) { setOtherClubData([]); return; }
+
+    Promise.all([
+      supabase.from('teams').select('*').in('club_id', otherClubIds).order('name'),
+      supabase.from('members').select('*').in('club_id', otherClubIds)
+        .eq('active', true).eq('enrollment_status', 'active').order('name'),
+    ]).then(([teamsRes, membersRes]) => {
+      const otherTeamsList = (teamsRes.data as Team[]) || [];
+      const otherMembersList = (membersRes.data as Member[]) || [];
+
+      const grouped = clubs
+        .filter(c => c.id !== currentClub.id)
+        .map(club => ({
+          club,
+          teams: otherTeamsList
+            .filter(t => t.club_id === club.id)
+            .map(t => ({
+              ...t,
+              members: otherMembersList.filter(m => m.team_id === t.id),
+            }))
+            .filter(t => t.members.length > 0),
+        }))
+        .filter(g => g.teams.length > 0);
+
+      setOtherClubData(grouped);
+    }).catch(() => setOtherClubData([]));
+  }, [currentClub, clubs]);
+
+  // 같은 클럽 내 다른 팀 아이들
   const assignedMemberIds = new Set(assignedMembers.map(m => m.id));
-  const otherMembers = isUnassigned ? [] : allMembers.filter(m => !assignedMemberIds.has(m.id));
-  const otherTeams = teams
+  const sameClubOtherMembers = isUnassigned ? [] : allMembers.filter(m => !assignedMemberIds.has(m.id));
+  const sameClubOtherTeams = teams
     .filter(t => !assignedTeamIds.includes(t.id))
     .map(t => ({
       ...t,
-      members: otherMembers.filter(m => m.team_id === t.id),
+      members: sameClubOtherMembers.filter(m => m.team_id === t.id),
     }))
     .filter(t => t.members.length > 0);
 
-  const toggleTeam = (teamId: string) => {
-    setOpenTeamIds(prev => {
+  const hasOtherKids = sameClubOtherTeams.length > 0 || otherClubData.length > 0;
+
+  const toggleSection = (id: string) => {
+    setOpenSectionIds(prev => {
       const next = new Set(prev);
-      if (next.has(teamId)) next.delete(teamId);
-      else next.add(teamId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -261,19 +303,25 @@ export default function TeacherHome() {
         </div>
       )}
 
-      {/* 다른 반 아이들 */}
-      {otherTeams.length > 0 && (
+      {/* 다른 반 아이들 (같은 클럽 + 다른 클럽 모두) */}
+      {hasOtherKids && (
         <div className="mt-6">
           <h2 className="font-semibold text-gray-900 mb-3">
             다른 반 아이들
           </h2>
           <div className="space-y-2">
-            {otherTeams.map(team => {
-              const isOpen = openTeamIds.has(team.id);
+            {/* 같은 클럽 내 다른 팀 */}
+            {sameClubOtherTeams.length > 0 && currentClub && clubs.length > 1 && (
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider px-1">
+                {currentClub.type === 'sparks' ? '스팍스' : currentClub.type === 'tnt' ? 'T&T' : currentClub.name}
+              </p>
+            )}
+            {sameClubOtherTeams.map(team => {
+              const isOpen = openSectionIds.has(team.id);
               return (
                 <div key={team.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <button
-                    onClick={() => toggleTeam(team.id)}
+                    onClick={() => toggleSection(team.id)}
                     className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex items-center gap-2">
@@ -304,6 +352,51 @@ export default function TeacherHome() {
                 </div>
               );
             })}
+
+            {/* 다른 클럽 */}
+            {otherClubData.map(({ club, teams: clubTeams }) => (
+              <div key={club.id}>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider px-1 mt-3 mb-1">
+                  {club.type === 'sparks' ? '스팍스' : club.type === 'tnt' ? 'T&T' : club.name}
+                </p>
+                {clubTeams.map(team => {
+                  const isOpen = openSectionIds.has(team.id);
+                  return (
+                    <div key={team.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-2">
+                      <button
+                        onClick={() => toggleSection(team.id)}
+                        className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
+                          <span className="text-sm font-medium text-gray-900">{team.name} 팀</span>
+                          <span className="text-xs text-gray-400">({team.members.length}명)</span>
+                        </div>
+                        {isOpen ? (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-3">
+                          <div className="grid grid-cols-3 gap-3">
+                            {team.members.map(member => (
+                              <FaceTile
+                                key={member.id}
+                                member={member}
+                                teamColor={team.color}
+                                onTap={() => openMemberProfile(member.id)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
       )}
