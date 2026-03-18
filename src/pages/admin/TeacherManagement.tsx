@@ -208,10 +208,9 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
                       : { borderColor: a.team_color, color: a.team_color }
                   }
                 >
-                  {typeTag && <span className="opacity-70">[{typeTag}]</span>}
-                  {a.team_name} {a.assignment_type === 'primary' ? '담임' : '지원'}
+                  {a.room_name} · {a.assignment_type === 'primary' ? '담임' : '임시 담임(지원)'}
                   {a.assignment_type === 'temporary' && a.end_date && (
-                    <span className="opacity-70">(~{a.end_date})</span>
+                    <span className="opacity-70"> (~{a.end_date})</span>
                   )}
                 </span>
               );
