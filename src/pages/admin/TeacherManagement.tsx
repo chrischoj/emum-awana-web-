@@ -121,7 +121,7 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
             className="shrink-0 group relative"
             title="프로필 사진 변경"
           >
-            <Avatar name={teacher.name} src={teacher.avatar_url} size="md" />
+            <Avatar name={teacher.name} src={teacher.avatar_url} size="lg" />
             <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
               <Camera className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>

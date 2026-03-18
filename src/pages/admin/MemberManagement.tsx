@@ -424,7 +424,7 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick, onProfileClic
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
             <button onClick={() => onProfileClick(member.id)} className="shrink-0">
-              <Avatar name={member.name} src={member.avatar_url} size="md" />
+              <Avatar name={member.name} src={member.avatar_url} size="lg" />
             </button>
             <div className="flex-1 min-w-0">
               <button onClick={() => onProfileClick(member.id)} className="text-sm font-bold text-gray-900 hover:text-indigo-600 transition-colors text-left">

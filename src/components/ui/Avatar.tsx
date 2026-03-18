@@ -4,11 +4,17 @@ import { cn } from '../../lib/utils';
 interface AvatarProps {
   name: string;
   src?: string | null;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   className?: string;
 }
 
-const sizes = { sm: 'h-8 w-8 text-xs', md: 'h-10 w-10 text-sm', lg: 'h-14 w-14 text-lg' };
+const sizes = {
+  sm: 'h-8 w-8 text-xs',
+  md: 'h-10 w-10 text-sm',
+  lg: 'h-14 w-14 text-lg',
+  xl: 'h-20 w-20 text-xl',
+  '2xl': 'h-24 w-24 text-2xl',
+};
 
 export function Avatar({ name, src, size = 'md', className }: AvatarProps) {
   const [imgError, setImgError] = useState(false);

@@ -465,7 +465,7 @@ function RoomCard({ room, teamMap, assignedTeachers, onQR, onToggle }: RoomCardP
                   key={t.id}
                   className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-full"
                 >
-                  <Avatar name={t.teacher_name} src={t.teacher_avatar_url || null} size="sm" />
+                  <Avatar name={t.teacher_name} src={t.teacher_avatar_url || null} size="md" />
                   <span className="text-xs font-medium text-gray-700">{t.teacher_name}</span>
                   <span className={`text-[10px] px-1 rounded ${
                     t.assignment_type === 'primary' ? 'bg-indigo-100 text-indigo-600' : 'bg-amber-100 text-amber-600'

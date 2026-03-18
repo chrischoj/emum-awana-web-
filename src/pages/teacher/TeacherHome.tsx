@@ -1,10 +1,50 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useTeacherAssignment } from '../../hooks/useTeacherAssignment';
 import { getSubmissionsByDate, getWeeklyScores } from '../../services/scoringService';
 import { getToday } from '../../lib/utils';
-import type { SubmissionStatus } from '../../types/awana';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import type { SubmissionStatus, Member } from '../../types/awana';
+
+function getGradientClass(color?: string): string {
+  const map: Record<string, string> = {
+    '#EF4444': 'from-red-300 to-red-500',
+    '#3B82F6': 'from-blue-300 to-blue-500',
+    '#22C55E': 'from-green-300 to-green-500',
+    '#EAB308': 'from-yellow-300 to-yellow-500',
+  };
+  return map[color || ''] || 'from-indigo-300 to-indigo-500';
+}
+
+function FaceTile({ member, teamColor, onTap }: { member: Member; teamColor?: string; onTap: () => void }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = member.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
+  return (
+    <button onClick={onTap} className="flex flex-col items-center gap-1 min-w-0">
+      {member.avatar_url && !imgError ? (
+        <img
+          src={member.avatar_url}
+          alt={member.name}
+          className="w-full aspect-square rounded-2xl object-cover shadow-sm active:scale-95 transition-transform"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`w-full aspect-square rounded-2xl flex items-center justify-center bg-gradient-to-br ${getGradientClass(teamColor)} shadow-sm active:scale-95 transition-transform`}>
+          <span className="text-2xl font-bold text-white">{initials}</span>
+        </div>
+      )}
+      <span className="text-xs font-medium text-gray-700 text-center truncate w-full">{member.name}</span>
+    </button>
+  );
+}
 
 interface TeamSubmissionInfo {
   teamId: string;
@@ -16,7 +56,8 @@ interface TeamSubmissionInfo {
 
 export default function TeacherHome() {
   const { teacher } = useAuth();
-  const { currentClub, clubs, teams } = useClub();
+  const { currentClub, clubs, teams, members: allMembers } = useClub();
+  const { openMemberProfile } = useMemberProfile();
   const {
     assignedTeamIds,
     assignedMembers,
@@ -27,6 +68,27 @@ export default function TeacherHome() {
   } = useTeacherAssignment();
 
   const [teamSubmissions, setTeamSubmissions] = useState<TeamSubmissionInfo[]>([]);
+  const [openTeamIds, setOpenTeamIds] = useState<Set<string>>(new Set());
+
+  // 다른 반 아이들: 전체 멤버에서 내 팀 멤버 제외
+  const assignedMemberIds = new Set(assignedMembers.map(m => m.id));
+  const otherMembers = isUnassigned ? [] : allMembers.filter(m => !assignedMemberIds.has(m.id));
+  const otherTeams = teams
+    .filter(t => !assignedTeamIds.includes(t.id))
+    .map(t => ({
+      ...t,
+      members: otherMembers.filter(m => m.team_id === t.id),
+    }))
+    .filter(t => t.members.length > 0);
+
+  const toggleTeam = (teamId: string) => {
+    setOpenTeamIds(prev => {
+      const next = new Set(prev);
+      if (next.has(teamId)) next.delete(teamId);
+      else next.add(teamId);
+      return next;
+    });
+  };
 
   // 오늘 제출 상태 + 점수 존재 여부 로드
   useEffect(() => {
@@ -175,6 +237,76 @@ export default function TeacherHome() {
           )}
         </div>
       </div>
+
+      {/* 내 반 아이들 */}
+      {assignedMembers.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold text-gray-900 mb-3">
+            {isUnassigned ? '전체 아이들' : '내 반 아이들'}{' '}
+            <span className="text-sm font-normal text-gray-400">({assignedMembers.length}명)</span>
+          </h2>
+          <div className="grid grid-cols-3 gap-3">
+            {assignedMembers.map(member => {
+              const team = teams.find(t => t.id === member.team_id);
+              return (
+                <FaceTile
+                  key={member.id}
+                  member={member}
+                  teamColor={team?.color}
+                  onTap={() => openMemberProfile(member.id)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 다른 반 아이들 */}
+      {otherTeams.length > 0 && (
+        <div className="mt-6">
+          <h2 className="font-semibold text-gray-900 mb-3">
+            다른 반 아이들
+          </h2>
+          <div className="space-y-2">
+            {otherTeams.map(team => {
+              const isOpen = openTeamIds.has(team.id);
+              return (
+                <div key={team.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <button
+                    onClick={() => toggleTeam(team.id)}
+                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }} />
+                      <span className="text-sm font-medium text-gray-900">{team.name} 팀</span>
+                      <span className="text-xs text-gray-400">({team.members.length}명)</span>
+                    </div>
+                    {isOpen ? (
+                      <ChevronDown className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                  {isOpen && (
+                    <div className="px-3 pb-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        {team.members.map(member => (
+                          <FaceTile
+                            key={member.id}
+                            member={member}
+                            teamColor={team.color}
+                            onTap={() => openMemberProfile(member.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

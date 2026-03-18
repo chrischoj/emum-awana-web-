@@ -115,7 +115,7 @@ function UnassignedRow({ member, teams, rooms, memberCountByRoom, onAssigned }: 
   return (
     <div className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50">
       <div className="flex items-center gap-3">
-        <Avatar name={member.name} src={member.avatar_url} size="sm" />
+        <Avatar name={member.name} src={member.avatar_url} size="md" />
         <div>
           <p className="text-sm font-medium text-gray-900">{member.name}</p>
           {member.birthday && (
@@ -241,7 +241,7 @@ function TeamMemberRow({ member, currentTeamId, teams, rooms, memberCountByRoom,
   return (
     <div className="flex items-center justify-between py-2 px-1 rounded-lg hover:bg-gray-50 group relative">
       <div className="flex items-center gap-2">
-        <Avatar name={member.name} src={member.avatar_url} size="sm" />
+        <Avatar name={member.name} src={member.avatar_url} size="md" />
         <div>
           <p className="text-sm font-medium text-gray-900">{member.name}</p>
           {member.birthday && (

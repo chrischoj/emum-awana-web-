@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useClub } from '../../contexts/ClubContext';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
+import type { Member } from '../../types/awana';
 
 interface Stats {
   activeMembers: number;
@@ -63,6 +66,44 @@ function CircularProgress({
   );
 }
 
+function getGradientByColor(color: string): string {
+  const map: Record<string, string> = {
+    '#EF4444': 'from-red-300 to-red-500',
+    '#3B82F6': 'from-blue-300 to-blue-500',
+    '#22C55E': 'from-green-300 to-green-500',
+    '#EAB308': 'from-yellow-300 to-yellow-500',
+  };
+  return map[color] || 'from-indigo-300 to-indigo-500';
+}
+
+function DashboardFaceTile({ member, teamColor, onTap }: { member: Member; teamColor?: string; onTap: () => void }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = member.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
+  return (
+    <button onClick={onTap} className="flex flex-col items-center gap-1 min-w-0">
+      {member.avatar_url && !imgError ? (
+        <img
+          src={member.avatar_url}
+          alt={member.name}
+          className="w-full aspect-square rounded-2xl object-cover shadow-sm hover:shadow-md transition-all active:scale-95"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className={`w-full aspect-square rounded-2xl flex items-center justify-center bg-gradient-to-br ${getGradientByColor(teamColor || '')} shadow-sm hover:shadow-md transition-all active:scale-95`}>
+          <span className="text-2xl font-bold text-white">{initials}</span>
+        </div>
+      )}
+      <span className="text-xs font-medium text-gray-700 text-center truncate w-full">{member.name}</span>
+    </button>
+  );
+}
+
 // 미니 프로그레스 바
 function MiniProgress({ value, color }: { value: number; color: string }) {
   return (
@@ -93,6 +134,15 @@ export default function DashboardPage() {
   });
   const [loading, setLoading] = useState(true);
   const roomStatus = useRealtimeRoomStatus();
+  const { clubs, members, teams, currentClub, setCurrentClub } = useClub();
+  const { openMemberProfile } = useMemberProfile();
+
+  // 팀별 멤버 그룹핑
+  const teamGroups = teams.map(team => ({
+    ...team,
+    members: members.filter(m => m.team_id === team.id),
+  })).filter(t => t.members.length > 0);
+  const unassignedMembers = members.filter(m => !m.team_id);
 
   useEffect(() => {
     async function loadStats() {
@@ -438,6 +488,79 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* 우리 아이들 한눈에 보기 */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-700">우리 아이들 한눈에 보기</h2>
+          <span className="text-xs text-gray-400">{members.length}명</span>
+        </div>
+
+        {/* 클럽 탭 */}
+        {clubs.length > 1 && (
+          <div className="flex gap-2 mb-4">
+            {clubs.map(club => (
+              <button
+                key={club.id}
+                onClick={() => setCurrentClub(club)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  currentClub?.id === club.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {club.type === 'sparks' ? '스팍스' : club.type === 'tnt' ? 'T&T' : club.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {members.length > 0 ? (
+          <div className="space-y-5">
+            {teamGroups.map(team => (
+              <div key={team.id}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: team.color }} />
+                  <span className="text-xs font-semibold text-gray-600">{team.name} 팀</span>
+                  <span className="text-xs text-gray-400">({team.members.length}명)</span>
+                </div>
+                <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {team.members.map(member => (
+                    <DashboardFaceTile
+                      key={member.id}
+                      member={member}
+                      teamColor={team.color}
+                      onTap={() => openMemberProfile(member.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+            {unassignedMembers.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-gray-400" />
+                  <span className="text-xs font-semibold text-gray-600">미배정</span>
+                  <span className="text-xs text-gray-400">({unassignedMembers.length}명)</span>
+                </div>
+                <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  {unassignedMembers.map(member => (
+                    <DashboardFaceTile
+                      key={member.id}
+                      member={member}
+                      onTap={() => openMemberProfile(member.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-sm text-gray-400">등록된 클럽원이 없습니다.</p>
+          </div>
+        )}
+      </div>
 
       {/* 실시간 활동 피드 */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
