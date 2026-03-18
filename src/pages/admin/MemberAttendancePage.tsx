@@ -190,7 +190,7 @@ export default function MemberAttendancePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-gray-900">클럽원 출석 총괄</h1>
+          <h1 className="text-2xl font-bold text-gray-900">클럽원 출석부</h1>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -233,14 +233,14 @@ export default function MemberAttendancePage() {
         <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          <table className="w-full divide-y divide-gray-200 table-fixed">
+          <table className="w-full divide-y divide-gray-200">
             <colgroup>
-              <col className="w-[100px] sm:w-[140px]" />
-              {filterClubId === null && <col className="w-[64px] sm:w-[80px]" />}
-              <col className="w-[56px] sm:w-[72px]" />
-              <col className="w-[56px] sm:w-[72px]" />
-              <col className="w-[120px] sm:w-[200px] lg:w-[280px]" />
-              <col className="w-[48px]" />
+              <col style={{ minWidth: 100 }} />
+              {filterClubId === null && <col style={{ minWidth: 64 }} />}
+              <col style={{ minWidth: 56 }} />
+              <col style={{ minWidth: 56 }} />
+              <col style={{ minWidth: 120 }} />
+              <col style={{ minWidth: 48 }} />
             </colgroup>
             <thead className="bg-gray-50">
               <tr>
@@ -265,16 +265,16 @@ export default function MemberAttendancePage() {
                     <td className="px-3 py-3">
                       <button onClick={() => openMemberProfile(member.id)} className="flex items-center gap-2 hover:opacity-80 min-w-0">
                         <Avatar name={member.name} src={member.avatar_url} size="sm" />
-                        <span className="text-sm font-medium text-gray-900 truncate">{member.name}</span>
+                        <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{member.name}</span>
                       </button>
                     </td>
                     {filterClubId === null && (
                       <td className="px-3 py-3">
-                        <span className="text-sm text-gray-600 truncate block">{clubMap[member.club_id] ?? '-'}</span>
+                        <span className="text-sm text-gray-600 whitespace-nowrap">{clubMap[member.club_id] ?? '-'}</span>
                       </td>
                     )}
                     <td className="px-3 py-3">
-                      {team && <span className="px-2 py-0.5 rounded text-xs font-medium text-white truncate block" style={{ backgroundColor: team.color }}>{team.name}</span>}
+                      {team && <span className="px-2 py-0.5 rounded text-xs font-medium text-white whitespace-nowrap inline-block" style={{ backgroundColor: team.color }}>{team.name}</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <button
