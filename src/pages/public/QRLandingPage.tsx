@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/ui/Button';
+import { checkInTeacherToRoom } from '../../services/checkInService';
 
 export default function QRLandingPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -34,39 +35,7 @@ export default function QRLandingPage() {
         return;
       }
 
-      // Find or create today's session
-      const today = new Date().toISOString().split('T')[0];
-      let { data: existingSession } = await supabase
-        .from('room_sessions')
-        .select('id')
-        .eq('room_id', room.id)
-        .eq('training_date', today)
-        .single();
-
-      if (!existingSession) {
-        const { data: newSession } = await supabase
-          .from('room_sessions')
-          .insert({ room_id: room.id, training_date: today })
-          .select('id')
-          .single();
-        existingSession = newSession;
-      }
-
-      if (!existingSession) {
-        toast.error('세션 생성 실패');
-        return;
-      }
-
-      // Check in teacher
-      const { error } = await supabase.from('room_teachers').upsert(
-        {
-          room_session_id: existingSession.id,
-          teacher_id: teacher.id,
-        },
-        { onConflict: 'room_session_id,teacher_id' }
-      );
-
-      if (error) throw error;
+      await checkInTeacherToRoom(room.id, teacher.id);
       setCheckedIn(true);
       toast.success('체크인 완료!');
     } catch {

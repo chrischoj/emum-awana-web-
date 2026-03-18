@@ -2,12 +2,14 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { LogOut, Menu, X, BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
 import { adminNavSections } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
 
 export default function AdminLayout() {
   const { teacher, signOut } = useAuth();
+  useAutoCheckIn();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

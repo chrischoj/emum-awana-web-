@@ -77,6 +77,15 @@ function getGradientByColor(color: string): string {
   return map[color] || 'from-indigo-300 to-indigo-500';
 }
 
+function formatElapsed(startedAt: string): string {
+  const diff = Date.now() - new Date(startedAt).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const remainMins = mins % 60;
+  if (hrs > 0) return `${hrs}:${String(remainMins).padStart(2, '0')}`;
+  return `${mins}분`;
+}
+
 function DashboardFaceTile({ member, teamColor, onTap }: { member: Member; teamColor?: string; onTap: () => void }) {
   const [imgError, setImgError] = useState(false);
   const initials = member.name
@@ -221,6 +230,7 @@ export default function DashboardPage() {
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
   const [allRoomsExpanded, setAllRoomsExpanded] = useState(true);
   const [allTeachersExpanded, setAllTeachersExpanded] = useState(true);
+  const [classroomExpanded, setClassroomExpanded] = useState(false);
 
   // --- 최적화 1: 단일 useEffect + Promise.all (7→6 쿼리, teachers COUNT 제거) ---
   useEffect(() => {
@@ -360,6 +370,55 @@ export default function DashboardPage() {
     const ratio = stats.totalMembers > 0 ? Math.round((stats.activeMembers / stats.totalMembers) * 100) : 0;
     return { attendanceRate: rate, attendanceColor: color, attendanceTextColor: textColor, memberRatio: ratio };
   }, [stats]);
+
+  // --- 활성 교실 enriched 데이터 (현재 클럽만) ---
+  const enrichedSessions = useMemo(() => {
+    return roomStatus.sessions
+      .filter(session => {
+        const room = allRooms.find(r => r.id === session.room_id);
+        return room && currentClub && room.club_id === currentClub.id;
+      })
+      .map(session => {
+        const room = allRooms.find(r => r.id === session.room_id)!;
+        const team = teams.find(t => t.id === room.team_id);
+        const checkedInTeacherIds = roomStatus.teachers
+          .filter(t => t.room_session_id === session.id)
+          .map(t => t.teacher_id);
+        const checkedInTeachers = checkedInTeacherIds
+          .map(tid => {
+            const t = allTeachers.find(tc => tc.id === tid);
+            const assignment = allAssignments.find(a => a.teacher_id === tid && a.room_id === session.room_id);
+            return t ? { teacher: t, assignmentType: assignment?.assignment_type ?? null } : null;
+          })
+          .filter((x): x is { teacher: Teacher; assignmentType: string | null } => !!x);
+        const assignedCount = allAssignments.filter(a => a.room_id === session.room_id).length;
+        const roomMembers = members.filter(m =>
+          m.room_id === session.room_id || (!m.room_id && m.team_id === room.team_id)
+        );
+        return {
+          ...session,
+          room,
+          team,
+          checkedInTeachers,
+          assignedTeacherCount: assignedCount,
+          memberCount: roomMembers.length,
+        };
+      });
+  }, [roomStatus.sessions, roomStatus.teachers, allRooms, teams, allTeachers, allAssignments, members, currentClub]);
+
+  const inactiveRooms = useMemo(() => {
+    const activeRoomIds = new Set(roomStatus.sessions.map(s => s.room_id));
+    return allRooms
+      .filter(r => currentClub && r.club_id === currentClub.id && !activeRoomIds.has(r.id) && allAssignments.some(a => a.room_id === r.id))
+      .map(r => {
+        const team = teams.find(t => t.id === r.team_id);
+        const assignedTeachers = allAssignments
+          .filter(a => a.room_id === r.id)
+          .map(a => allTeachers.find(t => t.id === a.teacher_id))
+          .filter((t): t is Teacher => !!t);
+        return { ...r, team, assignedTeachers };
+      });
+  }, [allRooms, roomStatus.sessions, allAssignments, teams, allTeachers, currentClub]);
 
   // 스켈레톤 플레이스홀더
   if (loading) {
@@ -576,42 +635,160 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 활성 교실 (실시간) */}
-      {roomStatus.sessions.length > 0 && (
+      {/* 교실 현황 (실시간) */}
+      {(enrichedSessions.length > 0 || inactiveRooms.length > 0) && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-700">활성 교실</h2>
-            <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              실시간
-            </span>
+          {/* 헤더 + 요약 + 토글 */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-gray-700">교실 현황</h2>
+              <span className="text-xs text-gray-400">
+                {enrichedSessions.length}개 운영 · {inactiveRooms.length}개 대기
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {enrichedSessions.length > 0 && (
+                <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                  실시간
+                </span>
+              )}
+              <button
+                onClick={() => setClassroomExpanded(prev => !prev)}
+                className="text-xs text-indigo-500 font-medium hover:text-indigo-700 transition-colors"
+              >
+                {classroomExpanded ? '간소화' : '상세보기'}
+              </button>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {roomStatus.sessions.map((session) => {
-              const teacherCount = roomStatus.teachers.filter(
-                (t) => t.room_session_id === session.id
-              ).length;
-              return (
-                <div
-                  key={session.id}
-                  className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-green-50 border border-green-100"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <span className="text-green-600 font-bold text-sm">🏫</span>
+
+          {/* 간소화 모드: 한 줄 요약 리스트 */}
+          {!classroomExpanded && (
+            <div className="space-y-1.5">
+              {enrichedSessions.map((es) => {
+                const teamColor = es.team?.color || '#6366f1';
+                return (
+                  <div key={es.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-green-50/60 border border-green-100">
+                    <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: teamColor }} />
+                    <span className="text-sm font-semibold text-gray-800 truncate">{es.room?.name || '교실'}</span>
+                    {es.team && <span className="text-xs text-gray-400">{es.team.name}</span>}
+                    <div className="flex-1" />
+                    {es.checkedInTeachers.length > 0 && (
+                      <div className="flex -space-x-1 flex-shrink-0">
+                        {es.checkedInTeachers.slice(0, 2).map(({ teacher: t }) => (
+                          t.avatar_url ? (
+                            <img key={t.id} src={t.avatar_url} alt={t.name} className="w-5 h-5 rounded-full object-cover ring-1 ring-white" />
+                          ) : (
+                            <div key={t.id} className="w-5 h-5 rounded-full ring-1 ring-white flex items-center justify-center text-[9px] font-bold" style={{ backgroundColor: teamColor + '25', color: teamColor }}>
+                              {t.name.slice(0, 1)}
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    )}
+                    {es.assignedTeacherCount > 0 && (
+                      <span className="text-[11px] text-emerald-600 font-medium flex-shrink-0">
+                        {es.checkedInTeachers.length}/{es.assignedTeacherCount}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400 flex-shrink-0">{formatElapsed(es.started_at)}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-green-500 text-white text-[9px] font-bold flex-shrink-0">LIVE</span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">교실 세션</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      교사 체크인 {teacherCount}명
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-full bg-green-500 text-white text-[10px] font-bold tracking-wide flex-shrink-0">
-                    LIVE
-                  </span>
+                );
+              })}
+              {inactiveRooms.map((ir) => (
+                <div key={ir.id} className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 opacity-60">
+                  <div className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-500 truncate">{ir.name}</span>
+                  {ir.team && <span className="text-xs text-gray-400">{ir.team.name}</span>}
+                  <div className="flex-1" />
+                  <span className="text-xs text-gray-400 truncate max-w-[120px]">{ir.assignedTeachers.map(t => t.name).join(', ')}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 text-[9px] font-bold flex-shrink-0">대기</span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {/* 상세 모드: 풀 카드 */}
+          {classroomExpanded && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {enrichedSessions.map((es) => {
+                const teamColor = es.team?.color || '#6366f1';
+                const gradient = getGradientByColor(teamColor);
+                return (
+                  <div key={es.id} className="rounded-xl border border-green-200 overflow-hidden">
+                    <div className={`h-1.5 bg-gradient-to-r ${gradient}`} />
+                    <div className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse" style={{ backgroundColor: teamColor }} />
+                          <span className="text-sm font-bold text-gray-900 truncate">{es.room?.name || '교실'}</span>
+                          {es.team && <span className="text-xs text-gray-400 truncate">{es.team.name}</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className="px-2 py-0.5 rounded-full bg-green-500 text-white text-[10px] font-bold tracking-wide">LIVE</span>
+                          <span className="text-[11px] text-gray-400 font-medium">{formatElapsed(es.started_at)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {es.checkedInTeachers.length > 0 && (
+                            <div className="flex -space-x-1.5 flex-shrink-0">
+                              {es.checkedInTeachers.slice(0, 3).map(({ teacher: t }) => (
+                                t.avatar_url ? (
+                                  <img key={t.id} src={t.avatar_url} alt={t.name} className="w-6 h-6 rounded-full object-cover ring-2 ring-white" />
+                                ) : (
+                                  <div key={t.id} className="w-6 h-6 rounded-full ring-2 ring-white flex items-center justify-center" style={{ backgroundColor: teamColor + '30' }}>
+                                    <span className="text-[10px] font-bold" style={{ color: teamColor }}>{t.name.slice(0, 1)}</span>
+                                  </div>
+                                )
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-600 truncate">
+                            {es.checkedInTeachers.map(({ teacher: t, assignmentType }) =>
+                              `${t.name}${assignmentType === 'primary' ? '(담임)' : assignmentType === 'temporary' ? '(지원)' : ''}`
+                            ).join(' · ') || '교사 없음'}
+                          </p>
+                        </div>
+                        {es.assignedTeacherCount > 0 && (
+                          <span className="text-[11px] font-medium text-emerald-600 flex-shrink-0 ml-2">
+                            체크인 {es.checkedInTeachers.length}/{es.assignedTeacherCount}
+                          </span>
+                        )}
+                      </div>
+                      {es.memberCount > 0 && (
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700" style={{ width: '100%', backgroundColor: teamColor + '80' }} />
+                          </div>
+                          <span className="text-[11px] text-gray-400 flex-shrink-0">{es.memberCount}명</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {inactiveRooms.map((ir) => (
+                <div key={ir.id} className="rounded-xl border border-gray-200 overflow-hidden opacity-60">
+                  <div className="h-1.5 bg-gray-200" />
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2.5 h-2.5 rounded-full bg-gray-300 flex-shrink-0" />
+                        <span className="text-sm font-bold text-gray-500 truncate">{ir.name}</span>
+                        {ir.team && <span className="text-xs text-gray-400 truncate">{ir.team.name}</span>}
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold tracking-wide flex-shrink-0">대기</span>
+                    </div>
+                    {ir.assignedTeachers.length > 0 && (
+                      <p className="text-xs text-gray-400">배정: {ir.assignedTeachers.map(t => t.name).join(', ')}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
