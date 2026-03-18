@@ -63,7 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole((data as Teacher).role);
     } catch {
       setTeacher(null);
-      setRole(null);
+      // teachers 테이블에 없으면 auth user_metadata에서 role 확인
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser?.user_metadata?.role === 'member') {
+        setRole('member');
+      } else {
+        setRole(null);
+      }
     } finally {
       setLoading(false);
     }

@@ -21,15 +21,20 @@ export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && role && !allowedRoles.includes(role)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">접근 권한 없음</h1>
-          <p className="text-gray-600">이 페이지에 접근할 권한이 없습니다.</p>
+  if (allowedRoles) {
+    if (!role || !allowedRoles.includes(role)) {
+      if (role === 'member') {
+        return <Navigate to="/member" replace />;
+      }
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">접근 권한 없음</h1>
+            <p className="text-gray-600">이 페이지에 접근할 권한이 없습니다.</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   return <Outlet />;

@@ -27,6 +27,9 @@ import RoomManagement from './pages/admin/RoomManagement';
 import ReportsPage from './pages/admin/ReportsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 
+// Member pages
+import MemberLandingPage from './pages/MemberLandingPage';
+
 // Teacher pages
 import TeacherHome from './pages/teacher/TeacherHome';
 import ScoringPage from './pages/teacher/ScoringPage';
@@ -49,6 +52,7 @@ function RoleRedirect() {
 
   if (!session) return <Navigate to="/login" replace />;
   if (role === 'admin') return <Navigate to="/admin" replace />;
+  if (role === 'member') return <Navigate to="/member" replace />;
   return <Navigate to="/teacher" replace />;
 }
 
@@ -95,6 +99,11 @@ function AppRoutes() {
           <Route path="/teacher/profile" element={<ProfilePage />} />
         </Route>
       </Route>
+
+      {/* Member route */}
+      <Route path="/member" element={
+        session ? <MemberLandingPage /> : <Navigate to="/login" replace />
+      } />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
