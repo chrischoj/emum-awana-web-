@@ -396,49 +396,53 @@ export default function TeacherHome() {
         </div>
       )}
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">{isUnassigned ? '전체 클럽원' : '내 팀원'}</p>
-          <p className="text-2xl font-bold text-gray-900">{isUnassigned ? allMembers.length : assignedMembers.length}</p>
+      {/* 통계 카드 - admin 미배정이면 숨김 */}
+      {!(teacher?.role === 'admin' && isUnassigned) && (
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500">{isUnassigned ? '전체 클럽원' : '내 팀원'}</p>
+            <p className="text-2xl font-bold text-gray-900">{isUnassigned ? allMembers.length : assignedMembers.length}</p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-xs text-gray-500">담당 팀</p>
+            <p className="text-2xl font-bold text-gray-900">{assignedTeamIds.length}</p>
+          </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500">담당 팀</p>
-          <p className="text-2xl font-bold text-gray-900">{assignedTeamIds.length}</p>
-        </div>
-      </div>
+      )}
 
-      {/* 오늘의 할 일 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-semibold text-gray-900 mb-3">오늘의 할 일</h2>
-        <div className="space-y-2">
-          {teamSubmissions.length > 0 ? (
-            teamSubmissions.map((ts) => {
-              const statusInfo = getStatusLabel(ts.status, ts.hasScores);
-              return (
-                <div key={ts.teamId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ts.teamColor }} />
-                    <span className="text-sm font-medium text-gray-900">{ts.teamName} 팀</span>
+      {/* 오늘의 할 일 - admin 미배정이면 숨김 */}
+      {!(teacher?.role === 'admin' && isUnassigned) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <h2 className="font-semibold text-gray-900 mb-3">오늘의 할 일</h2>
+          <div className="space-y-2">
+            {teamSubmissions.length > 0 ? (
+              teamSubmissions.map((ts) => {
+                const statusInfo = getStatusLabel(ts.status, ts.hasScores);
+                return (
+                  <div key={ts.teamId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ts.teamColor }} />
+                      <span className="text-sm font-medium text-gray-900">{ts.teamName} 팀</span>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusInfo.bg} ${statusInfo.color}`}>
+                      {statusInfo.text}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusInfo.bg} ${statusInfo.color}`}>
-                    {statusInfo.text}
-                  </span>
+                );
+              })
+            ) : (
+              <>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <span className="text-amber-600 font-medium text-sm">출석 입력</span>
                 </div>
-              );
-            })
-          ) : (
-            <>
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-                <span className="text-amber-600 font-medium text-sm">출석 입력</span>
-              </div>
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                <span className="text-blue-600 font-medium text-sm">점수 입력</span>
-              </div>
-            </>
-          )}
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <span className="text-blue-600 font-medium text-sm">점수 입력</span>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 내 학급 */}
       {!isUnassigned && assignedMembers.length > 0 && (
