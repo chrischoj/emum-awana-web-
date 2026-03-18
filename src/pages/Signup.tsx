@@ -7,7 +7,7 @@ import { AvatarUpload } from '../components/ui/AvatarUpload';
 
 type TabType = 'teacher' | 'member';
 
-const POSITIONS = ['조정관', '감독관', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
+const POSITIONS = ['조정관', '감독관', '팀장', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
 
 const initialFormData = {
   email: '',
