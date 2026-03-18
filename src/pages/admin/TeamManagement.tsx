@@ -66,7 +66,7 @@ interface UnassignedRowProps {
   teams: Team[];
   rooms: Room[];
   memberCountByRoom: Record<string, number>;
-  onAssigned: () => void;
+  onAssigned: (memberId: string, updates: Partial<Member>) => void;
 }
 
 function UnassignedRow({ member, teams, rooms, memberCountByRoom, onAssigned }: UnassignedRowProps) {
@@ -79,16 +79,21 @@ function UnassignedRow({ member, teams, rooms, memberCountByRoom, onAssigned }: 
 
     setPickerTeamId(null);
     setLoading(true);
+
+    // 낙관적 업데이트: UI 먼저 갱신
+    onAssigned(member.id, { team_id: room.team_id, room_id: roomId });
+
     const { error } = await supabase
       .from('members')
       .update({ team_id: room.team_id, room_id: roomId })
       .eq('id', member.id);
 
     if (error) {
+      // 롤백: 원래 상태로 복원
+      onAssigned(member.id, { team_id: member.team_id, room_id: member.room_id });
       toast.error('배정 실패: ' + error.message);
     } else {
       toast.success(`${member.name} → ${room.name} 배정 완료`);
-      onAssigned();
     }
     setLoading(false);
   }
@@ -159,7 +164,7 @@ interface TeamMemberRowProps {
   teams: Team[];
   rooms: Room[];
   memberCountByRoom: Record<string, number>;
-  onChanged: () => void;
+  onChanged: (memberId: string, updates: Partial<Member>) => void;
 }
 
 function TeamMemberRow({ member, currentTeamId, teams, rooms, memberCountByRoom, onChanged }: TeamMemberRowProps) {
@@ -175,16 +180,24 @@ function TeamMemberRow({ member, currentTeamId, teams, rooms, memberCountByRoom,
     setMenuOpen(false);
     setMoveToTeamId(null);
     setLoading(true);
+
+    // 이전 상태 저장 (롤백용)
+    const prevTeamId = member.team_id;
+    const prevRoomId = member.room_id;
+
+    // 낙관적 업데이트
+    onChanged(member.id, { team_id: room.team_id, room_id: roomId });
+
     const { error } = await supabase
       .from('members')
       .update({ team_id: room.team_id, room_id: roomId })
       .eq('id', member.id);
 
     if (error) {
+      onChanged(member.id, { team_id: prevTeamId, room_id: prevRoomId });
       toast.error('이동 실패: ' + error.message);
     } else {
       toast.success(`${member.name} → ${room.name} 이동 완료`);
-      onChanged();
     }
     setLoading(false);
   }
@@ -192,16 +205,23 @@ function TeamMemberRow({ member, currentTeamId, teams, rooms, memberCountByRoom,
   async function unassign() {
     setMenuOpen(false);
     setLoading(true);
+
+    const prevTeamId = member.team_id;
+    const prevRoomId = member.room_id;
+
+    // 낙관적 업데이트
+    onChanged(member.id, { team_id: null, room_id: null });
+
     const { error } = await supabase
       .from('members')
       .update({ team_id: null, room_id: null })
       .eq('id', member.id);
 
     if (error) {
+      onChanged(member.id, { team_id: prevTeamId, room_id: prevRoomId });
       toast.error('제거 실패: ' + error.message);
     } else {
       toast.success(`${member.name}을(를) 미배정으로 변경했습니다.`);
-      onChanged();
     }
     setLoading(false);
   }
@@ -311,7 +331,7 @@ interface TeamCardProps {
   memberCountByRoom: Record<string, number>;
   clubName?: string;
   showClubLabel?: boolean;
-  onChanged: () => void;
+  onChanged: (memberId: string, updates: Partial<Member>) => void;
 }
 
 function TeamCard({ team, teamMembers, teamRooms, allTeams, allRooms, memberCountByRoom, clubName, showClubLabel, onChanged }: TeamCardProps) {
@@ -432,7 +452,7 @@ interface ClubSectionProps {
   allTeams: Team[];
   allRooms: Room[];
   memberCountByRoom: Record<string, number>;
-  onChanged: () => void;
+  onChanged: (memberId: string, updates: Partial<Member>) => void;
 }
 
 function ClubSection({ club, clubTeams, clubMembers, clubRooms, allTeams, allRooms, memberCountByRoom, onChanged }: ClubSectionProps) {
@@ -525,6 +545,10 @@ export default function TeamManagement() {
     setAllMembers((membersRes.data as Member[]) || []);
     setAllRooms((roomsRes.data as Room[]) || []);
     setLoading(false);
+  }
+
+  function optimisticUpdateMember(memberId: string, updates: Partial<Member>) {
+    setAllMembers(prev => prev.map(m => m.id === memberId ? { ...m, ...updates } : m));
   }
 
   // 룸별 멤버 수 계산
@@ -620,7 +644,7 @@ export default function TeamManagement() {
                 allTeams={clubTeams}
                 allRooms={clubRooms}
                 memberCountByRoom={memberCountByRoom}
-                onChanged={loadData}
+                onChanged={optimisticUpdateMember}
               />
             );
           })}
@@ -652,7 +676,7 @@ export default function TeamManagement() {
                     teams={filteredTeams}
                     rooms={filteredRooms}
                     memberCountByRoom={memberCountByRoom}
-                    onAssigned={loadData}
+                    onAssigned={optimisticUpdateMember}
                   />
                 ))}
               </div>
@@ -679,7 +703,7 @@ export default function TeamManagement() {
                     allTeams={filteredTeams}
                     allRooms={filteredRooms}
                     memberCountByRoom={memberCountByRoom}
-                    onChanged={loadData}
+                    onChanged={optimisticUpdateMember}
                   />
                 );
               })}

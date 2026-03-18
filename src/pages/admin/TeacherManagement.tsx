@@ -282,12 +282,8 @@ export default function TeacherManagement() {
   };
 
   const loadAssignments = async () => {
-    const allAssignments: ActiveTeacherAssignment[] = [];
-    for (const club of clubs) {
-      const clubAssignments = await getAllAssignmentsByClub(club.id);
-      allAssignments.push(...clubAssignments);
-    }
-    setAssignments(allAssignments);
+    const results = await Promise.all(clubs.map(club => getAllAssignmentsByClub(club.id)));
+    setAssignments(results.flat());
   };
 
   const loadRooms = async () => {
