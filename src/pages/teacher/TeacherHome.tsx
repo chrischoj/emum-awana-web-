@@ -7,7 +7,7 @@ import { getSubmissionsByDate, getWeeklyScores } from '../../services/scoringSer
 import { supabase } from '../../lib/supabase';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { SubmissionStatus, Member, Team, Club } from '../../types/awana';
+import type { SubmissionStatus, Member, Team, Club, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
 
 function getGradientClass(color?: string): string {
   const map: Record<string, string> = {
@@ -47,6 +47,51 @@ function FaceTile({ member, teamColor, onTap }: { member: Member; teamColor?: st
   );
 }
 
+const TEACHER_CATEGORIES: { key: string; label: string; positions: string[] }[] = [
+  { key: 'admin', label: '행정', positions: ['조정관', '감독관', '서기', '회계'] },
+  { key: 'game', label: '게임디렉터', positions: ['게임디렉터'] },
+  { key: 'support', label: '보조 교사', positions: ['보조 교사'] },
+];
+
+function getTeacherCategory(position: string | null): string {
+  if (!position) return 'other';
+  for (const cat of TEACHER_CATEGORIES) {
+    if (cat.positions.includes(position)) return cat.key;
+  }
+  return 'other';
+}
+
+function TeacherFaceTile({ teacher, subtitle }: { teacher: Teacher; subtitle?: string }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = teacher.name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || '?';
+
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-0">
+      {teacher.avatar_url && !imgError ? (
+        <img
+          src={teacher.avatar_url}
+          alt={teacher.name}
+          className="w-full aspect-square rounded-2xl object-cover shadow-sm ring-2 ring-indigo-200"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="w-full aspect-square rounded-2xl flex items-center justify-center bg-gradient-to-br from-indigo-400 to-purple-500 shadow-sm ring-2 ring-indigo-200">
+          <span className="text-2xl font-bold text-white">{initials}</span>
+        </div>
+      )}
+      <span className="text-xs font-medium text-gray-700 text-center truncate w-full">{teacher.name}</span>
+      {subtitle && (
+        <span className="text-[10px] text-gray-400 text-center truncate w-full -mt-0.5">{subtitle}</span>
+      )}
+    </div>
+  );
+}
+
 interface TeamSubmissionInfo {
   teamId: string;
   teamName: string;
@@ -70,6 +115,48 @@ export default function TeacherHome() {
 
   const [teamSubmissions, setTeamSubmissions] = useState<TeamSubmissionInfo[]>([]);
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
+
+  // 전체 교사 + 배정 + 교실 데이터
+  const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+  const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>([]);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('teachers').select('*').eq('active', true).order('name'),
+      supabase.from('active_teacher_assignments').select('*'),
+      supabase.from('rooms').select('*').eq('active', true).order('name'),
+    ]).then(([teachersRes, assignmentsRes, roomsRes]) => {
+      setAllTeachers((teachersRes.data as Teacher[]) || []);
+      setAllAssignments((assignmentsRes.data as ActiveTeacherAssignment[]) || []);
+      setAllRooms((roomsRes.data as Room[]) || []);
+    }).catch(() => { setAllTeachers([]); setAllAssignments([]); setAllRooms([]); });
+  }, []);
+
+  // 팀별 담임 교사 맵: teamId -> Teacher[]
+  const teamTeacherMap = new Map<string, Teacher[]>();
+  for (const a of allAssignments) {
+    const t = allTeachers.find(tc => tc.id === a.teacher_id);
+    if (t) {
+      const existing = teamTeacherMap.get(a.team_id) || [];
+      existing.push(t);
+      teamTeacherMap.set(a.team_id, existing);
+    }
+  }
+
+  // 배정된 교사 ID 세트
+  const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
+
+  // 미배정 교사 카테고리별
+  const unassignedTeachers = allTeachers.filter(t => !assignedTeacherIds.has(t.id));
+  const teachersByCategory = TEACHER_CATEGORIES.map(cat => ({
+    ...cat,
+    teachers: unassignedTeachers.filter(t => getTeacherCategory(t.position) === cat.key),
+  })).filter(cat => cat.teachers.length > 0);
+  const otherUnassigned = unassignedTeachers.filter(t => getTeacherCategory(t.position) === 'other');
+  if (otherUnassigned.length > 0) {
+    teachersByCategory.push({ key: 'other', label: '담임 교사 (미배정)', positions: [], teachers: otherUnassigned });
+  }
 
   // 다른 클럽 멤버/팀 로드 (currentClub 외의 클럽들)
   const [otherClubData, setOtherClubData] = useState<
@@ -122,6 +209,32 @@ export default function TeacherHome() {
     .filter(t => t.members.length > 0);
 
   const hasOtherKids = sameClubOtherTeams.length > 0 || otherClubData.length > 0;
+  const hasTeacherSection = teachersByCategory.length > 0;
+
+  // T&T 학급별 그룹핑 헬퍼
+  const isCurrentClubTnT = currentClub?.type === 'tnt';
+  const groupMembersByRoom = (memberList: Member[], clubType?: string) => {
+    if (clubType !== 'tnt') return null;
+    const roomGroups: { room: Room | null; members: Member[] }[] = [];
+    const roomMap = new Map<string | null, Member[]>();
+    for (const m of memberList) {
+      const key = m.room_id;
+      const arr = roomMap.get(key) || [];
+      arr.push(m);
+      roomMap.set(key, arr);
+    }
+    for (const [roomId, members] of roomMap) {
+      const room = roomId ? allRooms.find(r => r.id === roomId) || null : null;
+      roomGroups.push({ room, members });
+    }
+    // 학급 이름순 정렬, 미배정은 마지막
+    roomGroups.sort((a, b) => {
+      if (!a.room) return 1;
+      if (!b.room) return -1;
+      return a.room.name.localeCompare(b.room.name);
+    });
+    return roomGroups;
+  };
 
   const toggleSection = (id: string) => {
     setOpenSectionIds(prev => {
@@ -287,19 +400,66 @@ export default function TeacherHome() {
             {isUnassigned ? '전체 아이들' : '내 반 아이들'}{' '}
             <span className="text-sm font-normal text-gray-400">({assignedMembers.length}명)</span>
           </h2>
-          <div className="grid grid-cols-3 gap-3">
-            {assignedMembers.map(member => {
-              const team = teams.find(t => t.id === member.team_id);
-              return (
-                <FaceTile
-                  key={member.id}
-                  member={member}
-                  teamColor={team?.color}
-                  onTap={() => openMemberProfile(member.id)}
-                />
-              );
-            })}
-          </div>
+
+          {/* 담임 선생님 표시 */}
+          {!isUnassigned && assignedTeamIds.map(tid => {
+            const teamTeachers = teamTeacherMap.get(tid) || [];
+            if (teamTeachers.length === 0) return null;
+            const team = teams.find(t => t.id === tid);
+            return (
+              <div key={`teacher-${tid}`} className="mb-3">
+                <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: team?.color }} />
+                  {team?.name} 팀 선생님
+                </p>
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {teamTeachers.map(t => (
+                    <TeacherFaceTile key={t.id} teacher={t} subtitle={t.position || '교사'} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* T&T: 학급별 그룹 / 스팍스: 플랫 */}
+          {isCurrentClubTnT && !isUnassigned ? (
+            <>
+              {(groupMembersByRoom(assignedMembers, 'tnt') || []).map(({ room, members: roomMembers }) => (
+                <div key={room?.id || 'unassigned-room'} className="mb-4">
+                  <p className="text-xs font-medium text-indigo-500 mb-2">
+                    {room ? room.name : '학급 미배정'}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {roomMembers.map(member => {
+                      const team = teams.find(t => t.id === member.team_id);
+                      return (
+                        <FaceTile
+                          key={member.id}
+                          member={member}
+                          teamColor={team?.color}
+                          onTap={() => openMemberProfile(member.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {assignedMembers.map(member => {
+                const team = teams.find(t => t.id === member.team_id);
+                return (
+                  <FaceTile
+                    key={member.id}
+                    member={member}
+                    teamColor={team?.color}
+                    onTap={() => openMemberProfile(member.id)}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -318,6 +478,8 @@ export default function TeacherHome() {
             )}
             {sameClubOtherTeams.map(team => {
               const isOpen = openSectionIds.has(team.id);
+              const tTeachers = teamTeacherMap.get(team.id) || [];
+              const roomGroups = groupMembersByRoom(team.members, currentClub?.type);
               return (
                 <div key={team.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <button
@@ -337,16 +499,31 @@ export default function TeacherHome() {
                   </button>
                   {isOpen && (
                     <div className="px-3 pb-3">
-                      <div className="grid grid-cols-3 gap-3">
-                        {team.members.map(member => (
-                          <FaceTile
-                            key={member.id}
-                            member={member}
-                            teamColor={team.color}
-                            onTap={() => openMemberProfile(member.id)}
-                          />
-                        ))}
-                      </div>
+                      {tTeachers.length > 0 && (
+                        <div className="grid grid-cols-4 gap-2 mb-3">
+                          {tTeachers.map(t => (
+                            <TeacherFaceTile key={t.id} teacher={t} subtitle={t.position || '교사'} />
+                          ))}
+                        </div>
+                      )}
+                      {roomGroups ? (
+                        roomGroups.map(({ room, members: rm }) => (
+                          <div key={room?.id || 'no-room'} className="mb-3 last:mb-0">
+                            <p className="text-xs font-medium text-indigo-500 mb-2">{room ? room.name : '학급 미배정'}</p>
+                            <div className="grid grid-cols-3 gap-3">
+                              {rm.map(member => (
+                                <FaceTile key={member.id} member={member} teamColor={team.color} onTap={() => openMemberProfile(member.id)} />
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="grid grid-cols-3 gap-3">
+                          {team.members.map(member => (
+                            <FaceTile key={member.id} member={member} teamColor={team.color} onTap={() => openMemberProfile(member.id)} />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -361,6 +538,8 @@ export default function TeacherHome() {
                 </p>
                 {clubTeams.map(team => {
                   const isOpen = openSectionIds.has(team.id);
+                  const tTeachers = teamTeacherMap.get(team.id) || [];
+                  const roomGroups = groupMembersByRoom(team.members, club.type);
                   return (
                     <div key={team.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-2">
                       <button
@@ -380,21 +559,59 @@ export default function TeacherHome() {
                       </button>
                       {isOpen && (
                         <div className="px-3 pb-3">
-                          <div className="grid grid-cols-3 gap-3">
-                            {team.members.map(member => (
-                              <FaceTile
-                                key={member.id}
-                                member={member}
-                                teamColor={team.color}
-                                onTap={() => openMemberProfile(member.id)}
-                              />
-                            ))}
-                          </div>
+                          {tTeachers.length > 0 && (
+                            <div className="grid grid-cols-4 gap-2 mb-3">
+                              {tTeachers.map(t => (
+                                <TeacherFaceTile key={t.id} teacher={t} subtitle={t.position || '교사'} />
+                              ))}
+                            </div>
+                          )}
+                          {roomGroups ? (
+                            roomGroups.map(({ room, members: rm }) => (
+                              <div key={room?.id || 'no-room'} className="mb-3 last:mb-0">
+                                <p className="text-xs font-medium text-indigo-500 mb-2">{room ? room.name : '학급 미배정'}</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                  {rm.map(member => (
+                                    <FaceTile key={member.id} member={member} teamColor={team.color} onTap={() => openMemberProfile(member.id)} />
+                                  ))}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="grid grid-cols-3 gap-3">
+                              {team.members.map(member => (
+                                <FaceTile key={member.id} member={member} teamColor={team.color} onTap={() => openMemberProfile(member.id)} />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
                   );
                 })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 우리 선생님들 */}
+      {hasTeacherSection && (
+        <div className="mt-6">
+          <h2 className="font-semibold text-gray-900 mb-3">
+            우리 선생님들
+          </h2>
+          <div className="space-y-4">
+            {teachersByCategory.map(cat => (
+              <div key={cat.key}>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-1">
+                  {cat.label}
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {cat.teachers.map(t => (
+                    <TeacherFaceTile key={t.id} teacher={t} subtitle={t.position || undefined} />
+                  ))}
+                </div>
               </div>
             ))}
           </div>
