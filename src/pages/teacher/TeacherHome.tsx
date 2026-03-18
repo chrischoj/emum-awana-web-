@@ -436,7 +436,7 @@ export default function TeacherHome() {
                   <span className="text-amber-600 font-medium text-sm">출석 입력</span>
                 </div>
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <span className="text-blue-600 font-medium text-sm">점수 입력</span>
+                  <span className="text-blue-600 font-medium text-sm">반별 점수</span>
                 </div>
               </>
             )}

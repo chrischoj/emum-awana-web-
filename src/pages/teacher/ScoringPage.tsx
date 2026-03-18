@@ -387,7 +387,7 @@ export default function ScoringPage() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900">점수 입력</h1>
+        <h1 className="text-xl font-bold text-gray-900">반별 점수</h1>
         <DatePickerWithToday
           value={selectedDate}
           onChange={setSelectedDate}
