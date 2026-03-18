@@ -28,6 +28,7 @@ export default function MemberAttendancePage() {
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: AttendanceStatus; absenceReason: string }>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadData = useCallback(async (showLoading = true) => {
     // 캐시로 즉시 표시 (최초 로딩 시만)
@@ -95,6 +96,21 @@ export default function MemberAttendancePage() {
     }
   }, [filterClubId, selectedDate]);
 
+  // Realtime 이벤트 시 attendance만 가볍게 reload (members/teams는 재쿼리하지 않음)
+  const refreshAttendanceOnly = useCallback(async () => {
+    try {
+      const attendanceRecords = await getAttendanceByDate(selectedDate, filterClubId ?? undefined);
+      const map: Record<string, { status: AttendanceStatus; absenceReason: string }> = {};
+      for (const rec of attendanceRecords) {
+        const status = rec.status || (rec.present ? 'present' : 'absent');
+        if (status !== 'none') map[rec.member_id] = { status, absenceReason: rec.absence_reason || '' };
+      }
+      setAttendanceMap(map);
+    } catch {
+      // 실패 시 무시 (다음 이벤트에서 재시도)
+    }
+  }, [selectedDate, filterClubId]);
+
   useEffect(() => {
     loadData(true);
   }, [loadData]);
@@ -103,10 +119,19 @@ export default function MemberAttendancePage() {
   useEffect(() => {
     const channel = supabase
       .channel(`admin-attendance-${selectedDate}-${filterClubId ?? 'all'}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_attendance', filter: `training_date=eq.${selectedDate}` }, () => loadData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'member_attendance', filter: `training_date=eq.${selectedDate}` }, () => {
+        // 300ms debounce: 연속 변경 시 마지막 이벤트 후 1회만 refresh
+        if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = setTimeout(() => {
+          refreshAttendanceOnly();
+        }, 300);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedDate, filterClubId, loadData]);
+    return () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate, filterClubId, refreshAttendanceOnly]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

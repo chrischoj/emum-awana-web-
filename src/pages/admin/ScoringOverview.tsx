@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -88,6 +88,7 @@ export default function ScoringOverview() {
   const [historyData, setHistoryData] = useState<ScoreEditHistory[]>([]);
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // When viewMode changes to a specific club, update context
   useEffect(() => {
@@ -106,21 +107,25 @@ export default function ScoringOverview() {
     }
   }, [viewMode, currentClub, selectedDate, clubs]);
 
-  // Realtime 구독
+  // Realtime 구독 (300ms debounce)
   useEffect(() => {
+    const debouncedRefresh = () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      realtimeTimerRef.current = setTimeout(() => {
+        if (viewMode === 'all') loadAllData(false);
+        else loadData(false);
+      }, 300);
+    };
     const channel = supabase
       .channel(`admin-scoring-${selectedDate}-${viewMode}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_scores' }, () => {
-        if (viewMode === 'all') loadAllData(false);
-        else loadData(false);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_score_submissions' }, () => {
-        if (viewMode === 'all') loadAllData(false);
-        else loadData(false);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_scores' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_score_submissions' }, debouncedRefresh)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedDate, viewMode, currentClub, members, clubs]);
+    return () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate, viewMode, currentClub, clubs]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

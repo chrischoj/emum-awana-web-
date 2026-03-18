@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
@@ -31,6 +31,20 @@ export default function GameScoresAdmin() {
   const [editDescription, setEditDescription] = useState('');
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const teacherNamesLoaded = useRef(false);
+
+  // 교사 이름은 최초 1회만 로드 (불변 데이터)
+  useEffect(() => {
+    if (teacherNamesLoaded.current) return;
+    supabase.from('teachers').select('id, name').then(({ data }) => {
+      const nameMap = new Map<string, string>();
+      for (const t of (data || [])) nameMap.set(t.id, t.name);
+      setTeacherNames(nameMap);
+      teacherNamesLoaded.current = true;
+    });
+  }, []);
+
   useEffect(() => {
     if (viewMode !== 'all') {
       const club = clubs.find((c) => c.id === viewMode);
@@ -50,17 +64,13 @@ export default function GameScoresAdmin() {
     if (!currentClub) return;
     setLoading(true);
     try {
-      const [totals, data, teachersRes, lock] = await Promise.all([
+      const [totals, data, lock] = await Promise.all([
         getTeamGameTotals(currentClub.id, selectedDate),
         getGameScoresByDate(currentClub.id, selectedDate),
-        supabase.from('teachers').select('id, name'),
         getGameScoreLock(currentClub.id, selectedDate),
       ]);
       setTeamTotals(totals);
       setEntries(data);
-      const nameMap = new Map<string, string>();
-      for (const t of (teachersRes.data || [])) nameMap.set(t.id, t.name);
-      setTeacherNames(nameMap);
       setGameLock(lock);
     } catch {
       toast.error('데이터 로드 실패');
@@ -72,10 +82,9 @@ export default function GameScoresAdmin() {
   async function loadAllData() {
     setLoading(true);
     try {
-      const [teamsRes, entriesRes, teachersRes] = await Promise.all([
+      const [teamsRes, entriesRes] = await Promise.all([
         supabase.from('teams').select('*').order('name'),
         supabase.from('game_score_entries').select('*').eq('training_date', selectedDate).order('created_at', { ascending: false }),
-        supabase.from('teachers').select('id, name'),
       ]);
 
       const fetchedTeams = (teamsRes.data as Team[]) || [];
@@ -83,11 +92,7 @@ export default function GameScoresAdmin() {
 
       setAllTeams(fetchedTeams);
       setEntries(fetchedEntries);
-      setGameLock(null); // all view doesn't have per-club lock
-
-      const nameMap = new Map<string, string>();
-      for (const t of (teachersRes.data || [])) nameMap.set(t.id, t.name);
-      setTeacherNames(nameMap);
+      setGameLock(null);
 
       const colorGroupMap = new Map<string, { color: string; teamIds: string[] }>();
       for (const team of fetchedTeams) {
@@ -112,18 +117,22 @@ export default function GameScoresAdmin() {
   }
 
   useEffect(() => {
+    const debouncedRefresh = () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      realtimeTimerRef.current = setTimeout(() => {
+        if (viewMode === 'all') loadAllData();
+        else loadClubData();
+      }, 300);
+    };
     const channel = supabase
       .channel(`admin-game-scores-${selectedDate}-${viewMode}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_entries' }, () => {
-        if (viewMode === 'all') loadAllData();
-        else loadClubData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, () => {
-        if (viewMode === 'all') loadAllData();
-        else loadClubData();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_entries' }, debouncedRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, debouncedRefresh)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [selectedDate, viewMode, currentClub, clubs]);
 
   const handleDeleteEntry = async (entryId: string) => {
