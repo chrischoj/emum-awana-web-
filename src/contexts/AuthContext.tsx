@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Teacher, UserRole } from '../types/awana';
@@ -23,18 +23,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [teacher, setTeacher] = useState<Teacher | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const fetchingRef = useRef(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchTeacher(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
-
+    // onAuthStateChange만 사용 (INITIAL_SESSION 이벤트로 getSession() 역할도 수행)
+    // getSession() + onAuthStateChange 이중 호출 race condition 제거
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -51,6 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function fetchTeacher(userId: string) {
+    // 중복 호출 방지
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -64,15 +60,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole((data as Teacher).role);
     } catch {
       setTeacher(null);
-      // teachers 테이블에 없으면 auth user_metadata에서 role 확인
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser?.user_metadata?.role === 'member') {
+      // teachers 테이블에 없으면 이미 가진 user 정보에서 role 확인
+      // (catch 내에서 추가 네트워크 호출하면 이중 hang 위험)
+      const currentUser = user;
+      if (currentUser?.user_metadata?.role === 'member') {
         setRole('member');
       } else {
         setRole(null);
       }
     } finally {
       setLoading(false);
+      fetchingRef.current = false;
     }
   }
 
