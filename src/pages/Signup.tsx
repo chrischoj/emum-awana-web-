@@ -4,10 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { AvatarUpload } from '../components/ui/AvatarUpload';
+import { PositionInput } from '../components/ui/PositionInput';
 
 type TabType = 'teacher' | 'member';
-
-const POSITIONS = ['조정관', '감독관', '팀장', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
 
 const initialFormData = {
   email: '',
@@ -29,6 +28,8 @@ const Signup = () => {
   const qrRoomId = searchParams.get('roomId');
   const [roomInfo, setRoomInfo] = useState<{ roomId: string; clubId: string; clubName: string } | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('teacher');
+  const [simpleMode, setSimpleMode] = useState(true); // true = 간편 가입, false = 이메일 가입
+  const [registeredSimple, setRegisteredSimple] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
   // 2단계: 가입 후 사진 업로드
@@ -78,10 +79,19 @@ const Signup = () => {
   };
 
   const handleSubmitTeacher = async () => {
+    // 간편 가입 모드: 이메일/비밀번호 자동 생성
+    const phoneDigits = formData.phone.replace(/[^0-9]/g, '');
+    const resolvedEmail = simpleMode
+      ? `${phoneDigits}@awana.local`
+      : formData.email;
+    const resolvedPassword = simpleMode
+      ? phoneDigits
+      : formData.password;
+
     // Sign up with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
+      email: resolvedEmail,
+      password: resolvedPassword,
       options: {
         data: {
           role: 'teacher',
@@ -93,7 +103,7 @@ const Signup = () => {
 
     // 이미 가입된 이메일인 경우 (Supabase는 보안상 동일 응답을 줌)
     if (!authData.user?.identities?.length) {
-      toast.error('이미 가입된 이메일입니다. 로그인해주세요.');
+      toast.error(simpleMode ? '이미 가입된 이름입니다. 로그인해주세요.' : '이미 가입된 이메일입니다. 로그인해주세요.');
       navigate('/login');
       return;
     }
@@ -117,6 +127,7 @@ const Signup = () => {
     await refreshTeacher(authData.user!.id);
 
     toast.success('회원가입이 완료되었습니다!');
+    setRegisteredSimple(simpleMode);
     setRegistered({ id: authData.user!.id, name: formData.name, folder: 'teachers' });
   };
 
@@ -169,7 +180,7 @@ const Signup = () => {
     setLoading(true);
 
     try {
-      if (formData.password !== formData.confirmPassword) {
+      if (!simpleMode && formData.password !== formData.confirmPassword) {
         throw new Error('비밀번호가 일치하지 않습니다.');
       }
 
@@ -236,7 +247,9 @@ const Signup = () => {
             로그인하러 가기
           </button>
           <p className="text-center text-xs text-gray-400 mt-3">
-            이메일 확인 후 로그인해주세요
+            {registeredSimple
+              ? `로그인 ID: 전화번호 숫자 / 초기 비밀번호: 전화번호 숫자`
+              : '이메일 확인 후 로그인해주세요'}
           </p>
         </div>
       </div>
@@ -281,56 +294,86 @@ const Signup = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 공통: 이메일 */}
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              이메일
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              value={formData.email}
-              onChange={handleChange}
-              className={inputClass}
-              placeholder="your@email.com"
-            />
-          </div>
+          {/* 교사 전용: 간편/이메일 가입 모드 토글 */}
+          {activeTab === 'teacher' && (
+            <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setSimpleMode(true)}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  simpleMode ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-500'
+                }`}
+              >
+                간편 가입 (이름+전화번호)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimpleMode(false)}
+                className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  !simpleMode ? 'bg-white shadow-sm text-indigo-700' : 'text-gray-500'
+                }`}
+              >
+                이메일 가입
+              </button>
+            </div>
+          )}
 
-          {/* 공통: 비밀번호 */}
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              비밀번호
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              value={formData.password}
-              onChange={handleChange}
-              className={inputClass}
-              placeholder="••••••••"
-            />
-          </div>
+          {/* 공통: 이메일 (간편 가입 시 교사 탭에서는 숨김) */}
+          {(!simpleMode || activeTab === 'member') && (
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                이메일
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
+                className={inputClass}
+                placeholder="your@email.com"
+              />
+            </div>
+          )}
 
-          {/* 공통: 비밀번호 확인 */}
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-              비밀번호 확인
-            </label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              required
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              className={inputClass}
-              placeholder="••••••••"
-            />
-          </div>
+          {/* 공통: 비밀번호 (간편 가입 시 교사 탭에서는 숨김) */}
+          {(!simpleMode || activeTab === 'member') && (
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                비밀번호
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                required
+                value={formData.password}
+                onChange={handleChange}
+                className={inputClass}
+                placeholder="••••••••"
+              />
+            </div>
+          )}
+
+          {/* 공통: 비밀번호 확인 (간편 가입 시 교사 탭에서는 숨김) */}
+          {(!simpleMode || activeTab === 'member') && (
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                비밀번호 확인
+              </label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className={inputClass}
+                placeholder="••••••••"
+              />
+            </div>
+          )}
 
           {/* 공통: 이름 */}
           <div>
@@ -365,6 +408,11 @@ const Signup = () => {
                 className={inputClass}
                 placeholder="010-1234-5678"
               />
+              {simpleMode && formData.phone && (
+                <p className="text-xs text-gray-400 mt-1">
+                  초기 비밀번호: {formData.phone.replace(/[^0-9]/g, '')} (전화번호 숫자)
+                </p>
+              )}
             </div>
           )}
 
@@ -451,21 +499,13 @@ const Signup = () => {
           {/* 교사 전용: 직책 */}
           {activeTab === 'teacher' && (
             <div>
-              <label htmlFor="position" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 직책 <span className="text-gray-400 font-normal">(선택)</span>
               </label>
-              <select
-                id="position"
-                name="position"
+              <PositionInput
                 value={formData.position}
-                onChange={handleChange}
-                className={inputClass}
-              >
-                <option value="">선택 안함</option>
-                {POSITIONS.map((pos) => (
-                  <option key={pos} value={pos}>{pos}</option>
-                ))}
-              </select>
+                onChange={(value) => setFormData({ ...formData, position: value })}
+              />
             </div>
           )}
 

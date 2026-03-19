@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase';
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -15,8 +15,9 @@ const Login = () => {
     setLoading(true);
 
     try {
+      const resolvedEmail = loginId.includes('@') ? loginId : `${loginId.trim()}@awana.local`;
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: resolvedEmail,
         password,
       });
 
@@ -28,7 +29,7 @@ const Login = () => {
       toast.success('로그인되었습니다!');
     } catch (error) {
       console.error('Login error:', error);
-      toast.error('로그인에 실패했습니다. 다시 시도해주세요.');
+      toast.error('로그인에 실패했습니다. 이름/이메일 또는 비밀번호를 확인해주세요.');
     } finally {
       setLoading(false);
     }
@@ -45,17 +46,17 @@ const Login = () => {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              이메일
+            <label htmlFor="loginId" className="block text-sm font-medium text-gray-700">
+              전화번호 또는 이메일
             </label>
             <input
-              id="email"
-              type="email"
+              id="loginId"
+              type="text"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="your@email.com"
+              placeholder="전화번호 또는 이메일"
             />
           </div>
 

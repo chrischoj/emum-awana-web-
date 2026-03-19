@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Camera, RefreshCw } from 'lucide-react';
+import { Camera, RefreshCw, UserPlus, Key } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
@@ -10,11 +11,9 @@ import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { Switch } from '../../components/ui/Switch';
 import { getAllAssignmentsByClub, createAssignment, endAssignment, deleteAssignment } from '../../services/assignmentService';
+import { PositionInput } from '../../components/ui/PositionInput';
+import { POSITION_PRESETS } from '../../constants/positions';
 import type { Teacher, ActiveTeacherAssignment, AssignmentType, Room } from '../../types/awana';
-
-// ---- 상수 ----
-
-const POSITIONS = ['조정관', '감독관', '팀장', '서기', '게임디렉터', '회계', '교사', '보조 교사'] as const;
 
 type ClubFilterKey = 'all' | 'sparks' | 'tnt' | 'unassigned';
 
@@ -24,6 +23,13 @@ const CLUB_FILTER_TABS: { key: ClubFilterKey; label: string }[] = [
   { key: 'tnt', label: '티앤티' },
   { key: 'unassigned', label: '그 외' },
 ];
+
+// 관리자 세션에 영향을 주지 않는 별도 클라이언트
+const authOnlySupabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
 
 // ---- 유틸 ----
 
@@ -135,9 +141,25 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
                 {teacher.active ? '활성' : '비활성'}
               </Badge>
             </div>
-            {teacher.phone && (
-              <p className="text-xs text-gray-500 mt-0.5">{teacher.phone}</p>
-            )}
+            <div className="flex items-center gap-1 mt-0.5">
+              {teacher.phone && (
+                <p className="text-xs text-gray-500">{teacher.phone}</p>
+              )}
+              {teacher.user_id && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const loginId = teacher.name;
+                    const initialPw = teacher.phone?.replace(/[^0-9]/g, '') || '(전화번호 미등록)';
+                    toast(`로그인: ${loginId}\n초기 비밀번호: ${initialPw}`, { icon: '🔑', duration: 5000 });
+                  }}
+                  className="text-gray-300 hover:text-indigo-500 transition-colors"
+                  title="로그인 정보"
+                >
+                  <Key className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* 직책 드롭다운 + 토글 버튼 */}
@@ -146,19 +168,20 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
               <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
             ) : (
               <>
-                <select
+                <input
+                  type="text"
                   value={teacher.position || ''}
                   onChange={(e) => handleChangePosition(e.target.value)}
                   disabled={loading}
-                  className="text-xs font-medium text-gray-700 bg-transparent border border-gray-300 rounded-md px-2 py-1 focus:border-indigo-500 focus:outline-none cursor-pointer"
-                >
-                  <option value="">선택 안함</option>
-                  {POSITIONS.map((pos) => (
-                    <option key={pos} value={pos}>
-                      {pos}
-                    </option>
+                  className="text-xs font-medium text-gray-700 bg-transparent border border-gray-300 rounded-md px-2 py-1 focus:border-indigo-500 focus:outline-none w-24"
+                  placeholder="직책"
+                  list="position-presets"
+                />
+                <datalist id="position-presets">
+                  {POSITION_PRESETS.map((pos) => (
+                    <option key={pos} value={pos} />
                   ))}
-                </select>
+                </datalist>
                 <Switch
                   checked={teacher.active}
                   onChange={(checked) => checked ? handleActivate() : handleDeactivate()}
@@ -248,6 +271,13 @@ export default function TeacherManagement() {
   const [assignCreating, setAssignCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [showAddTeacher, setShowAddTeacher] = useState(false);
+  const [newTeacherName, setNewTeacherName] = useState('');
+  const [newTeacherPhone, setNewTeacherPhone] = useState('');
+  const [newTeacherClubId, setNewTeacherClubId] = useState('');
+  const [newTeacherPosition, setNewTeacherPosition] = useState('');
+  const [addingTeacher, setAddingTeacher] = useState(false);
+
   const loadTeachers = async () => {
     const showUnassigned = filterTab === 'unassigned';
     const filterType = filterTab === 'sparks' ? 'sparks' : filterTab === 'tnt' ? 'tnt' : null;
@@ -318,6 +348,55 @@ export default function TeacherManagement() {
     await Promise.all([loadTeachers(), loadAssignments(), loadRooms()]);
     setRefreshing(false);
     toast.success('갱신됨');
+  };
+
+  const handleAddTeacher = async () => {
+    if (!newTeacherName.trim() || !newTeacherPhone.trim()) {
+      toast.error('이름과 전화번호를 입력해주세요.');
+      return;
+    }
+    setAddingTeacher(true);
+    try {
+      const phoneDigits = newTeacherPhone.replace(/[^0-9]/g, '');
+      const email = `${phoneDigits}@awana.local`;
+      const password = phoneDigits;
+
+      // 세션 영향 없는 클라이언트로 Auth 계정 생성
+      const { data: authData, error: authError } = await authOnlySupabase.auth.signUp({
+        email,
+        password,
+        options: { data: { role: 'teacher' } },
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('계정 생성 실패');
+
+      // teachers 테이블에 프로필 INSERT (admin의 세션으로)
+      const { error: insertError } = await supabase.from('teachers').insert({
+        user_id: authData.user.id,
+        name: newTeacherName.trim(),
+        phone: newTeacherPhone.trim(),
+        club_id: newTeacherClubId || null,
+        position: newTeacherPosition || null,
+        role: 'teacher',
+      });
+
+      if (insertError) throw insertError;
+
+      toast.success(`${newTeacherName} 교사 계정이 생성되었습니다.\n로그인: ${phoneDigits} / 비밀번호: ${phoneDigits}`);
+      setShowAddTeacher(false);
+      setNewTeacherName('');
+      setNewTeacherPhone('');
+      setNewTeacherClubId('');
+      setNewTeacherPosition('');
+      await loadTeachers();
+    } catch (error) {
+      console.error('Teacher creation error:', error);
+      const msg = error instanceof Error ? error.message : '교사 계정 생성 실패';
+      toast.error(msg.includes('already') ? '이미 등록된 이름입니다.' : msg);
+    } finally {
+      setAddingTeacher(false);
+    }
   };
 
   const handleTeacherAvatarUpload = async (url: string) => {
@@ -405,6 +484,13 @@ export default function TeacherManagement() {
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
+        <button
+          onClick={() => setShowAddTeacher(true)}
+          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" />
+          교사 추가
+        </button>
       </div>
 
       {/* 클럽 필터 탭 */}
@@ -568,6 +654,71 @@ export default function TeacherManagement() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 교사 추가 모달 */}
+      <Modal
+        open={showAddTeacher}
+        onClose={() => setShowAddTeacher(false)}
+        title="새 교사 계정 생성"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            이름으로 로그인하고, 전화번호가 초기 비밀번호가 됩니다.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">이름 *</label>
+            <input
+              type="text"
+              value={newTeacherName}
+              onChange={(e) => setNewTeacherName(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="홍길동"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">전화번호 * (초기 비밀번호)</label>
+            <input
+              type="tel"
+              value={newTeacherPhone}
+              onChange={(e) => setNewTeacherPhone(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              placeholder="010-1234-5678"
+            />
+            {newTeacherPhone && (
+              <p className="text-xs text-gray-400 mt-1">
+                초기 비밀번호: {newTeacherPhone.replace(/[^0-9]/g, '')}
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">소속 클럽</label>
+            <select
+              value={newTeacherClubId}
+              onChange={(e) => setNewTeacherClubId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="">없음 (그 외)</option>
+              {clubs.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">직책</label>
+            <PositionInput
+              value={newTeacherPosition}
+              onChange={setNewTeacherPosition}
+            />
+          </div>
+          <button
+            onClick={handleAddTeacher}
+            disabled={addingTeacher || !newTeacherName.trim() || !newTeacherPhone.trim()}
+            className="w-full py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors"
+          >
+            {addingTeacher ? '생성 중...' : '계정 생성'}
+          </button>
+        </div>
       </Modal>
     </div>
   );
