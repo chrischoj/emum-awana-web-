@@ -64,12 +64,9 @@ export async function getTeamGameTotals(
   dateFrom: string,
   dateTo: string
 ): Promise<Record<string, number>> {
-  const approvedSet = await getApprovedPairs(clubId, dateFrom, dateTo);
-  if (approvedSet.size === 0) return {};
-
   const { data, error } = await supabase
     .from('game_score_entries')
-    .select('team_id, points, training_date')
+    .select('team_id, points')
     .eq('club_id', clubId)
     .gte('training_date', dateFrom)
     .lte('training_date', dateTo);
@@ -78,9 +75,7 @@ export async function getTeamGameTotals(
 
   const totals: Record<string, number> = {};
   for (const entry of data || []) {
-    if (approvedSet.has(`${entry.team_id}:${entry.training_date}`)) {
-      totals[entry.team_id] = (totals[entry.team_id] || 0) + entry.points;
-    }
+    totals[entry.team_id] = (totals[entry.team_id] || 0) + entry.points;
   }
   return totals;
 }
