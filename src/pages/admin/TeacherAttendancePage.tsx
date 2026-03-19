@@ -70,6 +70,54 @@ export default function TeacherAttendancePage() {
 
   const presentCount = filteredTeachers.filter((t) => attendance[t.id]).length;
 
+  const handleCheckAll = async () => {
+    if (!window.confirm(`${filteredTeachers.length}명을 전체 출석 처리하시겠습니까?`)) return;
+    const targets = filteredTeachers;
+    const prevAttendance = { ...attendance };
+    setAttendance((prev) => {
+      const next = { ...prev };
+      targets.forEach((t) => { next[t.id] = true; });
+      return next;
+    });
+    const rows = targets.map((t) => ({
+      teacher_id: t.id,
+      training_date: selectedDate,
+      present: true,
+      note: notes[t.id] || '',
+    }));
+    const { error } = await supabase
+      .from('teacher_attendance')
+      .upsert(rows, { onConflict: 'teacher_id,training_date' });
+    if (error) {
+      toast.error('일괄 출석 저장 실패');
+      setAttendance(prevAttendance);
+    }
+  };
+
+  const handleUncheckAll = async () => {
+    if (!window.confirm(`${filteredTeachers.length}명의 출석을 전체 해제하시겠습니까?`)) return;
+    const targets = filteredTeachers;
+    const prevAttendance = { ...attendance };
+    setAttendance((prev) => {
+      const next = { ...prev };
+      targets.forEach((t) => { next[t.id] = false; });
+      return next;
+    });
+    const rows = targets.map((t) => ({
+      teacher_id: t.id,
+      training_date: selectedDate,
+      present: false,
+      note: notes[t.id] || '',
+    }));
+    const { error } = await supabase
+      .from('teacher_attendance')
+      .upsert(rows, { onConflict: 'teacher_id,training_date' });
+    if (error) {
+      toast.error('일괄 해제 저장 실패');
+      setAttendance(prevAttendance);
+    }
+  };
+
   const clubMap = new Map(clubs.map((c) => [c.id, c.name]));
 
   const isAllActive = !filterClubId && !showUnassigned;
@@ -83,15 +131,12 @@ export default function TeacherAttendancePage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">교사 출석부</h1>
-          <p className="text-sm text-gray-500 mt-1">출석: {presentCount}/{filteredTeachers.length}</p>
-        </div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">교사 출석부</h1>
         <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
       </div>
 
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div className="flex gap-2 mb-3 flex-wrap">
         <button
           onClick={() => { setFilterClubId(null); setShowUnassigned(false); }}
           className={isAllActive ? activeClass : inactiveClass}
@@ -112,6 +157,25 @@ export default function TeacherAttendancePage() {
           className={showUnassigned ? activeClass : inactiveClass}
         >
           그 외
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+          출석 {presentCount}/{filteredTeachers.length}
+        </span>
+        <span className="w-px h-4 bg-gray-200" />
+        <button
+          onClick={handleCheckAll}
+          className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all"
+        >
+          전체 출석
+        </button>
+        <button
+          onClick={handleUncheckAll}
+          className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95 transition-all"
+        >
+          전체 해제
         </button>
       </div>
 

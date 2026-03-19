@@ -241,9 +241,97 @@ export default function MemberAttendancePage() {
     }
   };
 
+  const handleBulkPresent = async () => {
+    if (!window.confirm(`${allMembers.length}명을 전체 출석 처리하시겠습니까?`)) return;
+    const prevMap = { ...attendanceMap };
+    const newMap = { ...attendanceMap };
+    allMembers.forEach((m) => {
+      newMap[m.id] = { status: 'present', absenceReason: '' };
+    });
+    setAttendanceMap(newMap);
+
+    try {
+      const rows = allMembers.map((m) => ({
+        member_id: m.id,
+        training_date: selectedDate,
+        present: true,
+        status: 'present' as AttendanceStatus,
+        absence_reason: null,
+      }));
+      const { error } = await supabase
+        .from('member_attendance')
+        .upsert(rows, { onConflict: 'member_id,training_date' });
+      if (error) throw error;
+
+      // 점수 일괄 동기화
+      const scoreRows = allMembers
+        .filter((m) => m.club_id)
+        .map((m) => ({
+          member_id: m.id,
+          club_id: m.club_id,
+          training_date: selectedDate,
+          category: 'attendance',
+          base_points: getAttendancePoints('present'),
+          multiplier: 1,
+          recorded_by: teacher?.id ?? null,
+        }));
+      if (scoreRows.length > 0) {
+        await supabase
+          .from('scores')
+          .upsert(scoreRows, { onConflict: 'member_id,training_date,category' });
+      }
+      toast.success('전체 출석 처리 완료');
+    } catch {
+      toast.error('일괄 출석 저장 실패');
+      setAttendanceMap(prevMap);
+    }
+  };
+
+  const handleBulkReset = async () => {
+    if (!window.confirm(`${allMembers.length}명의 출석 기록을 전체 해제하시겠습니까?`)) return;
+    const prevMap = { ...attendanceMap };
+    setAttendanceMap({});
+
+    try {
+      const rows = allMembers.map((m) => ({
+        member_id: m.id,
+        training_date: selectedDate,
+        present: false,
+        status: 'none' as AttendanceStatus,
+        absence_reason: null,
+      }));
+      const { error } = await supabase
+        .from('member_attendance')
+        .upsert(rows, { onConflict: 'member_id,training_date' });
+      if (error) throw error;
+
+      // 점수 초기화
+      const scoreRows = allMembers
+        .filter((m) => m.club_id)
+        .map((m) => ({
+          member_id: m.id,
+          club_id: m.club_id,
+          training_date: selectedDate,
+          category: 'attendance',
+          base_points: 0,
+          multiplier: 0,
+          recorded_by: teacher?.id ?? null,
+        }));
+      if (scoreRows.length > 0) {
+        await supabase
+          .from('scores')
+          .upsert(scoreRows, { onConflict: 'member_id,training_date,category' });
+      }
+      toast.success('전체 해제 완료');
+    } catch {
+      toast.error('일괄 해제 저장 실패');
+      setAttendanceMap(prevMap);
+    }
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold text-gray-900">클럽원 출석부</h1>
           <button
@@ -255,33 +343,45 @@ export default function MemberAttendancePage() {
             <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />
           </button>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilterClubId(null)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium ${filterClubId === null ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-          >
-            모두
-          </button>
-          {clubs.map((club) => (
-            <button
-              key={club.id}
-              onClick={() => setFilterClubId(club.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${filterClubId === club.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'}`}
-            >
-              {club.name}
-            </button>
-          ))}
-        </div>
+        <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
       </div>
 
-      <div className="flex items-center gap-4 mb-4">
-        <DatePickerWithToday value={selectedDate} onChange={setSelectedDate} />
-        <div className="flex gap-2 text-sm">
-          <span className="px-2 py-1 bg-green-100 text-green-700 rounded">출석 {counts.present}</span>
-          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded">지각 {counts.late}</span>
-          <span className="px-2 py-1 bg-red-100 text-red-700 rounded">결석 {counts.absent}</span>
-          <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded">미기록 {counts.unrecorded}</span>
-        </div>
+      <div className="flex gap-2 mb-3 flex-wrap">
+        <button
+          onClick={() => setFilterClubId(null)}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium ${filterClubId === null ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+        >
+          모두
+        </button>
+        {clubs.map((club) => (
+          <button
+            key={club.id}
+            onClick={() => setFilterClubId(club.id)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium ${filterClubId === club.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            {club.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">출석 {counts.present}</span>
+        <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">지각 {counts.late}</span>
+        <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">결석 {counts.absent}</span>
+        <span className="px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs font-medium">미기록 {counts.unrecorded}</span>
+        <span className="w-px h-4 bg-gray-200" />
+        <button
+          onClick={handleBulkPresent}
+          className="px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:scale-95 transition-all"
+        >
+          전체 출석
+        </button>
+        <button
+          onClick={handleBulkReset}
+          className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 active:scale-95 transition-all"
+        >
+          전체 해제
+        </button>
       </div>
 
       {loading ? (
