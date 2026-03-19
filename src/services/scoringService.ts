@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { WeeklyScore, ScoringCategory, MemberWeeklySummary, Member, WeeklyScoreSubmission, ScoreEditHistory } from '../types/awana';
+import { createNotifications, getAdminTeacherIds, getTeamName, getClubName, createNotification } from './notificationService';
 
 export async function getWeeklyScores(clubId: string, trainingDate: string): Promise<WeeklyScore[]> {
   const { data, error } = await supabase
@@ -185,6 +186,24 @@ export async function submitScores(params: {
     .select()
     .single();
   if (error) throw error;
+
+  // 알림: admin들에게 점수 제출 알림
+  try {
+    const [adminIds, teamName, clubName] = await Promise.all([
+      getAdminTeacherIds(),
+      getTeamName(params.teamId),
+      getClubName(params.clubId),
+    ]);
+    await createNotifications({
+      recipientIds: adminIds,
+      type: 'score_submitted',
+      title: `${teamName}(${clubName}) 점수가 제출되었습니다`,
+      metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate },
+    });
+  } catch (e) {
+    console.error('점수 제출 알림 생성 실패:', e);
+  }
+
   return data as WeeklyScoreSubmission;
 }
 
@@ -223,6 +242,31 @@ export async function approveSubmission(params: {
     .eq('team_id', params.teamId)
     .eq('training_date', params.trainingDate);
   if (error) throw error;
+
+  // 알림: 제출한 교사에게 승인 알림
+  try {
+    const { data: submission } = await supabase
+      .from('weekly_score_submissions')
+      .select('submitted_by')
+      .eq('club_id', params.clubId)
+      .eq('team_id', params.teamId)
+      .eq('training_date', params.trainingDate)
+      .single();
+    if (submission?.submitted_by) {
+      const [teamName, clubName] = await Promise.all([
+        getTeamName(params.teamId),
+        getClubName(params.clubId),
+      ]);
+      await createNotification({
+        recipientId: submission.submitted_by,
+        type: 'score_approved',
+        title: `${teamName}(${clubName}) 점수가 승인되었습니다`,
+        metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate },
+      });
+    }
+  } catch (e) {
+    console.error('점수 승인 알림 생성 실패:', e);
+  }
 }
 
 /** 관리자: submitted -> rejected */
@@ -243,6 +287,32 @@ export async function rejectSubmission(params: {
     .eq('team_id', params.teamId)
     .eq('training_date', params.trainingDate);
   if (error) throw error;
+
+  // 알림: 제출한 교사에게 반려 알림
+  try {
+    const { data: submission } = await supabase
+      .from('weekly_score_submissions')
+      .select('submitted_by')
+      .eq('club_id', params.clubId)
+      .eq('team_id', params.teamId)
+      .eq('training_date', params.trainingDate)
+      .single();
+    if (submission?.submitted_by) {
+      const [teamName, clubName] = await Promise.all([
+        getTeamName(params.teamId),
+        getClubName(params.clubId),
+      ]);
+      await createNotification({
+        recipientId: submission.submitted_by,
+        type: 'score_rejected',
+        title: `${teamName}(${clubName}) 점수가 반려되었습니다`,
+        body: params.rejectionNote,
+        metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate, rejection_note: params.rejectionNote },
+      });
+    }
+  } catch (e) {
+    console.error('점수 반려 알림 생성 실패:', e);
+  }
 }
 
 // ============================================

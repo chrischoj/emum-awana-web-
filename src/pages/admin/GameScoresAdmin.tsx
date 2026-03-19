@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
+import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { getGameScoresByDate, getTeamGameTotals, updateGameScore, deleteGameScore, getGameScoreLock, lockGameScores, unlockGameScores } from '../../services/gameScoreService';
@@ -30,6 +31,9 @@ export default function GameScoresAdmin() {
   const [editPoints, setEditPoints] = useState(0);
   const [editDescription, setEditDescription] = useState('');
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [, setTick] = useState(0);
 
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const teacherNamesLoaded = useRef(false);
@@ -75,6 +79,7 @@ export default function GameScoresAdmin() {
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
+      setLastUpdated(new Date());
       setLoading(false);
     }
   }
@@ -112,9 +117,36 @@ export default function GameScoresAdmin() {
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
+      setLastUpdated(new Date());
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!lastUpdated) return;
+    const timer = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [lastUpdated]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      if (viewMode === 'all') await loadAllData();
+      else await loadClubData();
+      toast.success('갱신됨');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const getTimeSinceUpdate = () => {
+    if (!lastUpdated) return '';
+    const seconds = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+    if (seconds < 5) return '방금 전';
+    if (seconds < 60) return `${seconds}초 전`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}분 전`;
+  };
 
   useEffect(() => {
     const debouncedRefresh = () => {
@@ -186,7 +218,20 @@ export default function GameScoresAdmin() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">게임 점수 관리</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">게임 점수 관리</h1>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+            title="새로고침"
+          >
+            <RefreshCw className={cn('w-4 h-4', refreshing && 'animate-spin')} />
+          </button>
+          {lastUpdated && (
+            <span className="text-xs text-gray-400">{getTimeSinceUpdate()}</span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setViewMode('all')}

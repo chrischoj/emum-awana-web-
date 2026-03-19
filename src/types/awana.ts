@@ -352,3 +352,23 @@ export interface TeacherAssignmentInfo {
   isReadOnly: boolean;
 }
 
+// ---- Notifications (알림 시스템) ----
+
+export type NotificationType =
+  | 'score_submitted'
+  | 'score_approved'
+  | 'score_rejected'
+  | 'game_score_locked'
+  | 'game_score_unlocked';
+
+export interface Notification {
+  id: string;
+  recipient_id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  metadata: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
+}
+

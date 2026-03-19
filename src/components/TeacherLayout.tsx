@@ -5,6 +5,7 @@ import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
 import { teacherNavItems } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
+import { NotificationBell } from './NotificationBell';
 
 export default function TeacherLayout() {
   const { teacher, role, signOut } = useAuth();
@@ -20,6 +21,7 @@ export default function TeacherLayout() {
           <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
         </Link>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <button
             onClick={() => navigate('/teacher/profile')}
             className="flex items-center gap-1.5"

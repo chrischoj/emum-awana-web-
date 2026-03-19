@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { GameScoreEntry } from '../types/awana';
+import { createNotifications, getClubTeacherIds, getClubName } from './notificationService';
 
 export async function addGameScore(params: {
   teamId: string;
@@ -194,6 +195,22 @@ export async function lockGameScores(
       { onConflict: 'club_id,training_date' }
     );
   if (error) throw error;
+
+  // 알림: 교사들에게 게임 점수 잠금 알림
+  try {
+    const [teacherIds, clubName] = await Promise.all([
+      getClubTeacherIds(clubId),
+      getClubName(clubId),
+    ]);
+    await createNotifications({
+      recipientIds: teacherIds,
+      type: 'game_score_locked',
+      title: `${clubName} 게임 점수가 잠금되었습니다`,
+      metadata: { club_id: clubId, training_date: trainingDate },
+    });
+  } catch (e) {
+    console.error('게임 잠금 알림 생성 실패:', e);
+  }
 }
 
 /** 잠금 해제 */
@@ -207,4 +224,20 @@ export async function unlockGameScores(
     .eq('club_id', clubId)
     .eq('training_date', trainingDate);
   if (error) throw error;
+
+  // 알림: 교사들에게 게임 점수 잠금 해제 알림
+  try {
+    const [teacherIds, clubName] = await Promise.all([
+      getClubTeacherIds(clubId),
+      getClubName(clubId),
+    ]);
+    await createNotifications({
+      recipientIds: teacherIds,
+      type: 'game_score_unlocked',
+      title: `${clubName} 게임 점수 잠금이 해제되었습니다`,
+      metadata: { club_id: clubId, training_date: trainingDate },
+    });
+  } catch (e) {
+    console.error('게임 잠금 해제 알림 생성 실패:', e);
+  }
 }

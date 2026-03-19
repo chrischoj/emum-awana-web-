@@ -6,6 +6,7 @@ import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
 import { adminNavSections } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
+import { NotificationBell } from './NotificationBell';
 
 export default function AdminLayout() {
   const { teacher, signOut } = useAuth();
@@ -86,6 +87,7 @@ export default function AdminLayout() {
               <span className="text-sm text-gray-600 truncate">{teacher?.name ?? '관리자'}</span>
             </button>
             <div className="flex items-center gap-1">
+              <NotificationBell />
               <button
                 onClick={() => navigate('/teacher')}
                 className="p-2 text-gray-400 hover:text-indigo-500 rounded-lg hover:bg-gray-100"
@@ -119,6 +121,9 @@ export default function AdminLayout() {
             <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
             <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
           </Link>
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
         </header>
 
         <main className="p-4 lg:p-6">
