@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
+import { Avatar } from '../ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { BadgeRequest, BadgeRequestStatus } from '../../types/awana';
 
 // ---- Constants ----
@@ -15,7 +17,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 type EnrichedBadgeRequest = BadgeRequest & {
   badge: { id: string; name: string; category: string | null };
-  member: { id: string; name: string };
+  member: { id: string; name: string; avatar_url: string | null };
   requester: { id: string; name: string };
 };
 
@@ -47,6 +49,7 @@ interface RequestItemProps {
 }
 
 const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject }) => {
+  const { openMemberProfile } = useMemberProfile();
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionNote, setRejectionNote] = useState('');
   const [loadingAction, setLoadingAction] = useState<'approve' | 'reject' | null>(null);
@@ -87,7 +90,14 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject 
     <div className="p-3 border-b border-gray-100 last:border-b-0">
       {/* 멤버명 → 뱃지명 */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="font-semibold text-gray-900 text-sm">{request.member.name}</span>
+        <button
+          type="button"
+          onClick={() => openMemberProfile(request.member.id)}
+          className="flex items-center gap-1.5 hover:opacity-80"
+        >
+          <Avatar name={request.member.name} src={request.member.avatar_url} size="sm" />
+          <span className="font-semibold text-gray-900 text-sm">{request.member.name}</span>
+        </button>
         <span className="text-gray-400 text-xs">→</span>
         <span className="text-sm text-amber-700">
           {categoryIcon} {request.badge.name}
@@ -111,6 +121,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject 
         <div className="mt-2 space-y-1.5">
           <input
             type="text"
+            data-testid={`badge-rejection-note-${request.id}`}
             value={rejectionNote}
             onChange={(e) => setRejectionNote(e.target.value)}
             placeholder="반려 사유 (선택)"
@@ -121,6 +132,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject 
           <div className="flex gap-1.5">
             <button
               type="button"
+              data-testid={`badge-reject-confirm-${request.id}`}
               onClick={handleRejectConfirm}
               disabled={isLoading}
               className={`px-3 py-1.5 bg-red-500 text-white text-xs rounded-lg touch-manipulation transition-all active:scale-95 ${
@@ -144,6 +156,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject 
         <div className="mt-2 flex gap-1.5 justify-end">
           <button
             type="button"
+            data-testid={`badge-approve-${request.id}`}
             onClick={handleApprove}
             disabled={isLoading}
             className={`px-3 py-1.5 bg-green-500 text-white text-xs rounded-lg touch-manipulation transition-all active:scale-95 ${
@@ -154,6 +167,7 @@ const RequestItem: React.FC<RequestItemProps> = ({ request, onApprove, onReject 
           </button>
           <button
             type="button"
+            data-testid={`badge-reject-${request.id}`}
             onClick={() => setRejectingId(request.id)}
             disabled={isLoading}
             className={`px-3 py-1.5 bg-red-500 text-white text-xs rounded-lg touch-manipulation transition-all active:scale-95 ${
@@ -183,12 +197,13 @@ const BadgeReviewBanner: React.FC<BadgeReviewBannerProps> = ({
   return (
     <>
       {/* 상단 배너 */}
-      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+      <div data-testid="badge-review-banner" className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
         <p className="text-sm text-amber-800 font-medium">
           🏅 {pendingCount}건의 뱃지 신청이 대기 중입니다
         </p>
         <button
           type="button"
+          data-testid="badge-review-open-modal"
           onClick={() => setIsModalOpen(true)}
           className="text-xs text-amber-700 underline font-medium touch-manipulation"
         >

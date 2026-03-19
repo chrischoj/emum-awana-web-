@@ -13,7 +13,7 @@ import type { BadgeRequest } from '../types/awana';
 
 type BadgeRequestWithJoins = BadgeRequest & {
   badge: { id: string; name: string; category: string | null };
-  member: { id: string; name: string };
+  member: { id: string; name: string; avatar_url: string | null };
   requester: { id: string; name: string };
 };
 

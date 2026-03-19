@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from 'react';
+import { Avatar } from '../ui/Avatar';
+import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import type { Badge, BadgeRequest, BadgeRequestStatus } from '../../types/awana';
 
 // ---- Constants ----
@@ -21,7 +23,9 @@ const STATUS_CONFIG: Record<BadgeRequestStatus, { icon: string; label: string; c
 // ---- Types ----
 
 interface BadgeRequestPanelProps {
+  memberId: string;
   memberName: string;
+  memberAvatarUrl?: string | null;
   isOpen: boolean;
   onClose: () => void;
   badges: Badge[];
@@ -36,7 +40,9 @@ interface BadgeRequestPanelProps {
 // ---- Component ----
 
 const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
+  memberId,
   memberName,
+  memberAvatarUrl,
   isOpen,
   onClose,
   badges,
@@ -45,6 +51,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
   memberRequests,
   onSubmit,
 }) => {
+  const { openMemberProfile } = useMemberProfile();
   const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,7 +101,16 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
   return (
     <div className="mt-2 p-3 bg-amber-50 rounded-lg">
       {/* 헤더 */}
-      <p className="text-xs font-semibold text-amber-700 mb-2">🏅 {memberName} 뱃지 신청</p>
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          type="button"
+          onClick={() => openMemberProfile(memberId)}
+          className="flex items-center gap-1.5 hover:opacity-80"
+        >
+          <Avatar name={memberName} src={memberAvatarUrl} size="sm" />
+          <span className="text-xs font-semibold text-amber-700">🏅 {memberName} 뱃지 신청</span>
+        </button>
+      </div>
       {/* 카테고리별 뱃지 선택 */}
       <div className="space-y-2.5">
         {CATEGORY_ORDER.filter((cat) => groupedBadges[cat]?.length > 0).map((cat) => (
@@ -130,6 +146,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
                   <button
                     key={badge.id}
                     type="button"
+                    data-testid={`badge-chip-${badge.id}`}
                     disabled={isDisabled}
                     onClick={() =>
                       setSelectedBadgeId(isSelected ? null : badge.id)
@@ -162,6 +179,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
       <div className="mt-3">
         <input
           type="text"
+          data-testid="badge-request-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="메모 (선택)"
@@ -181,6 +199,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
         </button>
         <button
           type="button"
+          data-testid="badge-request-submit"
           disabled={!selectedBadgeId || isSubmitting}
           onClick={handleSubmit}
           className={`flex-1 py-2 text-xs font-semibold rounded-lg active:scale-95 touch-manipulation transition-colors ${

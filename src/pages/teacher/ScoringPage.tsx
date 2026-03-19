@@ -560,6 +560,7 @@ export default function ScoringPage() {
                   {!isLocked && (
                     <button
                       type="button"
+                      data-testid={`badge-open-${member.id}`}
                       onClick={() => setBadgeMemberId(badgeMemberId === member.id ? null : member.id)}
                       className="w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 text-xs active:scale-95 touch-manipulation"
                       title="뱃지 신청"
@@ -690,7 +691,9 @@ export default function ScoringPage() {
 
               {/* Badge request panel (inline expand) */}
               <BadgeRequestPanel
+                memberId={member.id}
                 memberName={member.name}
+                memberAvatarUrl={member.avatar_url}
                 isOpen={badgeMemberId === member.id}
                 onClose={() => setBadgeMemberId(null)}
                 badges={allBadges}

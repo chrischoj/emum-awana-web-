@@ -17,10 +17,10 @@ async function getBadgeApproverIds(): Promise<string[]> {
 export async function getBadgeRequests(filters?: {
   status?: string;
   memberId?: string;
-}): Promise<(BadgeRequest & { badge: { id: string; name: string; category: string | null }; member: { id: string; name: string }; requester: { id: string; name: string } })[]> {
+}): Promise<(BadgeRequest & { badge: { id: string; name: string; category: string | null }; member: { id: string; name: string; avatar_url: string | null }; requester: { id: string; name: string } })[]> {
   let query = supabase
     .from('badge_requests')
-    .select('*, badge:badges(id, name, category), member:members(id, name), requester:teachers!requested_by(id, name)')
+    .select('*, badge:badges(id, name, category), member:members(id, name, avatar_url), requester:teachers!requested_by(id, name)')
     .order('created_at', { ascending: false });
 
   if (filters?.status) query = query.eq('status', filters.status);
