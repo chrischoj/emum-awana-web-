@@ -170,6 +170,7 @@ export default function CeremonyPage() {
           </div>
         </div>
         <button
+          data-testid="ceremony-aggregate-btn"
           onClick={handleLoad}
           disabled={loading}
           className="w-full py-2 bg-indigo-600 text-white rounded-lg font-medium text-sm disabled:opacity-50"
@@ -220,6 +221,7 @@ export default function CeremonyPage() {
           {/* Actions */}
           <div className="space-y-2">
             <button
+              data-testid="ceremony-start-btn"
               onClick={handleOpenCeremony}
               className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-colors"
             >

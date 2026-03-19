@@ -11,6 +11,9 @@ const TYPE_CONFIG: Record<NotificationType, { icon: string; route: string }> = {
   score_rejected: { icon: '❌', route: '/teacher/scoring' },
   game_score_locked: { icon: '🔒', route: '/teacher/game' },
   game_score_unlocked: { icon: '🔓', route: '/teacher/game' },
+  badge_requested: { icon: '🏅', route: '/admin/awards' },
+  badge_approved: { icon: '✅', route: '/teacher/scoring' },
+  badge_rejected: { icon: '❌', route: '/teacher/scoring' },
 };
 
 function getTimeAgo(dateStr: string): string {

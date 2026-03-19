@@ -15,6 +15,13 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useSessionCache } from '../../hooks/useSessionCache';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
 import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member, SubmissionStatus } from '../../types/awana';
+import BadgeRequestPanel from '../../components/scoring/BadgeRequestPanel';
+import BadgeReviewBanner from '../../components/scoring/BadgeReviewBanner';
+import { useBadgeRequests } from '../../hooks/useBadgeRequests';
+import { getBadges, getMemberBadges } from '../../services/badgeService';
+import { getMemberBadgeRequests } from '../../services/badgeRequestService';
+import { canApproveBadges } from '../../lib/positionUtils';
+import type { Badge, BadgeRequest } from '../../types/awana';
 
 const ATTENDANCE_CYCLE: AttendanceStatus[] = ['present', 'late', 'absent'];
 const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
@@ -51,6 +58,12 @@ export default function ScoringPage() {
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
   const [loading, setLoading] = useState(true);
   const [recitationMemberId, setRecitationMemberId] = useState<string | null>(null);
+  const [badgeMemberId, setBadgeMemberId] = useState<string | null>(null);
+  const [allBadges, setAllBadges] = useState<Badge[]>([]);
+  const [memberBadgeMap, setMemberBadgeMap] = useState<Record<string, string[]>>({});
+  const [memberRequestMap, setMemberRequestMap] = useState<Record<string, (BadgeRequest & { badge: { id: string; name: string; category: string | null } })[]>>({});
+  const { requests: badgeRequests, pendingCount: badgePendingCount, submitRequest, approve: approveBadge, reject: rejectBadge } = useBadgeRequests();
+  const canReview = canApproveBadges(teacher?.role || '', teacher?.position || null);
 
   const cacheKey = `scoring-${currentClub?.id}-${selectedDate}`;
   const { restore: restoreScores } = useSessionCache(cacheKey, scores, Object.keys(scores).length > 0);
@@ -124,6 +137,38 @@ export default function ScoringPage() {
   useEffect(() => {
     loadScores(true);
   }, [loadScores]);
+
+  // Load badge data
+  useEffect(() => {
+    getBadges().then(setAllBadges).catch(() => {});
+  }, []);
+
+  // Load member badges & requests when members change
+  useEffect(() => {
+    if (members.length === 0) return;
+    const loadBadgeData = async () => {
+      const badgeMap: Record<string, string[]> = {};
+      const requestMap: Record<string, (BadgeRequest & { badge: { id: string; name: string; category: string | null } })[]> = {};
+      await Promise.all(
+        members.map(async (m) => {
+          try {
+            const [badges, requests] = await Promise.all([
+              getMemberBadges(m.id),
+              getMemberBadgeRequests(m.id),
+            ]);
+            badgeMap[m.id] = badges.map((b) => b.badge_id);
+            requestMap[m.id] = requests;
+          } catch {
+            badgeMap[m.id] = [];
+            requestMap[m.id] = [];
+          }
+        })
+      );
+      setMemberBadgeMap(badgeMap);
+      setMemberRequestMap(requestMap);
+    };
+    loadBadgeData();
+  }, [members]);
 
   // Realtime subscription for attendance & score changes
   useEffect(() => {
@@ -245,6 +290,10 @@ export default function ScoringPage() {
       // 결석 전환 시 암송 패널만 닫기 (점수는 보존)
       if (nextStatus === 'absent' && recitationMemberId === memberId) {
         setTimeout(() => setRecitationMemberId(null), 0);
+      }
+      // 뱃지 패널도 닫기
+      if (nextStatus === 'absent' && badgeMemberId === memberId) {
+        setTimeout(() => setBadgeMemberId(null), 0);
       }
 
       updated.total = calcTotal(updated);
@@ -473,6 +522,16 @@ export default function ScoringPage() {
         </div>
       )}
 
+      {/* Badge review banner (서기/감독관 전용) */}
+      {canReview && (
+        <BadgeReviewBanner
+          pendingCount={badgePendingCount}
+          requests={badgeRequests.filter((r) => r.status === 'requested')}
+          onApprove={approveBadge}
+          onReject={rejectBadge}
+        />
+      )}
+
       {/* Member cards */}
       <div className="space-y-3">
         {filteredMembers.map((member) => {
@@ -481,7 +540,7 @@ export default function ScoringPage() {
           const team = teams.find((t) => t.id === member.team_id);
 
           return (
-            <div key={member.id} className="bg-white rounded-xl border border-gray-200 p-3">
+            <div key={member.id} data-testid={`member-card-${member.id}`} className="bg-white rounded-xl border border-gray-200 p-3">
               {/* Member header */}
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
@@ -496,7 +555,19 @@ export default function ScoringPage() {
                     <span className="font-semibold text-gray-900 text-sm">{member.name}</span>
                   </button>
                 </div>
-                <span className="text-sm font-bold text-indigo-600">{s.total}pt</span>
+                <div className="flex items-center gap-2">
+                  <span data-testid={`member-total-${member.id}`} className="text-sm font-bold text-indigo-600">{s.total}pt</span>
+                  {!isLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setBadgeMemberId(badgeMemberId === member.id ? null : member.id)}
+                      className="w-7 h-7 flex items-center justify-center rounded-full bg-amber-100 text-xs active:scale-95 touch-manipulation"
+                      title="뱃지 신청"
+                    >
+                      🏅
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Score chips */}
@@ -508,6 +579,7 @@ export default function ScoringPage() {
                     {/* Attendance */}
                     <button
                       type="button"
+                      data-testid={`attendance-btn-${member.id}`}
                       onClick={() => handleAttendanceTap(member.id)}
                       disabled={isLocked}
                       className={cn(
@@ -524,6 +596,7 @@ export default function ScoringPage() {
                     {/* Handbook */}
                     <button
                       type="button"
+                      data-testid={`handbook-btn-${member.id}`}
                       onClick={() => handleToggle(member.id, 'handbook')}
                       disabled={isLocked || isAbsent}
                       className={cn(
@@ -543,6 +616,7 @@ export default function ScoringPage() {
                     {/* Uniform */}
                     <button
                       type="button"
+                      data-testid={`uniform-btn-${member.id}`}
                       onClick={() => handleToggle(member.id, 'uniform')}
                       disabled={isLocked || isAbsent}
                       className={cn(
@@ -562,6 +636,7 @@ export default function ScoringPage() {
                     {/* Recitation */}
                     <button
                       type="button"
+                      data-testid={`recitation-btn-${member.id}`}
                       onClick={() =>
                         !isAbsent && setRecitationMemberId(
                           recitationMemberId === member.id ? null : member.id
@@ -592,17 +667,19 @@ export default function ScoringPage() {
                 <div className="mt-2 flex items-center justify-center gap-4 py-2 bg-indigo-50 rounded-lg">
                   <button
                     type="button"
+                    data-testid={`recitation-minus-${member.id}`}
                     onClick={() => handleRecitationChange(member.id, -1)}
                     className="w-12 h-12 rounded-full bg-white border-2 border-gray-300 text-xl font-bold text-gray-700 active:scale-95 touch-manipulation"
                   >
                     −
                   </button>
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-indigo-700">{s.recitation.multiplier}</p>
+                    <p data-testid={`recitation-count-${member.id}`} className="text-2xl font-bold text-indigo-700">{s.recitation.multiplier}</p>
                     <p className="text-xs text-gray-500">구절</p>
                   </div>
                   <button
                     type="button"
+                    data-testid={`recitation-plus-${member.id}`}
                     onClick={() => handleRecitationChange(member.id, 1)}
                     className="w-12 h-12 rounded-full bg-indigo-600 text-white text-xl font-bold active:scale-95 touch-manipulation"
                   >
@@ -610,6 +687,29 @@ export default function ScoringPage() {
                   </button>
                 </div>
               )}
+
+              {/* Badge request panel (inline expand) */}
+              <BadgeRequestPanel
+                memberName={member.name}
+                isOpen={badgeMemberId === member.id}
+                onClose={() => setBadgeMemberId(null)}
+                badges={allBadges}
+                existingBadgeIds={memberBadgeMap[member.id] || []}
+                existingRequestIds={
+                  (memberRequestMap[member.id] || [])
+                    .filter((r) => r.status === 'requested')
+                    .map((r) => r.badge_id)
+                }
+                memberRequests={memberRequestMap[member.id] || []}
+                onSubmit={async (badgeId, note) => {
+                  await submitRequest(member.id, badgeId, note);
+                  // 신청 후 해당 멤버의 request 데이터 갱신
+                  try {
+                    const updated = await getMemberBadgeRequests(member.id);
+                    setMemberRequestMap((prev) => ({ ...prev, [member.id]: updated }));
+                  } catch {}
+                }}
+              />
             </div>
           );
         })}
@@ -619,11 +719,11 @@ export default function ScoringPage() {
       <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between z-20">
         <div>
           <span className="text-sm text-gray-500">팀 합계</span>
-          <span className="ml-2 text-lg font-bold text-indigo-600">{teamTotal.toLocaleString()}pt</span>
+          <span data-testid="team-total" className="ml-2 text-lg font-bold text-indigo-600">{teamTotal.toLocaleString()}pt</span>
         </div>
         <div className="flex items-center gap-2">
           {submission?.status && (
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+            <span data-testid="submission-status" className={`text-xs px-2 py-0.5 rounded-full font-medium ${
               submission.status === 'draft' ? 'bg-gray-100 text-gray-600' :
               submission.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
               submission.status === 'approved' ? 'bg-green-100 text-green-700' :
@@ -636,6 +736,7 @@ export default function ScoringPage() {
           )}
           {!isLocked && selectedTeamId && (
             <button
+              data-testid="submit-scores-btn"
               onClick={() => setShowSubmitConfirm(true)}
               disabled={submitting}
               className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg active:scale-95 touch-manipulation disabled:opacity-50"
@@ -662,6 +763,7 @@ export default function ScoringPage() {
                 취소
               </button>
               <button
+                data-testid="submit-confirm-btn"
                 onClick={handleSubmit}
                 disabled={submitting}
                 className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"

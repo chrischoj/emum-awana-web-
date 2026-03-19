@@ -618,12 +618,12 @@ export default function ScoringOverview() {
                     {!hasSubTeams && (
                       <>
                         {statusCfg && !isUnsubmitted && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg.className}`}>
+                          <span data-testid={`admin-submission-status-${t.teamId}`} className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg.className}`}>
                             {statusCfg.label}
                           </span>
                         )}
                         {isUnsubmitted && (
-                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-400">
+                          <span data-testid={`admin-submission-status-${t.teamId}`} className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-400">
                             미제출
                           </span>
                         )}
@@ -658,6 +658,7 @@ export default function ScoringOverview() {
                           {rejectingTeam === t.teamId ? (
                             <>
                               <textarea
+                                data-testid={`admin-reject-input-${t.teamId}`}
                                 className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
                                 rows={2}
                                 placeholder="반려 사유 입력..."
@@ -668,6 +669,7 @@ export default function ScoringOverview() {
                               />
                               <div className="flex gap-1.5">
                                 <button
+                                  data-testid={`admin-reject-confirm-${t.teamId}`}
                                   onClick={() => handleReject(t)}
                                   disabled={actionLoading === t.teamId}
                                   className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
@@ -685,6 +687,7 @@ export default function ScoringOverview() {
                           ) : (
                             <div className="flex gap-1.5">
                               <button
+                                data-testid={`admin-approve-btn-${t.teamId}`}
                                 onClick={() => handleApprove(t)}
                                 disabled={actionLoading === t.teamId}
                                 className="flex-1 py-1 rounded-lg text-xs font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
@@ -692,6 +695,7 @@ export default function ScoringOverview() {
                                 {actionLoading === t.teamId ? '처리중...' : '승인'}
                               </button>
                               <button
+                                data-testid={`admin-reject-btn-${t.teamId}`}
                                 onClick={() => setRejectingTeam(t.teamId)}
                                 className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200"
                               >

@@ -15,8 +15,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
   global: {
     fetch: (url, options = {}) => {
+      // 이미 signal이 있으면 (auth 내부 등) 그대로 사용
+      if (options.signal) {
+        return fetch(url, options);
+      }
+      // signal이 없으면 10초 타임아웃 적용
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10초 타임아웃
+      const timeout = setTimeout(() => controller.abort(), 10000);
       return fetch(url, { ...options, signal: controller.signal })
         .finally(() => clearTimeout(timeout));
     },

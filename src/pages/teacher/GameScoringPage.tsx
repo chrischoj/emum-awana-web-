@@ -280,7 +280,7 @@ export default function GameScoringPage() {
       )}
 
       {isLocked && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+        <div data-testid="game-lock-banner" className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="text-lg">🔒</span>
             <p className="text-sm text-amber-700 font-medium">
@@ -297,6 +297,7 @@ export default function GameScoringPage() {
           {teams.map((team) => (
             <div
               key={team.id}
+              data-testid={`game-team-total-${team.id}`}
               className={cn(
                 'text-center py-3 px-2 rounded-lg transition-all',
                 flashTeamId === team.id && 'animate-pulse scale-105'
@@ -324,6 +325,7 @@ export default function GameScoringPage() {
             {DESCRIPTION_PRESETS.map((desc) => (
               <button
                 key={desc}
+                data-testid={`game-desc-preset-${desc}`}
                 onClick={() => setDescription(desc)}
                 className={cn(
                   'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
@@ -338,6 +340,7 @@ export default function GameScoringPage() {
           </div>
           <input
             type="text"
+            data-testid="game-description-input"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="직접 입력..."
@@ -350,6 +353,7 @@ export default function GameScoringPage() {
           {teams.map((team) => (
             <button
               key={team.id}
+              data-testid={`game-team-btn-${team.id}`}
               onClick={() => !isLocked && toggleTeam(team.id)}
               disabled={isLocked}
               className={cn(
@@ -375,6 +379,7 @@ export default function GameScoringPage() {
         {/* Points */}
         <div className="flex items-center justify-center gap-3 mb-3">
           <button
+            data-testid="game-points-minus"
             onClick={() => setPoints(Math.max(0, points - 50))}
             disabled={isLocked}
             className="w-12 h-12 rounded-full bg-gray-100 text-gray-700 text-xl font-bold active:scale-95 touch-manipulation disabled:opacity-50"
@@ -383,11 +388,13 @@ export default function GameScoringPage() {
           </button>
           <input
             type="number"
+            data-testid="game-points-input"
             value={points}
             onChange={(e) => setPoints(Math.max(0, Number(e.target.value)))}
             className="w-24 text-center text-2xl font-bold border border-gray-300 rounded-lg py-2"
           />
           <button
+            data-testid="game-points-plus"
             onClick={() => setPoints(points + 50)}
             disabled={isLocked}
             className="w-12 h-12 rounded-full bg-indigo-600 text-white text-xl font-bold active:scale-95 touch-manipulation disabled:opacity-50"
@@ -399,6 +406,7 @@ export default function GameScoringPage() {
           {POINT_PRESETS.map((p) => (
             <button
               key={p}
+              data-testid={`game-point-preset-${p}`}
               onClick={() => setPoints(p)}
               disabled={isLocked}
               className={cn(
@@ -413,6 +421,7 @@ export default function GameScoringPage() {
 
         {/* Submit */}
         <button
+          data-testid="game-submit-btn"
           onClick={handleSubmit}
           disabled={submitting || selectedTeamIds.size === 0 || isLocked}
           className="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold text-base disabled:opacity-50 active:scale-[0.98] transition-all touch-manipulation"

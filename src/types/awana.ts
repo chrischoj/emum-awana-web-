@@ -9,6 +9,7 @@ export type ClubType = 'sparks' | 'tnt';
 export type AttendanceStatus = 'present' | 'late' | 'absent' | 'none';
 export type ScoringCategory = 'attendance' | 'handbook' | 'uniform' | 'recitation';
 export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memorization' | 'special' | 'custom';
+export type BadgeCategory = 'jewel' | 'promotion' | 'citation' | 'special';
 export type EnrollmentStatus = 'pending' | 'active' | 'inactive';
 
 // ---- Core Entities ----
@@ -165,6 +166,9 @@ export interface Badge {
   description: string | null;
   icon_url: string | null;
   curriculum_template_id: string | null;
+  category: BadgeCategory | null;
+  level: number | null;
+  sort_order: number | null;
   created_at: string;
 }
 
@@ -176,6 +180,23 @@ export interface MemberBadge {
   awarded_date: string;
   note: string | null;
   created_at: string;
+}
+
+// ---- Badge Requests (뱃지 신청) ----
+
+export type BadgeRequestStatus = 'requested' | 'approved' | 'rejected';
+
+export interface BadgeRequest {
+  id: string;
+  member_id: string;
+  badge_id: string;
+  requested_by: string;
+  status: BadgeRequestStatus;
+  approved_by: string | null;
+  note: string | null;
+  rejection_note: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ---- Rooms ----
@@ -359,7 +380,10 @@ export type NotificationType =
   | 'score_approved'
   | 'score_rejected'
   | 'game_score_locked'
-  | 'game_score_unlocked';
+  | 'game_score_unlocked'
+  | 'badge_requested'
+  | 'badge_approved'
+  | 'badge_rejected';
 
 export interface Notification {
   id: string;

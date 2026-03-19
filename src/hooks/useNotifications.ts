@@ -11,6 +11,9 @@ const NOTIFICATION_TOAST_MESSAGES: Record<string, string> = {
   score_rejected: '❌ 점수가 반려되었습니다',
   game_score_locked: '🔒 게임 점수가 잠금되었습니다',
   game_score_unlocked: '🔓 게임 점수 잠금이 해제되었습니다',
+  badge_requested: '🏅 새 뱃지 신청이 있습니다',
+  badge_approved: '✅ 뱃지가 승인되었습니다',
+  badge_rejected: '❌ 뱃지 신청이 반려되었습니다',
 };
 
 export function useNotifications() {

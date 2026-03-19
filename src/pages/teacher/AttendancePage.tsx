@@ -350,6 +350,7 @@ export default function AttendancePage() {
       {/* Bulk action + filter */}
       <div className="flex items-center justify-between mb-3">
         <button
+          data-testid="att-bulk-present-btn"
           onClick={handleBulkPresent}
           disabled={isReadOnly}
           className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg active:scale-95 touch-manipulation disabled:opacity-50"
@@ -368,6 +369,7 @@ export default function AttendancePage() {
         ].map(({ key, label, count }) => (
           <button
             key={key}
+            data-testid={`att-filter-${key}`}
             onClick={() => setFilter(key)}
             className={cn(
               'px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap flex-shrink-0',
@@ -390,6 +392,7 @@ export default function AttendancePage() {
           return (
             <div
               key={member.id}
+              data-testid={`att-member-${member.id}`}
               className="bg-white rounded-xl border border-gray-200 p-3"
             >
               <div className="flex items-center justify-between">
@@ -407,6 +410,7 @@ export default function AttendancePage() {
                 </div>
 
                 <button
+                  data-testid={`att-status-btn-${member.id}`}
                   onClick={() => handleStatusChange(member.id)}
                   disabled={isMemberLocked(member.id)}
                   className={cn(

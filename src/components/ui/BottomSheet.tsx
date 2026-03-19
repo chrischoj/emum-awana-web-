@@ -37,7 +37,7 @@ export function BottomSheet({ open, onClose, children }: BottomSheetProps) {
 
           {/* Sheet */}
           <motion.div
-            className="fixed bottom-0 left-2 right-2 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden sm:left-auto sm:right-auto sm:max-w-md md:max-w-lg sm:ml-[10%] sm:mr-auto sm:inset-x-0"
+            className="fixed bottom-0 left-2 right-2 bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden sm:left-0 sm:right-0 sm:mx-auto sm:max-w-xl md:max-w-2xl"
             style={{ zIndex: 9999, y: dragY, maxHeight: '67vh' }}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
