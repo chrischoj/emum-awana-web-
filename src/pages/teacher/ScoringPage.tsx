@@ -241,6 +241,12 @@ export default function ScoringPage() {
         ...current,
         attendance: { status: nextStatus, points },
       };
+
+      // 결석 전환 시 암송 패널만 닫기 (점수는 보존)
+      if (nextStatus === 'absent' && recitationMemberId === memberId) {
+        setTimeout(() => setRecitationMemberId(null), 0);
+      }
+
       updated.total = calcTotal(updated);
       syncScore(memberId, 'attendance', points, 1);
       syncAttendance(memberId, nextStatus);
@@ -250,6 +256,8 @@ export default function ScoringPage() {
 
   const handleToggle = (memberId: string, category: 'handbook' | 'uniform') => {
     if (isLocked) return;
+    // 결석 상태면 입력 차단
+    if (scores[memberId]?.attendance.status === 'absent') return;
     navigator.vibrate?.(10);
     setScores((prev) => {
       const current = prev[memberId];
@@ -268,6 +276,8 @@ export default function ScoringPage() {
 
   const handleRecitationChange = (memberId: string, delta: number) => {
     if (isLocked) return;
+    // 결석 상태면 입력 차단
+    if (scores[memberId]?.attendance.status === 'absent') return;
     navigator.vibrate?.(10);
     setScores((prev) => {
       const current = prev[memberId];
@@ -490,83 +500,92 @@ export default function ScoringPage() {
               </div>
 
               {/* Score chips */}
-              <div className="grid grid-cols-4 gap-2">
-                {/* Attendance */}
-                <button
-                  type="button"
-                  onClick={() => handleAttendanceTap(member.id)}
-                  disabled={isLocked}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
-                    ATTENDANCE_COLORS[s.attendance.status],
-                    isLocked && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <span className="text-[10px] font-medium">출석</span>
-                  <span className="text-base font-bold">{s.attendance.points}</span>
-                  <span className="text-[10px]">{ATTENDANCE_LABELS[s.attendance.status]}</span>
-                </button>
+              {(() => {
+                const isAbsent = s.attendance.status === 'absent';
+                const absentDim = isAbsent && 'opacity-30 pointer-events-none grayscale';
+                return (
+                  <div className="grid grid-cols-4 gap-2">
+                    {/* Attendance */}
+                    <button
+                      type="button"
+                      onClick={() => handleAttendanceTap(member.id)}
+                      disabled={isLocked}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all duration-300 active:scale-95 select-none touch-manipulation',
+                        ATTENDANCE_COLORS[s.attendance.status],
+                        isLocked && 'opacity-60 cursor-not-allowed'
+                      )}
+                    >
+                      <span className="text-[10px] font-medium">출석</span>
+                      <span className="text-base font-bold">{s.attendance.points}</span>
+                      <span className="text-[10px]">{ATTENDANCE_LABELS[s.attendance.status]}</span>
+                    </button>
 
-                {/* Handbook */}
-                <button
-                  type="button"
-                  onClick={() => handleToggle(member.id, 'handbook')}
-                  disabled={isLocked}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
-                    s.handbook.done
-                      ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent',
-                    isLocked && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <span className="text-[10px] font-medium">핸드북</span>
-                  <span className="text-base font-bold">{s.handbook.points}</span>
-                  <span className="text-[10px]">{s.handbook.done ? '✓' : '✗'}</span>
-                </button>
+                    {/* Handbook */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggle(member.id, 'handbook')}
+                      disabled={isLocked || isAbsent}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all duration-300 active:scale-95 select-none touch-manipulation',
+                        s.handbook.done
+                          ? 'bg-green-100 text-green-800 border-green-400'
+                          : 'bg-gray-100 text-gray-500 border-transparent',
+                        isLocked && 'opacity-60 cursor-not-allowed',
+                        absentDim
+                      )}
+                    >
+                      <span className="text-[10px] font-medium">핸드북</span>
+                      <span className="text-base font-bold">{s.handbook.points}</span>
+                      <span className="text-[10px]">{s.handbook.done ? '✓' : '✗'}</span>
+                    </button>
 
-                {/* Uniform */}
-                <button
-                  type="button"
-                  onClick={() => handleToggle(member.id, 'uniform')}
-                  disabled={isLocked}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
-                    s.uniform.done
-                      ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent',
-                    isLocked && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <span className="text-[10px] font-medium">단복</span>
-                  <span className="text-base font-bold">{s.uniform.points}</span>
-                  <span className="text-[10px]">{s.uniform.done ? '✓' : '✗'}</span>
-                </button>
+                    {/* Uniform */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggle(member.id, 'uniform')}
+                      disabled={isLocked || isAbsent}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all duration-300 active:scale-95 select-none touch-manipulation',
+                        s.uniform.done
+                          ? 'bg-green-100 text-green-800 border-green-400'
+                          : 'bg-gray-100 text-gray-500 border-transparent',
+                        isLocked && 'opacity-60 cursor-not-allowed',
+                        absentDim
+                      )}
+                    >
+                      <span className="text-[10px] font-medium">단복</span>
+                      <span className="text-base font-bold">{s.uniform.points}</span>
+                      <span className="text-[10px]">{s.uniform.done ? '✓' : '✗'}</span>
+                    </button>
 
-                {/* Recitation */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRecitationMemberId(
-                      recitationMemberId === member.id ? null : member.id
-                    )
-                  }
-                  disabled={isLocked}
-                  className={cn(
-                    'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all active:scale-95 select-none touch-manipulation',
-                    s.recitation.multiplier > 0
-                      ? 'bg-green-100 text-green-800 border-green-400'
-                      : 'bg-gray-100 text-gray-500 border-transparent',
-                    isLocked && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <span className="text-[10px] font-medium">암송</span>
-                  <span className="text-base font-bold">{s.recitation.points}</span>
-                  {s.recitation.multiplier > 0 && (
-                    <span className="text-[10px] text-indigo-600">x{s.recitation.multiplier}</span>
-                  )}
-                </button>
-              </div>
+                    {/* Recitation */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        !isAbsent && setRecitationMemberId(
+                          recitationMemberId === member.id ? null : member.id
+                        )
+                      }
+                      disabled={isLocked || isAbsent}
+                      className={cn(
+                        'flex flex-col items-center justify-center rounded-lg px-1 py-2 border-2 transition-all duration-300 active:scale-95 select-none touch-manipulation',
+                        s.recitation.multiplier > 0
+                          ? 'bg-green-100 text-green-800 border-green-400'
+                          : 'bg-gray-100 text-gray-500 border-transparent',
+                        isLocked && 'opacity-60 cursor-not-allowed',
+                        absentDim
+                      )}
+                    >
+                      <span className="text-[10px] font-medium">암송</span>
+                      <span className="text-base font-bold">{s.recitation.points}</span>
+                      {s.recitation.multiplier > 0 && (
+                        <span className="text-[10px] text-indigo-600">x{s.recitation.multiplier}</span>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Recitation stepper (inline expand) */}
               {recitationMemberId === member.id && (
