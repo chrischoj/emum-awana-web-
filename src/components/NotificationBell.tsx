@@ -24,11 +24,25 @@ function getTimeAgo(dateStr: string): string {
   return `${days}일 전`;
 }
 
-export function NotificationBell() {
+export function NotificationBell({ dropUp = false }: { dropUp?: boolean }) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
+
+  // 모바일에서 드롭다운을 뷰포트 기준 fixed로 배치
+  const getMobileStyle = (): React.CSSProperties | undefined => {
+    if (dropUp || !buttonRef.current || window.innerWidth >= 640) return undefined;
+    const rect = buttonRef.current.getBoundingClientRect();
+    return {
+      position: 'fixed',
+      top: rect.bottom + 8,
+      left: 16,
+      right: 16,
+      width: 'auto',
+    };
+  };
 
   // 외부 클릭 시 닫기
   useEffect(() => {
@@ -62,6 +76,7 @@ export function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       {/* Bell button */}
       <button
+        ref={buttonRef}
         onClick={() => setOpen(!open)}
         className="relative p-2 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-gray-100 transition-colors"
         title="알림"
@@ -76,7 +91,15 @@ export function NotificationBell() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-h-96 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden z-50">
+        <div
+          className={cn(
+            'max-h-96 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden z-50',
+            dropUp
+              ? 'absolute bottom-full mb-2 left-0 w-80'
+              : 'absolute top-full mt-2 right-0 w-80'
+          )}
+          style={getMobileStyle()}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-900">알림</h3>

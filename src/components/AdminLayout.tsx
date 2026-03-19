@@ -87,7 +87,7 @@ export default function AdminLayout() {
               <span className="text-sm text-gray-600 truncate">{teacher?.name ?? '관리자'}</span>
             </button>
             <div className="flex items-center gap-1">
-              <NotificationBell />
+              <NotificationBell dropUp />
               <button
                 onClick={() => navigate('/teacher')}
                 className="p-2 text-gray-400 hover:text-indigo-500 rounded-lg hover:bg-gray-100"
@@ -121,8 +121,28 @@ export default function AdminLayout() {
             <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
             <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
           </Link>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
             <NotificationBell />
+            <button
+              onClick={() => navigate('/teacher/profile')}
+              className="flex items-center gap-1.5"
+            >
+              <Avatar name={teacher?.name ?? ''} src={teacher?.avatar_url} size="sm" />
+            </button>
+            <button
+              onClick={() => navigate('/teacher')}
+              className="p-2 text-gray-400 hover:text-indigo-500 rounded-lg"
+              title="교사 페이지"
+            >
+              <BookOpen className="w-4 h-4" />
+            </button>
+            <button
+              onClick={signOut}
+              className="p-2 text-gray-400 hover:text-red-500 rounded-lg"
+              title="로그아웃"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </header>
 
