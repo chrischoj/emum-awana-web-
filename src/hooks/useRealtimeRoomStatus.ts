@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { getToday } from '../lib/utils';
 import type { RoomSession, RoomTeacher } from '../types/awana';
 
 interface RoomStatus {
@@ -22,7 +23,7 @@ export function useRealtimeRoomStatus() {
   const [status, setStatus] = useState<RoomStatus>({ sessions: [], teachers: [] });
 
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getToday();
 
     // Initial load: sessions 먼저 → sessionIds로 teachers 필터
     supabase

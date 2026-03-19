@@ -9,10 +9,10 @@ import { getToday } from '../lib/utils';
 export async function checkInTeacherToRoom(roomId: string, teacherId: string): Promise<void> {
   const today = getToday();
 
-  // 1. Find or create today's session
+  // 1. Find or create today's session (ensure status = 'active')
   let { data: existingSession } = await supabase
     .from('room_sessions')
-    .select('id')
+    .select('id, status')
     .eq('room_id', roomId)
     .eq('training_date', today)
     .single();
@@ -20,10 +20,16 @@ export async function checkInTeacherToRoom(roomId: string, teacherId: string): P
   if (!existingSession) {
     const { data: newSession } = await supabase
       .from('room_sessions')
-      .insert({ room_id: roomId, training_date: today })
+      .insert({ room_id: roomId, training_date: today, status: 'active' })
       .select('id')
       .single();
     existingSession = newSession;
+  } else if (existingSession.status !== 'active') {
+    // 비활성 세션이 있으면 재활성화
+    await supabase
+      .from('room_sessions')
+      .update({ status: 'active' })
+      .eq('id', existingSession.id);
   }
 
   if (!existingSession) {

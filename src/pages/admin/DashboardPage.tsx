@@ -5,7 +5,7 @@ import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { Member, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
+import type { Member, Teacher, ActiveTeacherAssignment, Room, Team } from '../../types/awana';
 
 interface Stats {
   activeMembers: number;
@@ -227,6 +227,7 @@ export default function DashboardPage() {
   const [allTeachers, setAllTeachers] = useState<Teacher[]>(cache?.teachers || []);
   const [allAssignments, setAllAssignments] = useState<ActiveTeacherAssignment[]>(cache?.assignments || []);
   const [allRooms, setAllRooms] = useState<Room[]>(cache?.rooms || []);
+  const [allTeamsForStatus, setAllTeamsForStatus] = useState<Team[]>([]);
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
   const [allRoomsExpanded, setAllRoomsExpanded] = useState(true);
   const [allTeachersExpanded, setAllTeachersExpanded] = useState(true);
@@ -236,10 +237,11 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadDashboard() {
       const today = getToday();
-      const [teachersRes, assignmentsRes, roomsRes, activeMembersRes, totalMembersRes, attendanceRes] = await Promise.all([
+      const [teachersRes, assignmentsRes, roomsRes, allTeamsRes, activeMembersRes, totalMembersRes, attendanceRes] = await Promise.all([
         supabase.from('teachers').select('*').eq('active', true).order('name'),
         supabase.from('active_teacher_assignments').select('*'),
         supabase.from('rooms').select('*').eq('active', true).order('name'),
+        supabase.from('teams').select('*').order('name'),
         supabase.from('members').select('id', { count: 'exact', head: true }).eq('active', true).eq('enrollment_status', 'active'),
         supabase.from('members').select('id', { count: 'exact', head: true }).eq('active', true),
         supabase.from('member_attendance').select('status').eq('training_date', today),
@@ -248,10 +250,12 @@ export default function DashboardPage() {
       const teachersList = (teachersRes.data as Teacher[]) || [];
       const assignmentsList = (assignmentsRes.data as ActiveTeacherAssignment[]) || [];
       const roomsList = (roomsRes.data as Room[]) || [];
+      const allTeamsList = (allTeamsRes.data as Team[]) || [];
 
       setAllTeachers(teachersList);
       setAllAssignments(assignmentsList);
       setAllRooms(roomsList);
+      setAllTeamsForStatus(allTeamsList);
 
       const activeMembers = activeMembersRes.count ?? 0;
       const totalMembers = totalMembersRes.count ?? 0;
@@ -371,16 +375,14 @@ export default function DashboardPage() {
     return { attendanceRate: rate, attendanceColor: color, attendanceTextColor: textColor, memberRatio: ratio };
   }, [stats]);
 
-  // --- 활성 교실 enriched 데이터 (현재 클럽만) ---
+  // --- 활성 교실 enriched 데이터 (전체 클럽) ---
   const enrichedSessions = useMemo(() => {
     return roomStatus.sessions
-      .filter(session => {
-        const room = allRooms.find(r => r.id === session.room_id);
-        return room && currentClub && room.club_id === currentClub.id;
-      })
+      .filter(session => allRooms.some(r => r.id === session.room_id))
       .map(session => {
         const room = allRooms.find(r => r.id === session.room_id)!;
-        const team = teams.find(t => t.id === room.team_id);
+        const team = allTeamsForStatus.find(t => t.id === room.team_id);
+        const club = clubs.find(c => c.id === room.club_id);
         const checkedInTeacherIds = roomStatus.teachers
           .filter(t => t.room_session_id === session.id)
           .map(t => t.teacher_id);
@@ -399,26 +401,28 @@ export default function DashboardPage() {
           ...session,
           room,
           team,
+          club,
           checkedInTeachers,
           assignedTeacherCount: assignedCount,
           memberCount: roomMembers.length,
         };
       });
-  }, [roomStatus.sessions, roomStatus.teachers, allRooms, teams, allTeachers, allAssignments, members, currentClub]);
+  }, [roomStatus.sessions, roomStatus.teachers, allRooms, allTeamsForStatus, allTeachers, allAssignments, members, clubs]);
 
   const inactiveRooms = useMemo(() => {
     const activeRoomIds = new Set(roomStatus.sessions.map(s => s.room_id));
     return allRooms
-      .filter(r => currentClub && r.club_id === currentClub.id && !activeRoomIds.has(r.id) && allAssignments.some(a => a.room_id === r.id))
+      .filter(r => !activeRoomIds.has(r.id) && allAssignments.some(a => a.room_id === r.id))
       .map(r => {
-        const team = teams.find(t => t.id === r.team_id);
+        const team = allTeamsForStatus.find(t => t.id === r.team_id);
+        const club = clubs.find(c => c.id === r.club_id);
         const assignedTeachers = allAssignments
           .filter(a => a.room_id === r.id)
           .map(a => allTeachers.find(t => t.id === a.teacher_id))
           .filter((t): t is Teacher => !!t);
-        return { ...r, team, assignedTeachers };
+        return { ...r, team, club, assignedTeachers };
       });
-  }, [allRooms, roomStatus.sessions, allAssignments, teams, allTeachers, currentClub]);
+  }, [allRooms, roomStatus.sessions, allAssignments, allTeamsForStatus, allTeachers, clubs]);
 
   // 스켈레톤 플레이스홀더
   if (loading) {
@@ -672,6 +676,7 @@ export default function DashboardPage() {
                     <div className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: teamColor }} />
                     <span className="text-sm font-semibold text-gray-800 truncate">{es.room?.name || '교실'}</span>
                     {es.team && <span className="text-xs text-gray-400">{es.team.name}</span>}
+                    {es.club && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{es.club.name}</span>}
                     <div className="flex-1" />
                     {es.checkedInTeachers.length > 0 && (
                       <div className="flex -space-x-1 flex-shrink-0">
@@ -701,6 +706,7 @@ export default function DashboardPage() {
                   <div className="w-2 h-2 rounded-full bg-gray-300 flex-shrink-0" />
                   <span className="text-sm font-medium text-gray-500 truncate">{ir.name}</span>
                   {ir.team && <span className="text-xs text-gray-400">{ir.team.name}</span>}
+                  {ir.club && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{ir.club.name}</span>}
                   <div className="flex-1" />
                   <span className="text-xs text-gray-400 truncate max-w-[120px]">{ir.assignedTeachers.map(t => t.name).join(', ')}</span>
                   <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 text-[9px] font-bold flex-shrink-0">대기</span>
@@ -724,6 +730,7 @@ export default function DashboardPage() {
                           <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 animate-pulse" style={{ backgroundColor: teamColor }} />
                           <span className="text-sm font-bold text-gray-900 truncate">{es.room?.name || '교실'}</span>
                           {es.team && <span className="text-xs text-gray-400 truncate">{es.team.name}</span>}
+                          {es.club && <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-full">{es.club.name}</span>}
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           <span className="px-2 py-0.5 rounded-full bg-green-500 text-white text-[10px] font-bold tracking-wide">LIVE</span>
@@ -778,6 +785,7 @@ export default function DashboardPage() {
                         <div className="w-2.5 h-2.5 rounded-full bg-gray-300 flex-shrink-0" />
                         <span className="text-sm font-bold text-gray-500 truncate">{ir.name}</span>
                         {ir.team && <span className="text-xs text-gray-400 truncate">{ir.team.name}</span>}
+                        {ir.club && <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-full">{ir.club.name}</span>}
                       </div>
                       <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-[10px] font-bold tracking-wide flex-shrink-0">대기</span>
                     </div>

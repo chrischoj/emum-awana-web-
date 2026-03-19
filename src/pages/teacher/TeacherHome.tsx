@@ -496,11 +496,11 @@ export default function TeacherHome() {
           {/* T&T: 학급별 그룹 / 스팍스: 플랫 */}
           {isCurrentClubTnT && !isUnassigned ? (
             <>
-              {(groupMembersByRoom(assignedMembers, 'tnt') || []).map(({ room, members: roomMembers }) => {
+              {(groupMembersByRoom(assignedMembers, 'tnt') || []).map(({ room, members: roomMembers }, idx) => {
                 const myRoomIds = [...primaryAssignments.map(a => a.room_id), ...temporaryAssignments.map(a => a.room_id)];
                 const isMyRoom = room && myRoomIds.includes(room.id);
                 return (
-                <div key={room?.id || 'unassigned-room'} className="mb-4">
+                <div key={room?.id || `unassigned-room-${idx}`} className="mb-4">
                   <p className="text-xs font-medium text-indigo-500 mb-2">
                     {isMyRoom ? '내 학급 아이들' : room ? room.name : '학급 미배정'}
                   </p>

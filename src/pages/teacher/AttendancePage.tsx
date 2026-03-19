@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
@@ -60,13 +60,17 @@ export default function AttendancePage() {
   const attCacheKey = `attendance-${currentClub?.id}-${selectedDate}`;
   const { restore: restoreAttendance } = useSessionCache(attCacheKey, attendance, Object.keys(attendance).length > 0);
 
-  const baseMembers = isUnassigned
-    ? (isReadOnly ? members : [])  // 일반교사 미배정: 열람용 전체, admin 미배정: 빈 목록
-    : assignedMembers;
+  const baseMembers = useMemo(
+    () => isUnassigned
+      ? (isReadOnly ? members : [])  // 일반교사 미배정: 열람용 전체, admin 미배정: 빈 목록
+      : assignedMembers,
+    [isUnassigned, isReadOnly, members, assignedMembers]
+  );
 
   // Initialize all members as unset
   useEffect(() => {
     if (!currentClub) return;
+    let stale = false;
     setLoading(true);
 
     const initial: Record<string, MemberAttendanceState> = {};
@@ -76,6 +80,7 @@ export default function AttendancePage() {
 
     getAttendanceByDate(selectedDate, currentClub.id)
       .then((records) => {
+        if (stale) return;
         for (const rec of records) {
           const status = rec.status || (rec.present ? 'present' : 'absent');
           if (initial[rec.member_id] && status !== 'none') {
@@ -88,6 +93,7 @@ export default function AttendancePage() {
         setAttendance(initial);
       })
       .catch(() => {
+        if (stale) return;
         // 오프라인: 캐시에서 복원, 없으면 기본값 사용
         const cached = restoreAttendance();
         if (cached && Object.keys(cached).length > 0) {
@@ -97,8 +103,10 @@ export default function AttendancePage() {
           if (navigator.onLine) toast.error('출석 데이터 로드 실패');
         }
       })
-      .finally(() => setLoading(false));
-  }, [currentClub, selectedDate, members]);
+      .finally(() => { if (!stale) setLoading(false); });
+
+    return () => { stale = true; };
+  }, [currentClub, selectedDate, baseMembers]);
 
   // 팀별 제출 상태 로드
   useEffect(() => {
