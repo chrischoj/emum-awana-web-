@@ -16,16 +16,31 @@ const Login = () => {
 
     try {
       const resolvedEmail = loginId.includes('@') ? loginId : `${loginId.trim().replace(/[^0-9]/g, '')}@awana.local`;
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: resolvedEmail,
         password,
       });
 
       if (error) throw error;
 
+      // 리다이렉트 파라미터가 있으면 우선 사용
       const redirect = searchParams.get('redirect');
       const isValidRedirect = redirect && redirect.startsWith('/') && !redirect.startsWith('//');
-      navigate(isValidRedirect ? redirect : '/');
+      if (isValidRedirect) {
+        navigate(redirect);
+      } else {
+        // role 기반 즉시 리다이렉트 (RoleRedirect 스피너 대기 방지)
+        try {
+          const { data: teacher } = await supabase
+            .from('teachers')
+            .select('role')
+            .eq('user_id', data.user.id)
+            .single();
+          navigate(teacher?.role === 'admin' ? '/admin' : '/teacher', { replace: true });
+        } catch {
+          navigate('/teacher', { replace: true });
+        }
+      }
       toast.success('로그인되었습니다!');
     } catch (error) {
       console.error('Login error:', error);
