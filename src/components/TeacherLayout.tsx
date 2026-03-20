@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { LogOut, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
+import { useSessionCleanup } from '../hooks/useSessionCleanup';
 import { teacherNavItems } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
@@ -10,6 +11,7 @@ import { NotificationBell } from './NotificationBell';
 export default function TeacherLayout() {
   const { teacher, role, signOut } = useAuth();
   useAutoCheckIn();
+  useSessionCleanup();
   const navigate = useNavigate();
 
   return (

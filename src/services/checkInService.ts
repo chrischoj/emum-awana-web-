@@ -96,6 +96,41 @@ export async function deactivateTeacherSessions(teacherId: string): Promise<void
 }
 
 /**
+ * 오래된 활성 세션을 자동 정리합니다.
+ * started_at 기준 maxAgeHours 이상 경과한 active 세션을 inactive로 변경.
+ * 관리자 대시보드 로드 시 호출하여 좀비 세션 정리.
+ */
+export async function cleanupStaleSessions(maxAgeHours = 4): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000).toISOString();
+
+  // 오래된 active 세션 조회
+  const { data: staleSessions } = await supabase
+    .from('room_sessions')
+    .select('id')
+    .eq('status', 'active')
+    .lt('started_at', cutoff);
+
+  if (!staleSessions?.length) return 0;
+
+  const staleIds = staleSessions.map(s => s.id);
+
+  // 해당 세션의 room_teachers 레코드 삭제
+  await supabase
+    .from('room_teachers')
+    .delete()
+    .in('room_session_id', staleIds);
+
+  // 세션 비활성화
+  await supabase
+    .from('room_sessions')
+    .update({ status: 'inactive', ended_at: new Date().toISOString() })
+    .in('id', staleIds);
+
+  console.log(`[SessionCleanup] ${staleIds.length}개 오래된 세션 정리 완료`);
+  return staleIds.length;
+}
+
+/**
  * 교사를 여러 교실에 일괄 체크인합니다.
  * 실패한 교실은 무시하고 성공한 교실만 처리
  */

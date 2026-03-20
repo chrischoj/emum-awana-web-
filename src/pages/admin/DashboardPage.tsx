@@ -4,6 +4,7 @@ import { useClub } from '../../contexts/ClubContext';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
+import { cleanupStaleSessions } from '../../services/checkInService';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
 import type { Member, Teacher, ActiveTeacherAssignment, Room, Team } from '../../types/awana';
@@ -222,6 +223,11 @@ export default function DashboardPage() {
   const [classroomExpanded, setClassroomExpanded] = useState(false);
 
   // --- 최적화 1: 단일 useEffect + Promise.all (7→6 쿼리, teachers COUNT 제거) ---
+  // 대시보드 로드 시 오래된 좀비 세션 자동 정리 (4시간 초과)
+  useEffect(() => {
+    cleanupStaleSessions(4).catch(() => {});
+  }, []);
+
   useEffect(() => {
     async function loadDashboard() {
       const today = getToday();
