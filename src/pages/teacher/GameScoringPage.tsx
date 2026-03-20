@@ -3,20 +3,18 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
 import {
-  addGameScoreToMultipleTeams,
   getGameScoresByDate,
   getTeamGameTotals,
-  updateGameScore,
-  deleteGameScore,
   getGameScoreLock,
 } from '../../services/gameScoreService';
 import type { GameScoreLock } from '../../services/gameScoreService';
 import { supabase } from '../../lib/supabase';
 import { cn, getToday } from '../../lib/utils';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
+import { SyncStatusIndicator } from '../../components/ui/SyncStatusIndicator';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useSessionCache } from '../../hooks/useSessionCache';
-import { useOfflineQueue } from '../../hooks/useOfflineQueue';
+import { useOptimisticGameQueue } from '../../hooks/useOptimisticGameQueue';
 import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
@@ -27,7 +25,6 @@ export default function GameScoringPage() {
   const { teacher } = useAuth();
   const { currentClub, clubs, setCurrentClub, teams } = useClub();
   const { isOffline } = useNetworkStatus();
-  const { enqueue, pendingCount } = useOfflineQueue();
 
   const sparksClub = clubs.find((c) => c.type === 'sparks');
   const tntClub = clubs.find((c) => c.type === 'tnt');
@@ -38,7 +35,6 @@ export default function GameScoringPage() {
   const [description, setDescription] = useState('');
   const [teamTotals, setTeamTotals] = useState<Record<string, number>>({});
   const [recentEntries, setRecentEntries] = useState<GameScoreEntry[]>([]);
-  const [submitting, setSubmitting] = useState(false);
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
   const [editPoints, setEditPoints] = useState(0);
@@ -76,26 +72,45 @@ export default function GameScoringPage() {
     }
   }, [currentClub, selectedDate, restoreGameTotals, restoreGameEntries]);
 
+  // Optimistic queue — must be after loadData definition
+  const { enqueueAdd, enqueueUpdate, enqueueDelete, pendingCount, isSyncing } =
+    useOptimisticGameQueue({
+      clubId: currentClub?.id,
+      date: selectedDate,
+      teamTotals,
+      recentEntries,
+      setTeamTotals,
+      setRecentEntries,
+      loadData,
+    });
+
   const isLocked = isOffline ? false : !!gameLock;
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // 백그라운드→포그라운드 복귀 시 스피너 없이 데이터 갱신
-  useAppResume(() => { loadData(); });
+  // 백그라운드→포그라운드 복귀 시 큐가 비어있을 때만 서버 갱신 (낙관적 상태 보호)
+  useAppResume(() => {
+    if (pendingCount === 0) loadData();
+  });
 
-  // Realtime: 잠금 상태 변경 감지
+  // Realtime: 잠금 상태 변경만 감지 (loadData 호출 X → 낙관적 상태 보호)
   useEffect(() => {
     if (!currentClub) return;
     const channel = supabase
       .channel(`game-lock-${currentClub.id}-${selectedDate}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, () => {
-        loadData();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_score_locks' }, async () => {
+        try {
+          const lock = await getGameScoreLock(currentClub.id, selectedDate);
+          setGameLock(lock);
+        } catch {
+          // ignore network error
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [currentClub, selectedDate, loadData]);
+  }, [currentClub, selectedDate]);
 
   const toggleTeam = (teamId: string) => {
     setSelectedTeamIds((prev) => {
@@ -106,111 +121,54 @@ export default function GameScoringPage() {
     });
   };
 
-  const handleSubmit = async () => {
+  // ── Handlers (synchronous — no await) ───────────────────────────
+
+  const handleSubmit = () => {
     if (!currentClub || selectedTeamIds.size === 0 || points <= 0) {
       toast.error('팀과 점수를 선택하세요');
       return;
     }
 
-    // 로컬 낙관적 업데이트 (오프라인/온라인 모두 즉시 반영)
-    const applyLocal = () => {
-      navigator.vibrate?.(20);
-      setTeamTotals((prev) => {
-        const next = { ...prev };
-        for (const tid of selectedTeamIds) {
-          next[tid] = (next[tid] || 0) + points;
-        }
-        return next;
-      });
-      // 로컬 기록 추가 (오프라인에서도 기록 확인 가능)
-      const now = new Date().toISOString();
-      const newEntries: GameScoreEntry[] = Array.from(selectedTeamIds).map((tid) => ({
-        id: `local-${Date.now()}-${tid}`,
-        team_id: tid,
-        club_id: currentClub!.id,
-        training_date: selectedDate,
-        points,
-        description: description || null,
-        recorded_by: teacher?.id || null,
-        created_at: now,
-      }));
-      setRecentEntries((prev) => [...newEntries, ...prev]);
-    };
-
-    if (isOffline) {
-      applyLocal();
-      enqueue('addGameScore', {
-        teamIds: Array.from(selectedTeamIds),
-        clubId: currentClub.id,
-        trainingDate: selectedDate,
-        points,
-        description: description || undefined,
-        recordedBy: teacher?.id,
-      });
-      toast.success(`${selectedTeamIds.size}팀에 ${points}점 부여! (오프라인)`);
-      setSelectedTeamIds(new Set());
-      setDescription('');
-      return;
-    }
-
-    // 온라인: 서버 잠금 재확인
-    const lock = await getGameScoreLock(currentClub.id, selectedDate);
-    if (lock) {
-      setGameLock(lock);
+    // 캐시된 잠금만 확인 (서버 호출 X)
+    if (gameLock) {
       toast.error('관리자가 점수를 잠금 처리했습니다');
       return;
     }
-    setSubmitting(true);
-    try {
-      await addGameScoreToMultipleTeams({
-        teamIds: Array.from(selectedTeamIds),
-        clubId: currentClub.id,
-        trainingDate: selectedDate,
-        points,
-        description: description || undefined,
-        recordedBy: teacher?.id,
-      });
 
-      // Flash animation
-      for (const tid of selectedTeamIds) {
-        setFlashTeamId(tid);
-        await new Promise((r) => setTimeout(r, 200));
-      }
-      setFlashTeamId(null);
+    enqueueAdd({
+      teamIds: Array.from(selectedTeamIds),
+      clubId: currentClub.id,
+      trainingDate: selectedDate,
+      points,
+      description: description || undefined,
+      recordedBy: teacher?.id,
+    });
 
-      applyLocal();
-      toast.success(`${selectedTeamIds.size}팀에 ${points}점 부여!`);
-      setSelectedTeamIds(new Set());
-      setDescription('');
-      await loadData();
-    } catch {
-      if (navigator.onLine) toast.error('점수 부여 실패');
-    } finally {
-      setSubmitting(false);
-    }
+    // Flash animation (비동기, non-blocking)
+    const teamIdsList = Array.from(selectedTeamIds);
+    teamIdsList.forEach((tid, i) => {
+      setTimeout(() => setFlashTeamId(tid), i * 200);
+    });
+    setTimeout(() => setFlashTeamId(null), teamIdsList.length * 200);
+
+    toast.success(`${selectedTeamIds.size}팀에 ${points}점 부여!`);
+    setSelectedTeamIds(new Set());
+    setDescription('');
   };
 
-  const handleDeleteEntry = async (entryId: string) => {
+  const handleDeleteEntry = (entryId: string) => {
     if (!currentClub) return;
-    if (isOffline) {
-      // 오프라인: 로컬에서만 제거
-      const entry = recentEntries.find(e => e.id === entryId);
-      if (entry) {
-        setRecentEntries(prev => prev.filter(e => e.id !== entryId));
-        setTeamTotals(prev => ({ ...prev, [entry.team_id]: (prev[entry.team_id] || 0) - entry.points }));
-        toast.success('기록 삭제됨 (오프라인)');
-      }
+
+    if (gameLock) {
+      toast.error('잠금 상태입니다');
       return;
     }
-    const lock = await getGameScoreLock(currentClub.id, selectedDate);
-    if (lock) { setGameLock(lock); toast.error('잠금 상태입니다'); return; }
-    try {
-      await deleteGameScore(entryId);
-      toast.success('기록 삭제됨');
-      await loadData();
-    } catch {
-      if (navigator.onLine) toast.error('삭제 실패');
-    }
+
+    const entry = recentEntries.find((e) => e.id === entryId);
+    if (!entry) return;
+
+    enqueueDelete(entryId, entry);
+    toast.success('기록 삭제됨');
   };
 
   const handleStartEdit = (entry: GameScoreEntry) => {
@@ -219,36 +177,32 @@ export default function GameScoringPage() {
     setEditDescription(entry.description || '');
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editingEntry || !currentClub) return;
 
-    if (isOffline) {
-      // 오프라인: 로컬에서만 수정
-      const diff = editPoints - editingEntry.points;
-      setRecentEntries(prev => prev.map(e =>
-        e.id === editingEntry.id ? { ...e, points: editPoints, description: editDescription } : e
-      ));
-      setTeamTotals(prev => ({ ...prev, [editingEntry.team_id]: (prev[editingEntry.team_id] || 0) + diff }));
-      toast.success('수정됨 (오프라인)');
+    if (gameLock) {
+      toast.error('잠금 상태입니다');
       setEditingEntry(null);
       return;
     }
 
-    const lock = await getGameScoreLock(currentClub.id, selectedDate);
-    if (lock) { setGameLock(lock); setEditingEntry(null); toast.error('잠금 상태입니다'); return; }
-    try {
-      await updateGameScore(editingEntry.id, { points: editPoints, description: editDescription });
-      toast.success('수정됨');
-      setEditingEntry(null);
-      await loadData();
-    } catch {
-      if (navigator.onLine) toast.error('수정 실패');
-    }
+    enqueueUpdate(
+      editingEntry.id,
+      { points: editPoints, description: editDescription },
+      editingEntry,
+    );
+
+    toast.success('수정됨');
+    setEditingEntry(null);
   };
 
   return (
     <div className="pb-4">
-      {isOffline && <OfflineBanner pendingCount={pendingCount} />}
+      {isOffline ? (
+        <OfflineBanner pendingCount={pendingCount} />
+      ) : (
+        <SyncStatusIndicator pendingCount={pendingCount} isSyncing={isSyncing} />
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-900">게임 점수</h1>
@@ -427,10 +381,10 @@ export default function GameScoringPage() {
         <button
           data-testid="game-submit-btn"
           onClick={handleSubmit}
-          disabled={submitting || selectedTeamIds.size === 0 || isLocked}
+          disabled={selectedTeamIds.size === 0 || isLocked}
           className="w-full py-3 rounded-lg bg-indigo-600 text-white font-bold text-base disabled:opacity-50 active:scale-[0.98] transition-all touch-manipulation"
         >
-          {submitting ? '저장 중...' : `선택된 팀에 ${points}점 부여`}
+          {`선택된 팀에 ${points}점 부여`}
         </button>
       </div>
 
