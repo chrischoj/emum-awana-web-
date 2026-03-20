@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { SubmissionStatus, Member, Team, Club, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
+import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
 
 function getGradientClass(color?: string): string {
   const map: Record<string, string> = {
@@ -47,19 +48,6 @@ function FaceTile({ member, teamColor, onTap }: { member: Member; teamColor?: st
   );
 }
 
-const TEACHER_CATEGORIES: { key: string; label: string; positions: string[] }[] = [
-  { key: 'admin', label: '행정', positions: ['조정관', '감독관', '서기', '회계'] },
-  { key: 'game', label: '게임디렉터', positions: ['게임디렉터'] },
-  { key: 'support', label: '보조 교사', positions: ['보조 교사'] },
-];
-
-function getTeacherCategory(position: string | null): string {
-  if (!position) return 'other';
-  for (const cat of TEACHER_CATEGORIES) {
-    if (cat.positions.some(p => position.includes(p))) return cat.key;
-  }
-  return 'other';
-}
 
 function TeacherFaceTile({ teacher, subtitle }: { teacher: Teacher; subtitle?: string }) {
   const [imgError, setImgError] = useState(false);
@@ -147,28 +135,8 @@ export default function TeacherHome() {
     }
   }
 
-  // 배정된 교사 ID 세트
-  const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
-
-  // 모든 교사를 카테고리별로 그룹핑 (본인 포함)
-  const allTeachersList = allTeachers;
-  const assignedRegularTeachers = allTeachersList.filter(
-    t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other'
-  );
-  const teachersByCategory: { key: string; label: string; teachers: Teacher[] }[] = [];
-  for (const cat of TEACHER_CATEGORIES) {
-    const matched = allTeachersList.filter(t => getTeacherCategory(t.position) === cat.key);
-    if (matched.length > 0) teachersByCategory.push({ key: cat.key, label: cat.label, teachers: matched });
-  }
-  if (assignedRegularTeachers.length > 0) {
-    teachersByCategory.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegularTeachers });
-  }
-  const unassignedRegular = allTeachersList.filter(
-    t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other'
-  );
-  if (unassignedRegular.length > 0) {
-    teachersByCategory.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
-  }
+  // 카테고리별 그룹핑
+  const teachersByCategory = groupTeachersByCategory(allTeachers, clubs);
 
   // 다른 클럽 멤버/팀 로드 (currentClub 외의 클럽들)
   const [otherClubData, setOtherClubData] = useState<
@@ -235,7 +203,7 @@ export default function TeacherHome() {
   const sameClubNoRoomMembers = sameClubOtherMembers.filter(m => !sameClubMatchedIds.has(m.id));
 
   const hasOtherKids = sameClubOtherRooms.length > 0 || sameClubNoRoomMembers.length > 0 || otherClubData.length > 0;
-  const hasTeacherSection = teachersByCategory.length > 0 || allTeachersList.length > 0;
+  const hasTeacherSection = teachersByCategory.length > 0;
 
   // T&T 학급별 그룹핑 헬퍼
   const isCurrentClubTnT = currentClub?.type === 'tnt';
@@ -780,15 +748,22 @@ export default function TeacherHome() {
           <h2 className="font-semibold text-gray-900 mb-3">
             우리 선생님들
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {teachersByCategory.map(cat => (
-              <div key={cat.key}>
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 px-1">
-                  {cat.label}
-                </p>
+              <div key={cat.key} className="rounded-xl border border-gray-100 border-l-4 p-3" style={{ borderLeftColor: cat.color }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">{cat.emoji}</span>
+                  <span className="text-sm font-semibold text-gray-700">{cat.label}</span>
+                  <span className="text-xs text-gray-400">({cat.teachers.length}명)</span>
+                </div>
                 <div className="grid grid-cols-4 gap-2">
                   {cat.teachers.map(t => (
-                    <TeacherFaceTile key={t.id} teacher={t} subtitle={t.position || undefined} />
+                    <div key={t.id} className="relative">
+                      <TeacherFaceTile teacher={t} subtitle={t.position || undefined} />
+                      {isLeader(t.position) && (
+                        <span className="absolute -top-1 -right-1 text-xs px-1 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: cat.color, fontSize: '9px' }}>★</span>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

@@ -5,6 +5,7 @@ import { useMemberProfile } from '../../contexts/MemberProfileContext';
 import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
 import type { Member, Teacher, ActiveTeacherAssignment, Room, Team } from '../../types/awana';
 
 interface Stats {
@@ -114,19 +115,6 @@ function DashboardFaceTile({ member, teamColor, onTap }: { member: Member; teamC
   );
 }
 
-const TEACHER_CATEGORIES: { key: string; label: string; positions: string[] }[] = [
-  { key: 'admin', label: '행정', positions: ['조정관', '감독관', '서기', '회계'] },
-  { key: 'game', label: '게임디렉터', positions: ['게임디렉터'] },
-  { key: 'support', label: '보조 교사', positions: ['보조 교사'] },
-];
-
-function getTeacherCategory(position: string | null): string {
-  if (!position) return 'other';
-  for (const cat of TEACHER_CATEGORIES) {
-    if (cat.positions.some(p => position.includes(p))) return cat.key;
-  }
-  return 'other';
-}
 
 function DashboardTeacherTile({ teacher, badges }: { teacher: Teacher; badges?: { label: string; color: string }[] }) {
   const [imgError, setImgError] = useState(false);
@@ -354,18 +342,8 @@ export default function DashboardPage() {
   }, [allAssignments, allTeachers]);
 
   const teachersByCategory = useMemo(() => {
-    const assignedTeacherIds = new Set(allAssignments.map(a => a.teacher_id));
-    const result: { key: string; label: string; teachers: Teacher[] }[] = [];
-    for (const cat of TEACHER_CATEGORIES) {
-      const matched = allTeachers.filter(t => getTeacherCategory(t.position) === cat.key);
-      if (matched.length > 0) result.push({ key: cat.key, label: cat.label, teachers: matched });
-    }
-    const assignedRegular = allTeachers.filter(t => assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
-    if (assignedRegular.length > 0) result.push({ key: 'assigned', label: '담임 교사', teachers: assignedRegular });
-    const unassignedRegular = allTeachers.filter(t => !assignedTeacherIds.has(t.id) && getTeacherCategory(t.position) === 'other');
-    if (unassignedRegular.length > 0) result.push({ key: 'unassigned', label: '미배정 교사', teachers: unassignedRegular });
-    return result;
-  }, [allAssignments, allTeachers]);
+    return groupTeachersByCategory(allTeachers, clubs);
+  }, [allTeachers, clubs]);
 
   const { attendanceRate, attendanceColor, attendanceTextColor, memberRatio } = useMemo(() => {
     const rate = stats.activeMembers > 0 ? Math.round((stats.attendancePresent / stats.activeMembers) * 100) : 0;
@@ -1092,7 +1070,7 @@ export default function DashboardPage() {
               const catSectionId = `teacher-cat-${cat.key}`;
               const isCatOpen = allTeachersExpanded || openSectionIds.has(catSectionId);
               return (
-                <div key={cat.key} className="rounded-xl border border-gray-100 overflow-hidden">
+                <div key={cat.key} className="rounded-xl border border-gray-100 overflow-hidden border-l-4" style={{ borderLeftColor: cat.color }}>
                   <button
                     onClick={() => {
                       if (allTeachersExpanded) {
@@ -1111,6 +1089,7 @@ export default function DashboardPage() {
                     className="w-full flex items-center justify-between p-3 bg-gray-50/80 hover:bg-gray-100/80 transition-colors"
                   >
                     <div className="flex items-center gap-2">
+                      <span className="text-base">{cat.emoji}</span>
                       <span className="text-sm font-semibold text-gray-700">{cat.label}</span>
                       <span className="text-xs text-gray-400">({cat.teachers.length}명)</span>
                     </div>
@@ -1122,6 +1101,9 @@ export default function DashboardPage() {
                         {cat.teachers.map(t => {
                           const teacherAssigns = allAssignments.filter(a => a.teacher_id === t.id);
                           const badges: { label: string; color: string }[] = [];
+                          if (isLeader(t.position)) {
+                            badges.push({ label: '★ 리더', color: cat.color });
+                          }
                           for (const a of teacherAssigns) {
                             const roomName = allRooms.find(r => r.id === a.room_id)?.name;
                             if (roomName) {
