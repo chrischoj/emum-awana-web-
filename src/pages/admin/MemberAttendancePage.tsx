@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
 import { getAttendanceByDate, recordAttendance, getAttendancePoints } from '../../services/attendanceService';
@@ -23,6 +23,8 @@ export default function MemberAttendancePage() {
   const { openMemberProfile } = useMemberProfile();
   const [filterClubId, setFilterClubId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getToday());
+  const [sortKey, setSortKey] = useState<'name' | 'team' | 'status' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: AttendanceStatus; absenceReason: string }>>({});
@@ -329,6 +331,37 @@ export default function MemberAttendancePage() {
     }
   };
 
+  const toggleSort = (key: 'name' | 'team' | 'status') => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortedMembers = [...allMembers].sort((a, b) => {
+    if (!sortKey) return 0;
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortKey === 'name') {
+      return a.name.localeCompare(b.name, 'ko') * dir;
+    }
+    if (sortKey === 'team') {
+      const teamA = allTeams.find(t => t.id === a.team_id)?.name || '';
+      const teamB = allTeams.find(t => t.id === b.team_id)?.name || '';
+      return teamA.localeCompare(teamB, 'ko') * dir;
+    }
+    if (sortKey === 'status') {
+      const order: Record<string, number> = { present: 0, late: 1, absent: 2 };
+      const sA = attendanceMap[a.id]?.status;
+      const sB = attendanceMap[b.id]?.status;
+      const vA = sA ? order[sA] : 3;
+      const vB = sB ? order[sB] : 3;
+      return (vA - vB) * dir;
+    }
+    return 0;
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -399,18 +432,33 @@ export default function MemberAttendancePage() {
             </colgroup>
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">이름</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <button onClick={() => toggleSort('name')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                    이름
+                    {sortKey === 'name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                  </button>
+                </th>
                 {filterClubId === null && (
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">클럽</th>
                 )}
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">팀</th>
-                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">상태</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <button onClick={() => toggleSort('team')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                    팀
+                    {sortKey === 'team' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                  </button>
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                  <button onClick={() => toggleSort('status')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                    상태
+                    {sortKey === 'status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                  </button>
+                </th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">사유</th>
                 <th className="px-2 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {allMembers.map((member) => {
+              {sortedMembers.map((member) => {
                 const entry = attendanceMap[member.id];
                 const status = entry?.status;
                 const reason = entry?.absenceReason || '';

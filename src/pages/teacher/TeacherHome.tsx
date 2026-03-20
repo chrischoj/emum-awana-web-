@@ -768,14 +768,26 @@ export default function TeacherHome() {
                   <span className="text-xs text-gray-400">({cat.teachers.length}명)</span>
                 </div>
                 <div className="grid grid-cols-4 gap-2">
-                  {cat.teachers.map(t => (
-                    <div key={t.id} className="relative">
-                      <TeacherFaceTile teacher={t} subtitle={t.position || undefined} />
-                      {isLeader(t.position) && (
-                        <span className="absolute -top-1 -right-1 text-xs px-1 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: cat.color, fontSize: '9px' }}>★</span>
-                      )}
-                    </div>
-                  ))}
+                  {cat.teachers.map(t => {
+                    const teacherAssignment = allAssignments.find(a => a.teacher_id === t.id);
+                    return (
+                      <div key={t.id} className="relative">
+                        <TeacherFaceTile teacher={t} subtitle={t.position || undefined} />
+                        {isLeader(t.position) && (
+                          <span className="absolute -top-1 -right-1 text-xs px-1 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: cat.color, fontSize: '9px' }}>★</span>
+                        )}
+                        {teacherAssignment && (
+                          <span
+                            className="mt-0.5 block text-center text-[10px] font-medium text-white rounded-full px-1.5 py-0.5 truncate"
+                            style={{ backgroundColor: teacherAssignment.team_color || '#6B7280' }}
+                            title={teacherAssignment.room_name}
+                          >
+                            {teacherAssignment.room_name}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
