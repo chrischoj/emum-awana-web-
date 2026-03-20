@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { getNotifications, getUnreadNotifications, markAsRead as markAsReadApi, markAllAsRead as markAllAsReadApi } from '../services/notificationService';
+import { getNotifications, getUnreadNotifications, markAsRead as markAsReadApi, markAllAsRead as markAllAsReadApi, cleanupOldNotifications } from '../services/notificationService';
 import type { Notification } from '../types/awana';
 
 const NOTIFICATION_TOAST_MESSAGES: Record<string, string> = {
@@ -38,6 +38,7 @@ export function useNotifications() {
   useEffect(() => {
     if (!teacher?.id || initialLoadDone.current) return;
     setLoading(true);
+    cleanupOldNotifications(teacher.id).catch(() => {});
     fetchNotifications().finally(() => {
       setLoading(false);
       initialLoadDone.current = true;

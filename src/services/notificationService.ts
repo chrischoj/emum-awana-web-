@@ -111,6 +111,17 @@ export async function getTeamName(teamId: string): Promise<string> {
   return data?.name || '팀';
 }
 
+/** 오래된 읽은 알림 정리 (3일 이상) */
+export async function cleanupOldNotifications(recipientId: string): Promise<void> {
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase
+    .from('notifications')
+    .delete()
+    .eq('recipient_id', recipientId)
+    .eq('read', true)
+    .lt('created_at', threeDaysAgo);
+}
+
 /** 클럽 이름 조회 */
 export async function getClubName(clubId: string): Promise<string> {
   const { data } = await supabase.from('clubs').select('name').eq('id', clubId).single();

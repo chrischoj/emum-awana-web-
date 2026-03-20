@@ -62,11 +62,11 @@ CREATE POLICY "notifications_delete_own" ON notifications
 -- Realtime 활성화
 ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 
--- 30일 이상 된 읽은 알림 자동 정리 함수 (선택적)
+-- 3일 이상 된 읽은 알림 자동 정리 함수
 CREATE OR REPLACE FUNCTION cleanup_old_notifications()
 RETURNS void AS $$
 BEGIN
   DELETE FROM notifications
-  WHERE read = true AND created_at < now() - interval '30 days';
+  WHERE read = true AND created_at < now() - interval '3 days';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
