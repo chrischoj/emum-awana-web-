@@ -71,7 +71,10 @@ export function useTeacherAssignment(): TeacherAssignmentInfo & {
       temporaryAssignments: clubAssignments.filter(a => a.assignment_type === 'temporary'),
       assignedMembers: isUnassigned
         ? members  // 미배정: 전체 멤버 (열람 전용)
-        : members.filter(m => m.room_id != null && roomIds.includes(m.room_id)),
+        : members.filter(m =>
+            (m.room_id != null && roomIds.includes(m.room_id)) ||
+            (!m.room_id && m.team_id != null && teamIds.includes(m.team_id))
+          ),
       isUnassigned,
       isReadOnly: isUnassigned && role !== 'admin',
     };
