@@ -125,6 +125,11 @@ export const getBadgeIconPath = (
   if (badgeGroup === 'recitation_pin') {
     return '/badges/common/pins/pin-01.png'; // 기본값, 실제로는 getRecitationPinIconPath 사용
   }
+  // 스팍스 보석: 단계 공통, 빨간/초록 분리
+  if (badgeGroup === 'gem' && clubType === 'sparks') {
+    if (badgeName?.includes('초록')) return '/badges/sparks/gem-green.png';
+    return '/badges/sparks/gem-red.png'; // 기본값 빨간보석
+  }
   // T&T 공유 리소스 체크
   if (clubType === 'tnt') {
     const tntSharedGroups: BadgeGroup[] = ['review', 'currency', 'multi_review', 'pin'];
