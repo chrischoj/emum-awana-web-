@@ -67,6 +67,8 @@ export function ClubProvider({ children }: { children: ReactNode }) {
 
   // Track clubs fetch result for parallel loading
   const [clubsFetched, setClubsFetched] = useState<Club[] | null>(null);
+  // 이미 데이터 로드가 완료된 teacher id 추적 (불필요한 재로드 방지)
+  const loadedForTeacherRef = useRef<string | null>(null);
 
   // Stage 1: Fetch clubs immediately on mount (no auth dependency)
   useEffect(() => {
@@ -85,6 +87,11 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       const clubList = clubsFetched!;
       if (clubList.length === 0) {
         setLoading(false);
+        return;
+      }
+
+      // 같은 teacher에 대해 이미 로드 완료된 경우 → 재로드 skip (백그라운드 복귀 보호)
+      if (teacher && loadedForTeacherRef.current === teacher.id && currentClub) {
         return;
       }
 
@@ -120,6 +127,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
         setTeams([]);
         setMembers([]);
         setLoading(false);
+        loadedForTeacherRef.current = null;
         return;
       }
 
@@ -152,6 +160,7 @@ export function ClubProvider({ children }: { children: ReactNode }) {
       setTeams(newTeams);
       setMembers(newMembers);
       setLoading(false);
+      loadedForTeacherRef.current = teacher?.id || null;
 
       // Update cache
       saveCache({

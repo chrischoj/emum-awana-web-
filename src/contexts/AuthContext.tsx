@@ -50,6 +50,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // 토큰 갱신(TOKEN_REFRESHED)인 경우: 동일 유저면 session만 조용히 교체, re-render 최소화
+      if (event === 'TOKEN_REFRESHED' && session?.user && lastValidUserIdRef.current === session.user.id) {
+        setSession(session);
+        // user/teacher는 변하지 않으므로 건드리지 않음
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -92,7 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 중복 호출 방지
     if (fetchingRef.current) return;
     fetchingRef.current = true;
-    setLoading(true);
+
+    // 이미 teacher가 있으면 loading 스피너를 보여주지 않고 백그라운드 갱신
+    const hasExisting = !!teacherRef.current;
+    if (!hasExisting) setLoading(true);
+
     try {
       const { data, error } = await supabase
         .from('teachers')
@@ -102,22 +113,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
       const t = data as Teacher;
-      setTeacher(t);
+
+      // 데이터가 실제로 변경된 경우에만 상태 업데이트 (불필요한 re-render 방지)
+      if (!teacherRef.current || teacherRef.current.id !== t.id || teacherRef.current.role !== t.role || teacherRef.current.name !== t.name || teacherRef.current.position !== t.position) {
+        setTeacher(t);
+        setRole(t.role);
+      }
       teacherRef.current = t;
-      setRole(t.role);
     } catch {
-      setTeacher(null);
-      teacherRef.current = null;
-      // teachers 테이블에 없으면 이미 가진 user 정보에서 role 확인
-      // (catch 내에서 추가 네트워크 호출하면 이중 hang 위험)
-      const currentUser = user;
-      if (currentUser?.user_metadata?.role === 'member') {
-        setRole('member');
-      } else {
-        setRole(null);
+      // 이미 teacher가 있으면 네트워크 실패 시 기존 상태 유지
+      if (!hasExisting) {
+        setTeacher(null);
+        teacherRef.current = null;
+        // teachers 테이블에 없으면 이미 가진 user 정보에서 role 확인
+        const currentUser = user;
+        if (currentUser?.user_metadata?.role === 'member') {
+          setRole('member');
+        } else {
+          setRole(null);
+        }
       }
     } finally {
-      setLoading(false);
+      if (!hasExisting) setLoading(false);
       fetchingRef.current = false;
     }
   }
