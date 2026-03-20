@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
@@ -41,7 +41,8 @@ export default function AttendancePage() {
   const { enqueue, pendingCount } = useOfflineQueue();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
 
-  const visibleTeams = isUnassigned ? teams : teams.filter(t => assignedTeamIds.includes(t.id));
+  const visibleTeams = (isUnassigned ? teams : teams.filter(t => assignedTeamIds.includes(t.id)))
+    .slice().sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
 
   // 배정된 반이 1개면 자동 선택
   useEffect(() => {
@@ -56,6 +57,9 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AttendanceStatus | 'all'>('all');
   const [teamSubmissions, setTeamSubmissions] = useState<Record<string, SubmissionStatus>>({});
+  type SortKey = 'team' | 'name' | 'status';
+  const [sortKey, setSortKey] = useState<SortKey>('team');
+  const [sortAsc, setSortAsc] = useState(true);
 
   const attCacheKey = `attendance-${currentClub?.id}-${selectedDate}`;
   const { restore: restoreAttendance } = useSessionCache(attCacheKey, attendance, Object.keys(attendance).length > 0);
@@ -208,6 +212,15 @@ export default function AttendancePage() {
     }
   };
 
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortAsc(prev => !prev);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  };
+
   const handleBulkPresent = async () => {
     if (!currentClub) return;
     if (isReadOnly) return;
@@ -271,10 +284,35 @@ export default function AttendancePage() {
   const teamFilteredMembers = selectedTeamId
     ? baseMembers.filter((m) => m.team_id === selectedTeamId)
     : baseMembers;
-  const filteredMembers =
+  const filteredUnsorted =
     filter === 'all'
       ? teamFilteredMembers
       : teamFilteredMembers.filter((m) => attendance[m.id]?.status === filter);
+  const filteredMembers = filteredUnsorted.slice().sort((a, b) => {
+    const dir = sortAsc ? 1 : -1;
+    if (sortKey === 'team') {
+      // 1차: 팀 배정 여부 (미배정은 맨 뒤)
+      const aHasTeam = a.team_id ? 0 : 1;
+      const bHasTeam = b.team_id ? 0 : 1;
+      if (aHasTeam !== bHasTeam) return aHasTeam - bHasTeam;
+      // 2차: 팀명 가나다순
+      const aTeam = teams.find(t => t.id === a.team_id)?.name || '';
+      const bTeam = teams.find(t => t.id === b.team_id)?.name || '';
+      const teamCmp = aTeam.localeCompare(bTeam, 'ko');
+      if (teamCmp !== 0) return teamCmp * dir;
+      // 3차: 이름순
+      return (a.name || '').localeCompare(b.name || '', 'ko') * dir;
+    }
+    if (sortKey === 'name') {
+      return (a.name || '').localeCompare(b.name || '', 'ko') * dir;
+    }
+    // status: 출석 > 지각 > 결석 > 미입력
+    const statusOrder: Record<string, number> = { present: 0, late: 1, absent: 2, none: 3 };
+    const aStatus = statusOrder[attendance[a.id]?.status || 'none'] ?? 3;
+    const bStatus = statusOrder[attendance[b.id]?.status || 'none'] ?? 3;
+    if (aStatus !== bStatus) return (aStatus - bStatus) * dir;
+    return (a.name || '').localeCompare(b.name || '', 'ko');
+  });
 
   if (loading) {
     return (
@@ -355,7 +393,7 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* Bulk action + filter */}
+      {/* Bulk action + sort */}
       <div className="flex items-center justify-between mb-3">
         <button
           data-testid="att-bulk-present-btn"
@@ -365,6 +403,29 @@ export default function AttendancePage() {
         >
           전체 출석
         </button>
+        <div className="flex gap-1">
+          {([
+            { key: 'team' as SortKey, label: '클럽/팀' },
+            { key: 'name' as SortKey, label: '이름' },
+            { key: 'status' as SortKey, label: '상태' },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => toggleSort(key)}
+              className={cn(
+                'px-2 py-1 text-xs rounded-md font-medium transition-colors',
+                sortKey === key
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+              )}
+            >
+              {label}
+              {sortKey === key && (
+                <span className="ml-0.5">{sortAsc ? '↑' : '↓'}</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4 overflow-x-auto">
@@ -391,18 +452,42 @@ export default function AttendancePage() {
 
       {/* Member list */}
       <div className="space-y-2">
-        {filteredMembers.map((member) => {
+        {filteredMembers.map((member, idx) => {
           const entry = attendance[member.id];
           if (!entry) return null;
           const team = teams.find((t) => t.id === member.team_id);
           const config = STATUS_CONFIG[entry.status];
 
+          // 팀 그룹 헤더: 팀 정렬 모드 + 전체 보기에서 팀이 바뀔 때 표시
+          let teamHeader: React.ReactNode = null;
+          if (sortKey === 'team' && !selectedTeamId) {
+            const prevMember = idx > 0 ? filteredMembers[idx - 1] : null;
+            const prevTeamId = prevMember?.team_id;
+            if (member.team_id !== prevTeamId) {
+              teamHeader = (
+                <div className="flex items-center gap-2 pt-2 pb-1">
+                  {team && (
+                    <div
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: team.color }}
+                    />
+                  )}
+                  <span className="text-xs font-bold text-gray-500">
+                    {team?.name || '미배정'}
+                  </span>
+                  <div className="flex-1 border-t border-gray-200" />
+                </div>
+              );
+            }
+          }
+
           return (
-            <div
-              key={member.id}
-              data-testid={`att-member-${member.id}`}
-              className="bg-white rounded-xl border border-gray-200 p-3"
-            >
+            <Fragment key={member.id}>
+              {teamHeader}
+              <div
+                data-testid={`att-member-${member.id}`}
+                className="bg-white rounded-xl border border-gray-200 p-3"
+              >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {team && (
@@ -444,6 +529,7 @@ export default function AttendancePage() {
                 />
               )}
             </div>
+          </Fragment>
           );
         })}
       </div>

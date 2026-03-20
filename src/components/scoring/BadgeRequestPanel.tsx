@@ -148,7 +148,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
                 const isSelected  = selectedBadgeId === badge.id;
 
                 let chipClass =
-                  'px-2.5 py-1.5 text-xs rounded-full border font-medium touch-manipulation select-none transition-all active:scale-95 ';
+                  'px-2.5 py-1.5 text-xs rounded-lg border font-medium touch-manipulation select-none transition-all active:scale-95 text-center leading-snug ';
 
                 if (isDisabled) {
                   chipClass +=
@@ -247,7 +247,7 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
                   className="flex items-center gap-1.5 text-xs"
                 >
                   <span>{cfg.icon}</span>
-                  <span className="flex-1 text-gray-700 truncate">
+                  <span className="flex-1 text-gray-700 break-words">
                     {req.badge.name}
                   </span>
                   <span className={`font-medium ${cfg.color}`}>

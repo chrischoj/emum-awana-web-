@@ -288,12 +288,12 @@ export default function AwardManagement() {
                   <img
                     src={iconSrc}
                     alt={badge.name}
-                    className="w-12 h-12 mx-auto mb-1 object-contain rounded"
+                    className="w-16 h-16 mx-auto mb-1.5 object-contain rounded"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = BADGE_FALLBACK_ICON;
                     }}
                   />
-                  <p className="text-xs font-medium text-gray-700 truncate">{badge.name}</p>
+                  <p className="text-xs font-medium text-gray-700 leading-tight line-clamp-2 break-keep">{badge.name}</p>
                 </div>
               );
             })}
@@ -370,12 +370,12 @@ export default function AwardManagement() {
                             )
                           }
                           alt={badge.name}
-                          className="w-12 h-12 mx-auto mb-1 object-contain"
+                          className="w-16 h-16 mx-auto mb-1.5 object-contain"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = BADGE_FALLBACK_ICON;
                           }}
                         />
-                        <p className="text-xs font-medium text-gray-700 truncate">{badge.name}</p>
+                        <p className="text-xs font-medium text-gray-700 leading-tight line-clamp-2 break-keep">{badge.name}</p>
                       </div>
                     ))}
                     {groupBadges.length === 0 && (

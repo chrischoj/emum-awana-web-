@@ -93,7 +93,7 @@ export function BadgeAssignmentModal({
                     <img
                       src={badge.icon_url || BADGE_FALLBACK_ICON}
                       alt=""
-                      className="w-8 h-8 object-contain"
+                      className="w-12 h-12 object-contain"
                       onError={(e) => { (e.target as HTMLImageElement).src = BADGE_FALLBACK_ICON; }}
                     />
                     <div>
