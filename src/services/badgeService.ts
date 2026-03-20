@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Badge, MemberBadge } from '../types/awana';
+import type { Badge, MemberBadge, ClubType, ClubStage, BadgeType, BadgeGroup } from '../types/awana';
 
 export async function getBadges(): Promise<Badge[]> {
   const { data, error } = await supabase.from('badges').select('*').order('name');
@@ -74,4 +74,59 @@ export async function getBadgesByCategory(category: string): Promise<Badge[]> {
     .order('name');
   if (error) throw error;
   return (data as Badge[]) || [];
+}
+
+export async function getClubStages(clubType: ClubType): Promise<ClubStage[]> {
+  const { data, error } = await supabase
+    .from('club_stages')
+    .select('*')
+    .eq('club_type', clubType)
+    .order('sort_order');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getBadgesByStageAndGroup(stageId: string, badgeGroup?: BadgeGroup): Promise<Badge[]> {
+  let query = supabase
+    .from('badges')
+    .select('*, stage:club_stages(*)')
+    .eq('stage_id', stageId)
+    .order('badge_group')
+    .order('sort_order');
+  if (badgeGroup) {
+    query = query.eq('badge_group', badgeGroup);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getBadgesByClubType(clubType: ClubType): Promise<Badge[]> {
+  const { data, error } = await supabase
+    .from('badges')
+    .select('*, stage:club_stages!inner(*)')
+    .eq('stage.club_type', clubType)
+    .order('sort_order', { referencedTable: 'club_stages' })
+    .order('badge_group')
+    .order('sort_order');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createBadgeWithStage(badge: {
+  name: string;
+  badge_type: BadgeType;
+  badge_group: BadgeGroup;
+  stage_id: string;
+  description?: string;
+  icon_url?: string;
+  sort_order?: number;
+}): Promise<Badge> {
+  const { data, error } = await supabase
+    .from('badges')
+    .insert(badge)
+    .select('*, stage:club_stages(*)')
+    .single();
+  if (error) throw error;
+  return data;
 }

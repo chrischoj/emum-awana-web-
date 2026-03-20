@@ -10,6 +10,7 @@ export type AttendanceStatus = 'present' | 'late' | 'absent' | 'none';
 export type ScoringCategory = 'attendance' | 'handbook' | 'uniform' | 'recitation';
 export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memorization' | 'special' | 'custom';
 export type BadgeCategory = 'jewel' | 'promotion' | 'citation' | 'special';
+export type BadgeGroup = 'promotion' | 'podium' | 'completion' | 'review' | 'workbook' | 'multi_review' | 'currency' | 'pin' | 'recitation_pin';
 export type EnrollmentStatus = 'pending' | 'active' | 'inactive';
 
 // ---- Core Entities ----
@@ -157,6 +158,17 @@ export interface LateAbsenceTracking {
   updated_at: string;
 }
 
+// ---- Club Stages ----
+
+export interface ClubStage {
+  id: string;
+  club_type: ClubType;
+  stage_key: string;
+  stage_name: string;
+  sort_order: number;
+  created_at: string;
+}
+
 // ---- Badges ----
 
 export interface Badge {
@@ -169,7 +181,11 @@ export interface Badge {
   category: BadgeCategory | null;
   level: number | null;
   sort_order: number | null;
+  stage_id: string | null;
+  badge_group: BadgeGroup | null;
   created_at: string;
+  // join시 사용할 optional 필드
+  stage?: ClubStage;
 }
 
 export interface MemberBadge {

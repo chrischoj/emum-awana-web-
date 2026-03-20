@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Avatar } from '../ui/Avatar';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
+import { BADGE_GROUP_LABELS } from '../../constants/badgeConstants';
 import type { Badge, BadgeRequest, BadgeRequestStatus } from '../../types/awana';
 
 // ---- Constants ----
@@ -12,7 +13,26 @@ const CATEGORY_LABELS: Record<string, string> = {
   special: '⭐ 특별',
 };
 
-const CATEGORY_ORDER = ['jewel', 'promotion', 'citation', 'special'] as const;
+const GROUP_LABELS: Record<string, string> = {
+  ...CATEGORY_LABELS,
+  ...Object.fromEntries(
+    Object.entries(BADGE_GROUP_LABELS).map(([k, v]) => {
+      const icons: Record<string, string> = {
+        promotion: '🏅', podium: '🏆', completion: '🎖️',
+        review: '📖', workbook: '📓', multi_review: '🌟',
+        currency: '🪙', pin: '📌',
+      };
+      return [k, `${icons[k] || '🏅'} ${v}`];
+    })
+  ),
+};
+
+const GROUP_ORDER = [
+  // 새 badge_group 키들
+  'promotion', 'podium', 'completion', 'review', 'workbook', 'multi_review', 'currency',
+  // 기존 category 키들 (fallback)
+  'jewel', 'citation', 'special',
+] as const;
 
 const STATUS_CONFIG: Record<BadgeRequestStatus, { icon: string; label: string; color: string }> = {
   requested: { icon: '🟡', label: '대기중', color: 'text-amber-600' },
@@ -56,17 +76,16 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // badges를 category로 그룹화
+  // badges를 그룹으로 분류 (badge_group 우선, 없으면 category fallback)
   const groupedBadges = useMemo(() => {
     const groups: Record<string, Badge[]> = {};
     for (const badge of badges) {
-      const cat = badge.category ?? 'special';
-      if (!groups[cat]) groups[cat] = [];
-      groups[cat].push(badge);
+      const groupKey = badge.badge_group || badge.category || 'special';
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(badge);
     }
-    // sort_order 기준 정렬
-    for (const cat of Object.keys(groups)) {
-      groups[cat].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
     }
     return groups;
   }, [badges]);
@@ -111,18 +130,18 @@ const BadgeRequestPanel: React.FC<BadgeRequestPanelProps> = ({
           <span className="text-xs font-semibold text-amber-700">🏅 {memberName} 뱃지 신청</span>
         </button>
       </div>
-      {/* 카테고리별 뱃지 선택 */}
+      {/* 그룹별 뱃지 선택 */}
       <div className="space-y-2.5">
-        {CATEGORY_ORDER.filter((cat) => groupedBadges[cat]?.length > 0).map((cat) => (
-          <div key={cat}>
-            {/* 카테고리 라벨 */}
+        {GROUP_ORDER.filter((key) => groupedBadges[key]?.length > 0).map((key) => (
+          <div key={key}>
+            {/* 그룹 라벨 */}
             <p className="text-xs font-semibold text-gray-500 mb-1">
-              {CATEGORY_LABELS[cat]}
+              {GROUP_LABELS[key] || key}
             </p>
 
             {/* 칩 목록 */}
             <div className="flex flex-wrap gap-1.5">
-              {groupedBadges[cat].map((badge) => {
+              {groupedBadges[key].map((badge) => {
                 const isOwned     = existingBadgeIds.includes(badge.id);
                 const isPending   = existingRequestIds.includes(badge.id);
                 const isDisabled  = isOwned || isPending;
