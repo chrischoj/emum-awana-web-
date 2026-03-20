@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Camera, RefreshCw, UserPlus, Key } from 'lucide-react';
+import { Camera, RefreshCw, UserPlus, Key, ChevronDown, ChevronRight } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ import { getAllAssignmentsByClub, createAssignment, endAssignment, deleteAssignm
 import { formatPhone, getInitialPassword } from '../../utils/phone';
 import { PositionInput } from '../../components/ui/PositionInput';
 import { POSITION_PRESETS } from '../../constants/positions';
+import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
 import type { Teacher, ActiveTeacherAssignment, AssignmentType, Room } from '../../types/awana';
 
 type ClubFilterKey = 'all' | 'sparks' | 'tnt' | 'unassigned';
@@ -271,6 +272,7 @@ export default function TeacherManagement() {
   const [newAssignEndDate, setNewAssignEndDate] = useState('');
   const [assignCreating, setAssignCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   const [showAddTeacher, setShowAddTeacher] = useState(false);
   const [newTeacherName, setNewTeacherName] = useState('');
@@ -514,21 +516,70 @@ export default function TeacherManagement() {
       {/* 교사 리스트 */}
       {allTeachers.length === 0 ? (
         <p className="text-gray-500 text-center py-10">해당하는 교사가 없습니다.</p>
-      ) : (
-        <div className="space-y-3">
-          {allTeachers.map((teacher) => (
-            <TeacherCard
-              key={teacher.id}
-              teacher={teacher}
-              clubs={clubs}
-              assignments={assignments.filter(a => a.teacher_id === teacher.id)}
-              onAction={() => { loadTeachers(); loadAssignments(); }}
-              onAvatarClick={setEditAvatarTeacher}
-              onManageAssignment={setAssignmentTeacher}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const activeTeachers = allTeachers.filter(t => t.active !== false);
+        const inactiveTeachers = allTeachers.filter(t => t.active === false);
+        const categories = groupTeachersByCategory(activeTeachers, clubs);
+
+        return (
+          <div className="space-y-3">
+            {/* 활성 교사 - 카테고리별 구분선 */}
+            {categories.map((cat, catIdx) => (
+              <div key={cat.key}>
+                {/* 카테고리 divider */}
+                <div className="flex items-center gap-2 py-2 px-1">
+                  <span className="text-sm">{cat.emoji}</span>
+                  <span className="text-xs font-semibold text-gray-500">{cat.label}</span>
+                  <span className="text-xs text-gray-300">({cat.teachers.length}명)</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+                <div className="space-y-3">
+                  {cat.teachers.map((teacher) => (
+                    <TeacherCard
+                      key={teacher.id}
+                      teacher={teacher}
+                      clubs={clubs}
+                      assignments={assignments.filter(a => a.teacher_id === teacher.id)}
+                      onAction={() => { loadTeachers(); loadAssignments(); }}
+                      onAvatarClick={setEditAvatarTeacher}
+                      onManageAssignment={setAssignmentTeacher}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* 비활성 교사 - 접힌 섹션 */}
+            {inactiveTeachers.length > 0 && (
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowInactive(prev => !prev)}
+                  className="flex items-center gap-2 w-full py-3 px-4 bg-gray-100 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-200 transition-colors"
+                >
+                  {showInactive ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  <span>비활성 교사</span>
+                  <span className="text-xs text-gray-400">({inactiveTeachers.length}명)</span>
+                </button>
+                {showInactive && (
+                  <div className="mt-3 space-y-3">
+                    {inactiveTeachers.map((teacher) => (
+                      <TeacherCard
+                        key={teacher.id}
+                        teacher={teacher}
+                        clubs={clubs}
+                        assignments={assignments.filter(a => a.teacher_id === teacher.id)}
+                        onAction={() => { loadTeachers(); loadAssignments(); }}
+                        onAvatarClick={setEditAvatarTeacher}
+                        onManageAssignment={setAssignmentTeacher}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 아바타 업로드 모달 */}
       <Modal
