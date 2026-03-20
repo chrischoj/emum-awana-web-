@@ -27,3 +27,9 @@ docs/CRITICAL_*
 *.njsproj
 *.sln
 *.sw?
+
+# E2E Tests
+e2e/.auth/
+e2e/.env
+e2e/test-results/
+e2e/playwright-report/
