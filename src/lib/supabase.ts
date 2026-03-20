@@ -19,9 +19,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       if (options.signal) {
         return fetch(url, options);
       }
-      // signal이 없으면 10초 타임아웃 적용
+      // auth 요청(토큰 갱신 등)은 30초, 일반 요청은 10초 타임아웃
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      const isAuth = urlStr.includes('/auth/');
+      const timeoutMs = isAuth ? 30000 : 10000;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       return fetch(url, { ...options, signal: controller.signal })
         .finally(() => clearTimeout(timeout));
     },

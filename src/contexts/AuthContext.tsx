@@ -26,16 +26,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const fetchingRef = useRef(false);
+  const teacherRef = useRef<Teacher | null>(null);
+
+  // 마지막으로 유효했던 user id를 기억 (토큰 갱신 실패 시 보호용)
+  const lastValidUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     // onAuthStateChange만 사용 (INITIAL_SESSION 이벤트로 getSession() 역할도 수행)
     // getSession() + onAuthStateChange 이중 호출 race condition 제거
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // TOKEN_REFRESHED 실패 등으로 session이 null이 되는 경우:
+      // 명시적 SIGNED_OUT이 아니면 기존 상태 유지 (모바일 백그라운드 복귀 보호)
+      if (!session && event !== 'SIGNED_OUT' && lastValidUserIdRef.current) {
+        // 세션 복구 시도 (localStorage에 저장된 Supabase 세션)
+        supabase.auth.getSession().then(({ data: { session: recovered } }) => {
+          if (recovered) {
+            setSession(recovered);
+            setUser(recovered.user);
+            lastValidUserIdRef.current = recovered.user.id;
+          }
+          // 복구 실패 시에도 기존 teacher 상태를 유지 (강제 로그아웃 방지)
+        });
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
+        lastValidUserIdRef.current = session.user.id;
         fetchTeacher(session.user.id);
       } else {
+        lastValidUserIdRef.current = null;
         setTeacher(null);
         setRole(null);
         setLoading(false);
@@ -43,6 +64,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // 모바일 백그라운드→포그라운드 복귀 시 세션 갱신
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return;
+      // 백그라운드 복귀 시 세션을 proactive하게 갱신
+      supabase.auth.getSession().then(({ data: { session: freshSession } }) => {
+        if (freshSession) {
+          setSession(freshSession);
+          setUser(freshSession.user);
+          lastValidUserIdRef.current = freshSession.user.id;
+          // teacher가 없는 경우에만 다시 fetch (정상 상태면 skip)
+          if (!teacherRef.current && freshSession.user) {
+            fetchTeacher(freshSession.user.id);
+          }
+        }
+      });
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   async function fetchTeacher(userId: string) {
@@ -58,10 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (error) throw error;
-      setTeacher(data as Teacher);
-      setRole((data as Teacher).role);
+      const t = data as Teacher;
+      setTeacher(t);
+      teacherRef.current = t;
+      setRole(t.role);
     } catch {
       setTeacher(null);
+      teacherRef.current = null;
       // teachers 테이블에 없으면 이미 가진 user 정보에서 role 확인
       // (catch 내에서 추가 네트워크 호출하면 이중 hang 위험)
       const currentUser = user;
@@ -120,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setUser(null);
     setTeacher(null);
+    teacherRef.current = null;
     setRole(null);
   }
 

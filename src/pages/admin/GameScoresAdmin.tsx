@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getToday, cn } from '../../lib/utils';
 import type { GameScoreEntry, Team } from '../../types/awana';
 import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
+import { useAppResume } from '../../hooks/useAppResume';
 
 interface ColorTotal {
   name: string;
@@ -121,6 +122,12 @@ export default function GameScoresAdmin() {
       setLoading(false);
     }
   }
+
+  // 백그라운드→포그라운드 복귀 시 데이터 갱신
+  useAppResume(() => {
+    if (viewMode === 'all') loadAllData();
+    else loadClubData();
+  });
 
   useEffect(() => {
     if (!lastUpdated) return;

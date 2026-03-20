@@ -17,6 +17,7 @@ import { OfflineBanner } from '../../components/ui/OfflineBanner';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { useSessionCache } from '../../hooks/useSessionCache';
 import { useOfflineQueue } from '../../hooks/useOfflineQueue';
+import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
 const POINT_PRESETS = [50, 100, 200, 400];
@@ -80,6 +81,9 @@ export default function GameScoringPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // 백그라운드→포그라운드 복귀 시 스피너 없이 데이터 갱신
+  useAppResume(() => { loadData(); });
 
   // Realtime: 잠금 상태 변경 감지
   useEffect(() => {

@@ -18,6 +18,7 @@ import type { WeeklyScore, ScoringCategory, AttendanceStatus, Member, Submission
 import BadgeRequestPanel from '../../components/scoring/BadgeRequestPanel';
 import BadgeReviewBanner from '../../components/scoring/BadgeReviewBanner';
 import { useBadgeRequests } from '../../hooks/useBadgeRequests';
+import { useAppResume } from '../../hooks/useAppResume';
 import { getBadges, getMemberBadges } from '../../services/badgeService';
 import { getMemberBadgeRequests } from '../../services/badgeRequestService';
 import { canApproveBadges } from '../../lib/positionUtils';
@@ -272,6 +273,38 @@ export default function ScoringPage() {
       loadScores(false);
     });
   }, [onReconnect, loadScores]);
+
+  // 백그라운드 전환 시 pending sync 즉시 flush, 복귀 시 soft-reload
+  const flushPendingSyncs = useCallback(() => {
+    if (!currentClub || !teacher) return;
+    for (const [key, timeout] of pendingSyncs.current) {
+      clearTimeout(timeout);
+      const dashIdx = key.indexOf('-');
+      const memberId = key.slice(0, dashIdx);
+      const category = key.slice(dashIdx + 1) as ScoringCategory;
+      const memberScore = scores[memberId];
+      if (memberScore && category) {
+        let basePoints = 0;
+        let multiplier = 1;
+        if (category === 'attendance') basePoints = memberScore.attendance.points;
+        else if (category === 'handbook') basePoints = memberScore.handbook.points;
+        else if (category === 'uniform') basePoints = memberScore.uniform.points;
+        else if (category === 'recitation') { basePoints = 100; multiplier = memberScore.recitation.multiplier; }
+        upsertScore({
+          memberId, clubId: currentClub.id, trainingDate: selectedDate,
+          category, basePoints, multiplier, recordedBy: teacher.id,
+        }).catch(() => {});
+      }
+    }
+    pendingSyncs.current.clear();
+  }, [currentClub, teacher, selectedDate, scores]);
+
+  useAppResume(
+    // onResume: 스피너 없이 데이터 갱신
+    () => { loadScores(false); },
+    // onBackground: pending sync 즉시 flush
+    flushPendingSyncs,
+  );
 
   const handleAttendanceTap = (memberId: string) => {
     if (isLocked) return;
