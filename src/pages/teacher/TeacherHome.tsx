@@ -113,15 +113,21 @@ export default function TeacherHome() {
   const [dataLoadError, setDataLoadError] = useState(false);
 
   useEffect(() => {
+    let stale = false;
     Promise.all([
       supabase.from('teachers').select('*').eq('active', true).order('name'),
       supabase.from('active_teacher_assignments').select('*'),
       supabase.from('rooms').select('*').eq('active', true).order('name'),
     ]).then(([teachersRes, assignmentsRes, roomsRes]) => {
+      if (stale) return;
       setAllTeachers((teachersRes.data as Teacher[]) || []);
       setAllAssignments((assignmentsRes.data as ActiveTeacherAssignment[]) || []);
       setAllRooms((roomsRes.data as Room[]) || []);
-    }).catch(() => { setAllTeachers([]); setAllAssignments([]); setAllRooms([]); setDataLoadError(true); });
+    }).catch(() => {
+      if (stale) return;
+      setAllTeachers([]); setAllAssignments([]); setAllRooms([]); setDataLoadError(true);
+    });
+    return () => { stale = true; };
   }, []);
 
   // 팀별 담임 교사 맵: teamId -> Teacher[]
@@ -151,11 +157,13 @@ export default function TeacherHome() {
     const otherClubIds = clubs.filter(c => c.id !== currentClub.id).map(c => c.id);
     if (otherClubIds.length === 0) { setOtherClubData([]); return; }
 
+    let stale = false;
     Promise.all([
       supabase.from('teams').select('*').in('club_id', otherClubIds).order('name'),
       supabase.from('members').select('*').in('club_id', otherClubIds)
         .eq('active', true).eq('enrollment_status', 'active').order('name'),
     ]).then(([teamsRes, membersRes]) => {
+      if (stale) return;
       const otherTeamsList = (teamsRes.data as Team[]) || [];
       const otherMembersList = (membersRes.data as Member[]) || [];
 
@@ -174,7 +182,8 @@ export default function TeacherHome() {
         .filter(g => g.teams.length > 0);
 
       setOtherClubData(grouped);
-    }).catch(() => setOtherClubData([]));
+    }).catch(() => { if (!stale) setOtherClubData([]); });
+    return () => { stale = true; };
   }, [currentClub, clubs]);
 
   // 같은 클럽 내 다른 학급 아이들
@@ -245,14 +254,15 @@ export default function TeacherHome() {
       setTeamSubmissions([]);
       return;
     }
+    let stale = false;
     const today = getToday();
     Promise.all([
       getSubmissionsByDate(currentClub.id, today),
       getWeeklyScores(currentClub.id, today),
     ])
       .then(([submissions, scores]) => {
+        if (stale) return;
         const subMap = new Map(submissions.map(s => [s.team_id, s.status]));
-        // 팀별 점수 존재 여부: member의 team_id로 매핑
         const teamHasScores = new Set<string>();
         for (const score of scores) {
           const member = assignedMembers.find(m => m.id === score.member_id);
@@ -273,7 +283,8 @@ export default function TeacherHome() {
         });
         setTeamSubmissions(infos);
       })
-      .catch(() => setTeamSubmissions([]));
+      .catch(() => { if (!stale) setTeamSubmissions([]); });
+    return () => { stale = true; };
   }, [currentClub, assignedTeamIds, assignedMembers, teams]);
 
   const getStatusLabel = (status: SubmissionStatus | null, hasScores: boolean) => {

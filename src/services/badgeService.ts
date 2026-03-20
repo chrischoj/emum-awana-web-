@@ -113,6 +113,23 @@ export async function getBadgesByClubType(clubType: ClubType): Promise<Badge[]> 
   return data || [];
 }
 
+/** 여러 멤버의 뱃지를 한 번에 조회 (N+1 쿼리 방지) */
+export async function getBatchMemberBadges(memberIds: string[]): Promise<Record<string, string[]>> {
+  if (memberIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('member_badges')
+    .select('member_id, badge_id')
+    .in('member_id', memberIds);
+  if (error) throw error;
+  const map: Record<string, string[]> = {};
+  for (const id of memberIds) map[id] = [];
+  for (const row of data || []) {
+    if (map[row.member_id]) map[row.member_id].push(row.badge_id);
+    else map[row.member_id] = [row.badge_id];
+  }
+  return map;
+}
+
 export async function createBadgeWithStage(badge: {
   name: string;
   badge_type: BadgeType;

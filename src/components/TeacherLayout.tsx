@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { LogOut, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { TeacherAssignmentProvider } from '../contexts/TeacherAssignmentContext';
+import { BadgeRequestsProvider } from '../contexts/BadgeRequestsContext';
 import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
 import { useSessionCleanup } from '../hooks/useSessionCleanup';
 import { teacherNavItems } from '../config/navigation';
@@ -52,7 +54,11 @@ export default function TeacherLayout() {
 
       {/* Main content */}
       <main className="p-4">
-        <Outlet />
+        <TeacherAssignmentProvider>
+          <BadgeRequestsProvider>
+            <Outlet />
+          </BadgeRequestsProvider>
+        </TeacherAssignmentProvider>
       </main>
 
       {/* Bottom tab bar (mobile optimized) */}

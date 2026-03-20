@@ -19,8 +19,8 @@ import BadgeRequestPanel from '../../components/scoring/BadgeRequestPanel';
 import BadgeReviewBanner from '../../components/scoring/BadgeReviewBanner';
 import { useBadgeRequests } from '../../hooks/useBadgeRequests';
 import { useAppResume } from '../../hooks/useAppResume';
-import { getBadges, getMemberBadges } from '../../services/badgeService';
-import { getMemberBadgeRequests } from '../../services/badgeRequestService';
+import { getBadges, getBatchMemberBadges } from '../../services/badgeService';
+import { getMemberBadgeRequests, getBatchMemberBadgeRequests } from '../../services/badgeRequestService';
 import { canApproveBadges } from '../../lib/positionUtils';
 import type { Badge, BadgeRequest } from '../../types/awana';
 
@@ -144,31 +144,28 @@ export default function ScoringPage() {
     getBadges().then(setAllBadges).catch(() => {});
   }, []);
 
-  // Load member badges & requests when members change
+  // Load member badges & requests when members change (배치 쿼리로 N+1 방지)
   useEffect(() => {
     if (members.length === 0) return;
-    const loadBadgeData = async () => {
-      const badgeMap: Record<string, string[]> = {};
-      const requestMap: Record<string, (BadgeRequest & { badge: { id: string; name: string; category: string | null } })[]> = {};
-      await Promise.all(
-        members.map(async (m) => {
-          try {
-            const [badges, requests] = await Promise.all([
-              getMemberBadges(m.id),
-              getMemberBadgeRequests(m.id),
-            ]);
-            badgeMap[m.id] = badges.map((b) => b.badge_id);
-            requestMap[m.id] = requests;
-          } catch {
-            badgeMap[m.id] = [];
-            requestMap[m.id] = [];
-          }
-        })
-      );
-      setMemberBadgeMap(badgeMap);
-      setMemberRequestMap(requestMap);
-    };
-    loadBadgeData();
+    let stale = false;
+    const memberIds = members.map(m => m.id);
+    Promise.all([
+      getBatchMemberBadges(memberIds),
+      getBatchMemberBadgeRequests(memberIds),
+    ])
+      .then(([badgeMap, requestMap]) => {
+        if (!stale) {
+          setMemberBadgeMap(badgeMap);
+          setMemberRequestMap(requestMap);
+        }
+      })
+      .catch(() => {
+        if (!stale) {
+          setMemberBadgeMap({});
+          setMemberRequestMap({});
+        }
+      });
+    return () => { stale = true; };
   }, [members]);
 
   // Realtime subscription for attendance & score changes

@@ -50,6 +50,24 @@ export async function getPendingBadgeRequestCount(): Promise<number> {
   return count || 0;
 }
 
+/** 여러 멤버의 뱃지 신청을 한 번에 조회 (N+1 쿼리 방지) */
+export async function getBatchMemberBadgeRequests(memberIds: string[]): Promise<Record<string, (BadgeRequest & { badge: { id: string; name: string; category: string | null } })[]>> {
+  if (memberIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from('badge_requests')
+    .select('*, badge:badges(id, name, category)')
+    .in('member_id', memberIds)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  const map: Record<string, (BadgeRequest & { badge: { id: string; name: string; category: string | null } })[]> = {};
+  for (const id of memberIds) map[id] = [];
+  for (const row of (data || []) as any[]) {
+    if (map[row.member_id]) map[row.member_id].push(row);
+    else map[row.member_id] = [row];
+  }
+  return map;
+}
+
 // ---- 신청 ----
 
 export async function createBadgeRequest(params: {
