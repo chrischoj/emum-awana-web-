@@ -21,7 +21,7 @@ import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
 const POINT_PRESETS = [50, 100, 200, 400];
-const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수', '보너스', '애교 점수'];
+const DESCRIPTION_PRESETS = ['릴레이 게임', '개별 게임', '응원 점수', '보너스'];
 
 export default function GameScoringPage() {
   const { teacher } = useAuth();
@@ -373,8 +373,8 @@ export default function GameScoringPage() {
               }
             >
               {team.name}
-              <div className="text-xs mt-0.5 opacity-70">
-                {selectedTeamIds.has(team.id) ? '✓' : ''}
+              <div className={cn("text-xs mt-0.5", selectedTeamIds.has(team.id) ? "opacity-70" : "opacity-0")}>
+                ✓
               </div>
             </button>
           ))}
