@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -42,11 +43,39 @@ import ProfilePage from './pages/teacher/ProfilePage';
 // Role-based redirect component
 function RoleRedirect() {
   const { session, role, loading } = useAuth();
+  const [showFallback, setShowFallback] = useState(false);
+
+  useEffect(() => {
+    if (!loading) { setShowFallback(false); return; }
+    const timer = setTimeout(() => setShowFallback(true), 5000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+          {showFallback && (
+            <div className="text-center">
+              <p className="text-sm text-gray-500 mb-3">로딩이 오래 걸리고 있습니다</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { window.location.href = '/admin'; }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                >
+                  관리자 페이지
+                </button>
+                <button
+                  onClick={() => { window.location.href = '/teacher'; }}
+                  className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
+                >
+                  교사 페이지
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
