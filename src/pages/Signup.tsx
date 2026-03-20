@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import { AvatarUpload } from '../components/ui/AvatarUpload';
 import { PositionInput } from '../components/ui/PositionInput';
+import { formatPhone, getInitialPassword } from '../utils/phone';
 
 type TabType = 'teacher' | 'member';
 
@@ -85,7 +86,7 @@ const Signup = () => {
       ? `${phoneDigits}@awana.local`
       : formData.email;
     const resolvedPassword = simpleMode
-      ? phoneDigits
+      ? getInitialPassword(formData.phone)
       : formData.password;
 
     // Sign up with Supabase Auth
@@ -103,7 +104,7 @@ const Signup = () => {
 
     // 이미 가입된 이메일인 경우 (Supabase는 보안상 동일 응답을 줌)
     if (!authData.user?.identities?.length) {
-      toast.error(simpleMode ? '이미 가입된 이름입니다. 로그인해주세요.' : '이미 가입된 이메일입니다. 로그인해주세요.');
+      toast.error(simpleMode ? '이미 가입된 전화번호입니다. 로그인해주세요.' : '이미 가입된 이메일입니다. 로그인해주세요.');
       navigate('/login');
       return;
     }
@@ -248,7 +249,7 @@ const Signup = () => {
           </button>
           <p className="text-center text-xs text-gray-400 mt-3">
             {registeredSimple
-              ? `로그인 ID: 전화번호 숫자 / 초기 비밀번호: 전화번호 숫자`
+              ? `로그인 ID: 전화번호 / 초기 비밀번호: 전화번호 뒷 8자리`
               : '이메일 확인 후 로그인해주세요'}
           </p>
         </div>
@@ -404,13 +405,13 @@ const Signup = () => {
                 type="tel"
                 required
                 value={formData.phone}
-                onChange={handleChange}
+                onChange={(e) => setFormData({ ...formData, phone: formatPhone(e.target.value) })}
                 className={inputClass}
                 placeholder="010-1234-5678"
               />
               {simpleMode && formData.phone && (
                 <p className="text-xs text-gray-400 mt-1">
-                  초기 비밀번호: {formData.phone.replace(/[^0-9]/g, '')} (전화번호 숫자)
+                  로그인 ID: {formData.phone.replace(/[^0-9]/g, '')} / 초기 비밀번호: {getInitialPassword(formData.phone)} (뒷 8자리)
                 </p>
               )}
             </div>

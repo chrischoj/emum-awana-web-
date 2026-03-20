@@ -11,6 +11,7 @@ import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { Switch } from '../../components/ui/Switch';
 import { getAllAssignmentsByClub, createAssignment, endAssignment, deleteAssignment } from '../../services/assignmentService';
+import { formatPhone, getInitialPassword } from '../../utils/phone';
 import { PositionInput } from '../../components/ui/PositionInput';
 import { POSITION_PRESETS } from '../../constants/positions';
 import type { Teacher, ActiveTeacherAssignment, AssignmentType, Room } from '../../types/awana';
@@ -149,9 +150,9 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    const loginId = teacher.name;
-                    const initialPw = teacher.phone?.replace(/[^0-9]/g, '') || '(전화번호 미등록)';
-                    toast(`로그인: ${loginId}\n초기 비밀번호: ${initialPw}`, { icon: '🔑', duration: 5000 });
+                    const loginId = teacher.phone?.replace(/[^0-9]/g, '') || teacher.name;
+                    const initialPw = teacher.phone ? getInitialPassword(teacher.phone) : '(미등록)';
+                    toast(`로그인: ${loginId}\n초기 비밀번호: ${initialPw} (뒷8자리)`, { icon: '🔑', duration: 5000 });
                   }}
                   className="text-gray-300 hover:text-indigo-500 transition-colors"
                   title="로그인 정보"
@@ -359,7 +360,7 @@ export default function TeacherManagement() {
     try {
       const phoneDigits = newTeacherPhone.replace(/[^0-9]/g, '');
       const email = `${phoneDigits}@awana.local`;
-      const password = phoneDigits;
+      const password = getInitialPassword(newTeacherPhone);
 
       // 세션 영향 없는 클라이언트로 Auth 계정 생성
       const { data: authData, error: authError } = await authOnlySupabase.auth.signUp({
@@ -383,7 +384,7 @@ export default function TeacherManagement() {
 
       if (insertError) throw insertError;
 
-      toast.success(`${newTeacherName} 교사 계정이 생성되었습니다.\n로그인: ${phoneDigits} / 비밀번호: ${phoneDigits}`);
+      toast.success(`${newTeacherName} 교사 계정이 생성되었습니다.\n로그인: ${phoneDigits} / 비밀번호: ${password}`);
       setShowAddTeacher(false);
       setNewTeacherName('');
       setNewTeacherPhone('');
@@ -393,7 +394,7 @@ export default function TeacherManagement() {
     } catch (error) {
       console.error('Teacher creation error:', error);
       const msg = error instanceof Error ? error.message : '교사 계정 생성 실패';
-      toast.error(msg.includes('already') ? '이미 등록된 이름입니다.' : msg);
+      toast.error(msg.includes('already') ? '이미 등록된 전화번호입니다.' : msg);
     } finally {
       setAddingTeacher(false);
     }
@@ -681,13 +682,13 @@ export default function TeacherManagement() {
             <input
               type="tel"
               value={newTeacherPhone}
-              onChange={(e) => setNewTeacherPhone(e.target.value)}
+              onChange={(e) => setNewTeacherPhone(formatPhone(e.target.value))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               placeholder="010-1234-5678"
             />
             {newTeacherPhone && (
               <p className="text-xs text-gray-400 mt-1">
-                초기 비밀번호: {newTeacherPhone.replace(/[^0-9]/g, '')}
+                로그인: {newTeacherPhone.replace(/[^0-9]/g, '')} / 비밀번호: {getInitialPassword(newTeacherPhone)} (뒷 8자리)
               </p>
             )}
           </div>

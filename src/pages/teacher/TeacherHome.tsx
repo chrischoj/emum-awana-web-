@@ -56,7 +56,7 @@ const TEACHER_CATEGORIES: { key: string; label: string; positions: string[] }[] 
 function getTeacherCategory(position: string | null): string {
   if (!position) return 'other';
   for (const cat of TEACHER_CATEGORIES) {
-    if (cat.positions.includes(position)) return cat.key;
+    if (cat.positions.some(p => position.includes(p))) return cat.key;
   }
   return 'other';
 }

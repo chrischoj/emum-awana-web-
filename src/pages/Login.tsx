@@ -15,7 +15,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const resolvedEmail = loginId.includes('@') ? loginId : `${loginId.trim()}@awana.local`;
+      const resolvedEmail = loginId.includes('@') ? loginId : `${loginId.trim().replace(/[^0-9]/g, '')}@awana.local`;
       const { error } = await supabase.auth.signInWithPassword({
         email: resolvedEmail,
         password,
@@ -41,7 +41,7 @@ const Login = () => {
         <div className="text-center mb-8">
           <img src="/eeum-logo.png" alt="이음교회" className="h-16 mx-auto mb-3 object-contain" />
           <h2 className="text-2xl font-bold text-gray-900">이음 AWANA</h2>
-          <p className="mt-2 text-sm text-gray-600">계정으로 로그인해주세요</p>
+          <p className="mt-2 text-sm text-gray-600">전화번호 또는 이메일로 로그인해주세요</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -56,7 +56,7 @@ const Login = () => {
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="전화번호 또는 이메일"
+              placeholder="01012345678"
             />
           </div>
 
