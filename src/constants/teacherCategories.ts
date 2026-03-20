@@ -39,7 +39,8 @@ export function isLeader(position: string | null): boolean {
 /** 교사 목록을 카테고리별로 그룹핑 (리더를 앞에 배치) */
 export function groupTeachersByCategory(
   teachers: Teacher[],
-  clubs: { id: string; name: string; type: string }[]
+  clubs: { id: string; name: string; type: string }[],
+  assignments?: { teacher_id: string; room_name: string; team_name: string; team_color: string }[]
 ): { key: string; label: string; emoji: string; color: string; teachers: Teacher[] }[] {
   const groups: Record<string, Teacher[]> = {};
 
@@ -50,13 +51,37 @@ export function groupTeachersByCategory(
     groups[cat].push(t);
   }
 
-  // 각 그룹 내에서 리더를 앞으로 정렬
+  // 각 그룹 내에서 정렬
   for (const key of Object.keys(groups)) {
-    groups[key].sort((a, b) => {
-      const aLeader = isLeader(a.position) ? 0 : 1;
-      const bLeader = isLeader(b.position) ? 0 : 1;
-      return aLeader - bLeader;
-    });
+    if ((key === 'sparks' || key === 'tnt') && assignments?.length) {
+      // 스팍스/T&T: 담임 → 팀별(가나다순) → 리더우선 → 이름순, 비담임은 이후 이름순
+      groups[key].sort((a, b) => {
+        const aAssign = assignments.find(x => x.teacher_id === a.id);
+        const bAssign = assignments.find(x => x.teacher_id === b.id);
+        // 1. 담임 우선
+        if (aAssign && !bAssign) return -1;
+        if (!aAssign && bAssign) return 1;
+        // 2. 둘 다 담임: 팀명 가나다순
+        if (aAssign && bAssign) {
+          const teamCmp = (aAssign.team_name || '').localeCompare(bAssign.team_name || '', 'ko');
+          if (teamCmp !== 0) return teamCmp;
+          // 같은 팀: 리더 우선
+          const aL = isLeader(a.position) ? 0 : 1;
+          const bL = isLeader(b.position) ? 0 : 1;
+          if (aL !== bL) return aL - bL;
+        }
+        // 3. 이름 가나다순
+        return (a.name || '').localeCompare(b.name || '', 'ko');
+      });
+    } else {
+      // 기타 그룹: 리더 우선 → 이름순
+      groups[key].sort((a, b) => {
+        const aLeader = isLeader(a.position) ? 0 : 1;
+        const bLeader = isLeader(b.position) ? 0 : 1;
+        if (aLeader !== bLeader) return aLeader - bLeader;
+        return (a.name || '').localeCompare(b.name || '', 'ko');
+      });
+    }
   }
 
   const result: { key: string; label: string; emoji: string; color: string; teachers: Teacher[] }[] = [];

@@ -348,8 +348,8 @@ export default function DashboardPage() {
   }, [allAssignments, allTeachers]);
 
   const teachersByCategory = useMemo(() => {
-    return groupTeachersByCategory(allTeachers, clubs);
-  }, [allTeachers, clubs]);
+    return groupTeachersByCategory(allTeachers, clubs, allAssignments);
+  }, [allTeachers, clubs, allAssignments]);
 
   const { attendanceRate, attendanceColor, attendanceTextColor, memberRatio } = useMemo(() => {
     const rate = stats.activeMembers > 0 ? Math.round((stats.attendancePresent / stats.activeMembers) * 100) : 0;

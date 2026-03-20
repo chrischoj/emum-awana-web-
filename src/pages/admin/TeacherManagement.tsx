@@ -145,7 +145,7 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
             </div>
             <div className="flex items-center gap-1 mt-0.5">
               {teacher.phone && (
-                <p className="text-xs text-gray-500">{teacher.phone}</p>
+                <p className="text-xs text-gray-500">{formatPhone(teacher.phone || '')}</p>
               )}
               {teacher.user_id && (
                 <button

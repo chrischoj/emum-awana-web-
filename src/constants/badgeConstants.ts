@@ -35,6 +35,7 @@ export interface BadgeGroupConfig {
 export const SPARKS_BADGE_GROUPS: BadgeGroupConfig[] = [
   { key: 'promotion', label: '승급', icon: '🏅', color: 'text-yellow-600', countPerStage: 1 },
   { key: 'podium', label: '수상대', icon: '🏆', color: 'text-purple-600', countPerStage: 1 },
+  { key: 'gem', label: '보석', icon: '💎', color: 'text-red-500', countPerStage: 2 },
   { key: 'completion', label: '완성', icon: '🎖️', color: 'text-blue-600', countPerStage: 1 },
   { key: 'review', label: '복습', icon: '📖', color: 'text-green-600', countPerStage: 1 },
   { key: 'workbook', label: '워크북', icon: '📓', color: 'text-orange-600', countPerStage: 1 },
@@ -59,6 +60,7 @@ export const BADGE_GROUPS_BY_CLUB: Record<ClubType, BadgeGroupConfig[]> = {
 export const BADGE_GROUP_LABELS: Record<BadgeGroup, string> = {
   promotion: '승급',
   podium: '수상대',
+  gem: '보석',
   completion: '완성',
   review: '복습',
   workbook: '워크북',
@@ -117,6 +119,7 @@ export const getBadgeIconPath = (
   clubType: ClubType,
   stageKey: string,
   badgeGroup: BadgeGroup,
+  badgeName?: string,
 ): string => {
   // 공통 암송핀은 별도 경로
   if (badgeGroup === 'recitation_pin') {
@@ -126,6 +129,11 @@ export const getBadgeIconPath = (
   if (clubType === 'tnt') {
     const tntSharedGroups: BadgeGroup[] = ['review', 'currency', 'multi_review', 'pin'];
     if (tntSharedGroups.includes(badgeGroup)) {
+      // 실버/골드 구분
+      if (badgeGroup === 'currency' && badgeName) {
+        if (badgeName.includes('실버')) return `/badges/tnt/currency-silver.png`;
+        if (badgeName.includes('골드')) return `/badges/tnt/currency-gold.png`;
+      }
       return `/badges/tnt/${badgeGroup}.png`;
     }
   }

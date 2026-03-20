@@ -10,7 +10,7 @@ export type AttendanceStatus = 'present' | 'late' | 'absent' | 'none';
 export type ScoringCategory = 'attendance' | 'handbook' | 'uniform' | 'recitation';
 export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memorization' | 'special' | 'custom';
 export type BadgeCategory = 'jewel' | 'promotion' | 'citation' | 'special';
-export type BadgeGroup = 'promotion' | 'podium' | 'completion' | 'review' | 'workbook' | 'multi_review' | 'currency' | 'pin' | 'recitation_pin';
+export type BadgeGroup = 'promotion' | 'podium' | 'gem' | 'completion' | 'review' | 'workbook' | 'multi_review' | 'currency' | 'pin' | 'recitation_pin';
 export type EnrollmentStatus = 'pending' | 'active' | 'inactive';
 
 // ---- Core Entities ----

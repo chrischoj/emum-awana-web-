@@ -366,6 +366,7 @@ export default function AwardManagement() {
                               selectedClub as ClubType,
                               selectedStage?.stage_key || '',
                               group.key,
+                              badge.name,
                             )
                           }
                           alt={badge.name}

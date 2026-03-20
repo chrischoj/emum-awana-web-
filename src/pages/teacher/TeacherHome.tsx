@@ -142,7 +142,7 @@ export default function TeacherHome() {
   }
 
   // 카테고리별 그룹핑
-  const teachersByCategory = groupTeachersByCategory(allTeachers, clubs);
+  const teachersByCategory = groupTeachersByCategory(allTeachers, clubs, allAssignments);
 
   // 다른 클럽 멤버/팀 로드 (currentClub 외의 클럽들)
   const [otherClubData, setOtherClubData] = useState<

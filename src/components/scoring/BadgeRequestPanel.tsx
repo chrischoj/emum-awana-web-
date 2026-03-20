@@ -18,7 +18,7 @@ const GROUP_LABELS: Record<string, string> = {
   ...Object.fromEntries(
     Object.entries(BADGE_GROUP_LABELS).map(([k, v]) => {
       const icons: Record<string, string> = {
-        promotion: '🏅', podium: '🏆', completion: '🎖️',
+        promotion: '🏅', podium: '🏆', gem: '💎', completion: '🎖️',
         review: '📖', workbook: '📓', multi_review: '🌟',
         currency: '🪙', pin: '📌',
       };
@@ -29,7 +29,7 @@ const GROUP_LABELS: Record<string, string> = {
 
 const GROUP_ORDER = [
   // 새 badge_group 키들
-  'promotion', 'podium', 'completion', 'review', 'workbook', 'multi_review', 'currency',
+  'promotion', 'podium', 'gem', 'completion', 'review', 'workbook', 'multi_review', 'currency',
   // 기존 category 키들 (fallback)
   'jewel', 'citation', 'special',
 ] as const;
