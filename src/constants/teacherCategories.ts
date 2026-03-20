@@ -36,6 +36,47 @@ export function isLeader(position: string | null): boolean {
   return ['팀장', '조정관', '감독관', '총괄'].some(k => position.includes(k));
 }
 
+/** 교사를 팀별 세로 컬럼용으로 서브그룹핑 (스팍스/T&T) */
+export function groupTeachersByTeam(
+  teachers: Teacher[],
+  assignments: { teacher_id: string; team_name: string; team_color: string }[]
+): { leaders: Teacher[]; teams: { name: string; color: string; teachers: Teacher[] }[]; unassigned: Teacher[] } {
+  const unattachedLeaders: Teacher[] = [];
+  const teamMap = new Map<string, { color: string; teachers: Teacher[] }>();
+  const unassigned: Teacher[] = [];
+
+  for (const t of teachers) {
+    const assign = assignments.find(a => a.teacher_id === t.id);
+    if (assign?.team_name) {
+      if (!teamMap.has(assign.team_name)) {
+        teamMap.set(assign.team_name, { color: assign.team_color || '#6B7280', teachers: [] });
+      }
+      // 리더는 팀 컬럼 맨 위
+      if (isLeader(t.position)) {
+        teamMap.get(assign.team_name)!.teachers.unshift(t);
+      } else {
+        teamMap.get(assign.team_name)!.teachers.push(t);
+      }
+    } else if (isLeader(t.position)) {
+      unattachedLeaders.push(t);
+    } else {
+      unassigned.push(t);
+    }
+  }
+
+  const teams = [...teamMap.entries()]
+    .sort(([a, aData], [b, bData]) => {
+      // 리더가 있는 팀 최우선
+      const aHasLeader = aData.teachers.some(t => isLeader(t.position));
+      const bHasLeader = bData.teachers.some(t => isLeader(t.position));
+      if (aHasLeader !== bHasLeader) return aHasLeader ? -1 : 1;
+      return a.localeCompare(b, 'ko');
+    })
+    .map(([name, data]) => ({ name, color: data.color, teachers: data.teachers }));
+
+  return { leaders: unattachedLeaders, teams, unassigned };
+}
+
 /** 교사 목록을 카테고리별로 그룹핑 (리더를 앞에 배치) */
 export function groupTeachersByCategory(
   teachers: Teacher[],

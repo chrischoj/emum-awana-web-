@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { SubmissionStatus, Member, Team, Club, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
-import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
+import { groupTeachersByCategory, groupTeachersByTeam, isLeader } from '../../constants/teacherCategories';
 
 function getGradientClass(color?: string): string {
   const map: Record<string, string> = {
@@ -767,8 +767,9 @@ export default function TeacherHome() {
                   <span className="text-sm font-semibold text-gray-700">{cat.label}</span>
                   <span className="text-xs text-gray-400">({cat.teachers.length}명)</span>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {cat.teachers.map(t => {
+                {(cat.key === 'sparks' || cat.key === 'tnt') ? (() => {
+                  const { leaders, teams: teamGroups, unassigned } = groupTeachersByTeam(cat.teachers, allAssignments);
+                  const renderTile = (t: Teacher) => {
                     const teacherAssignment = allAssignments.find(a => a.teacher_id === t.id);
                     return (
                       <div key={t.id} className="relative">
@@ -787,8 +788,59 @@ export default function TeacherHome() {
                         )}
                       </div>
                     );
-                  })}
-                </div>
+                  };
+                  return (
+                    <div className="flex gap-2 items-start">
+                      {teamGroups.map(team => (
+                        <div key={team.name} className="flex-1 min-w-0 space-y-2">
+                          <div className="text-[10px] font-bold text-center rounded-full py-0.5 text-white" style={{ backgroundColor: team.color }}>
+                            {team.name}
+                          </div>
+                          {team.teachers.map(t => renderTile(t))}
+                        </div>
+                      ))}
+                      {(leaders.length > 0 || unassigned.length > 0) && (
+                        <div className="flex-1 min-w-0 space-y-2">
+                          {leaders.length > 0 && (
+                            <>
+                              <div className="text-[10px] font-bold text-center rounded-full py-0.5 bg-gray-400 text-white">리더</div>
+                              {leaders.map(t => renderTile(t))}
+                            </>
+                          )}
+                          {unassigned.length > 0 && (
+                            <>
+                              <div className="text-[10px] font-bold text-center rounded-full py-0.5 bg-gray-300 text-white">미배정</div>
+                              {unassigned.map(t => renderTile(t))}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })() : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {cat.teachers.map(t => {
+                      const teacherAssignment = allAssignments.find(a => a.teacher_id === t.id);
+                      return (
+                        <div key={t.id} className="relative">
+                          <TeacherFaceTile teacher={t} subtitle={t.position || undefined} />
+                          {isLeader(t.position) && (
+                            <span className="absolute -top-1 -right-1 text-xs px-1 py-0.5 rounded-full text-white font-bold" style={{ backgroundColor: cat.color, fontSize: '9px' }}>★</span>
+                          )}
+                          {teacherAssignment && (
+                            <span
+                              className="mt-0.5 block text-center text-[10px] font-medium text-white rounded-full px-1.5 py-0.5 truncate"
+                              style={{ backgroundColor: teacherAssignment.team_color || '#6B7280' }}
+                              title={teacherAssignment.room_name}
+                            >
+                              {teacherAssignment.room_name}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>

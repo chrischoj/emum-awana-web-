@@ -6,7 +6,7 @@ import { useRealtimeRoomStatus } from '../../hooks/useRealtimeRoomStatus';
 import { getToday } from '../../lib/utils';
 import { cleanupStaleSessions } from '../../services/checkInService';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { groupTeachersByCategory, isLeader } from '../../constants/teacherCategories';
+import { groupTeachersByCategory, groupTeachersByTeam, isLeader } from '../../constants/teacherCategories';
 import type { Member, Teacher, ActiveTeacherAssignment, Room, Team } from '../../types/awana';
 
 interface Stats {
@@ -1103,8 +1103,9 @@ export default function DashboardPage() {
                   </button>
                   {isCatOpen && (
                     <div className="p-3">
-                      <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {cat.teachers.map(t => {
+                      {(cat.key === 'sparks' || cat.key === 'tnt') ? (() => {
+                        const { leaders, teams: teamGroups, unassigned } = groupTeachersByTeam(cat.teachers, allAssignments);
+                        const renderTile = (t: Teacher) => {
                           const teacherAssigns = allAssignments.filter(a => a.teacher_id === t.id);
                           const badges: { label: string; color: string }[] = [];
                           if (isLeader(t.position)) {
@@ -1119,11 +1120,59 @@ export default function DashboardPage() {
                               });
                             }
                           }
-                          return (
-                            <DashboardTeacherTile key={t.id} teacher={t} badges={badges} />
-                          );
-                        })}
-                      </div>
+                          return <DashboardTeacherTile key={t.id} teacher={t} badges={badges} />;
+                        };
+                        return (
+                          <div className="flex gap-3 items-start">
+                            {teamGroups.map(team => (
+                              <div key={team.name} className="flex-1 min-w-0 space-y-2">
+                                <div className="text-[10px] font-bold text-center rounded-full py-0.5 text-white" style={{ backgroundColor: team.color }}>
+                                  {team.name}
+                                </div>
+                                {team.teachers.map(t => renderTile(t))}
+                              </div>
+                            ))}
+                            {(leaders.length > 0 || unassigned.length > 0) && (
+                              <div className="flex-1 min-w-0 space-y-2">
+                                {leaders.length > 0 && (
+                                  <>
+                                    <div className="text-[10px] font-bold text-center rounded-full py-0.5 bg-gray-400 text-white">리더</div>
+                                    {leaders.map(t => renderTile(t))}
+                                  </>
+                                )}
+                                {unassigned.length > 0 && (
+                                  <>
+                                    <div className="text-[10px] font-bold text-center rounded-full py-0.5 bg-gray-300 text-white">미배정</div>
+                                    {unassigned.map(t => renderTile(t))}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : (
+                        <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {cat.teachers.map(t => {
+                            const teacherAssigns = allAssignments.filter(a => a.teacher_id === t.id);
+                            const badges: { label: string; color: string }[] = [];
+                            if (isLeader(t.position)) {
+                              badges.push({ label: '★ 리더', color: cat.color });
+                            }
+                            for (const a of teacherAssigns) {
+                              const roomName = allRooms.find(r => r.id === a.room_id)?.name;
+                              if (roomName) {
+                                badges.push({
+                                  label: a.assignment_type === 'primary' ? `${roomName} 담임` : `${roomName} 지원`,
+                                  color: a.team_color || '#6366f1',
+                                });
+                              }
+                            }
+                            return (
+                              <DashboardTeacherTile key={t.id} teacher={t} badges={badges} />
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
