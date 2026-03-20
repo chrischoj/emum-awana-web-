@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { deactivateTeacherSessions } from '../services/checkInService';
 import type { Teacher, UserRole } from '../types/awana';
 
 interface AuthContextType {
@@ -105,6 +106,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // 로그아웃 전에 활성 세션 정리 (교사가 빠지면 교실 비활성화)
+    if (teacher?.id) {
+      try {
+        await deactivateTeacherSessions(teacher.id);
+      } catch (err) {
+        console.warn('[SignOut] 활성 세션 정리 실패:', err);
+      }
+      localStorage.removeItem('awana_auto_checkin');
+    }
+
     await supabase.auth.signOut();
     setSession(null);
     setUser(null);
