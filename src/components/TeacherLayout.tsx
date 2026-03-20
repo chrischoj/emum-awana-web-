@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
-import { LogOut, Menu, X } from 'lucide-react';
+import { LogOut, Menu, X, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { TeacherAssignmentProvider } from '../contexts/TeacherAssignmentContext';
 import { BadgeRequestsProvider } from '../contexts/BadgeRequestsContext';
@@ -74,12 +74,21 @@ export default function TeacherLayout() {
         </aside>
       )}
       {/* Top header */}
-      <header className="sticky top-0 z-30 flex items-center justify-between h-14 px-4 bg-white border-b border-gray-200">
+      <header className="sticky top-0 z-30 flex items-center h-14 px-4 bg-white border-b border-gray-200">
+        {role === 'admin' && (
+          <button
+            onClick={() => setAdminSidebarOpen(true)}
+            className="p-2 -ml-2 mr-1 text-indigo-500 hover:text-indigo-700 rounded-lg"
+            title="관리자 메뉴"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
         <Link to="/teacher" className="flex items-center gap-2">
           <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
           <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
           <button
             onClick={() => navigate('/teacher/profile')}
@@ -90,11 +99,11 @@ export default function TeacherLayout() {
           </button>
           {role === 'admin' && (
             <button
-              onClick={() => setAdminSidebarOpen(true)}
+              onClick={() => navigate('/admin')}
               className="p-2 text-indigo-500 hover:text-indigo-700 rounded-lg"
-              title="관리자 메뉴"
+              title="관리자 페이지"
             >
-              <Menu className="w-5 h-5" />
+              <Shield className="w-4 h-4" />
             </button>
           )}
           <button

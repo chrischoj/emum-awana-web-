@@ -23,7 +23,7 @@ export default function MemberAttendancePage() {
   const { openMemberProfile } = useMemberProfile();
   const [filterClubId, setFilterClubId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(getToday());
-  const [sortKey, setSortKey] = useState<'name' | 'team' | 'status' | null>(null);
+  const [sortKey, setSortKey] = useState<'name' | 'club' | 'team' | 'status' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [allTeams, setAllTeams] = useState<Team[]>([]);
@@ -331,7 +331,7 @@ export default function MemberAttendancePage() {
     }
   };
 
-  const toggleSort = (key: 'name' | 'team' | 'status') => {
+  const toggleSort = (key: 'name' | 'club' | 'team' | 'status') => {
     if (sortKey === key) {
       setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
@@ -345,6 +345,11 @@ export default function MemberAttendancePage() {
     const dir = sortDir === 'asc' ? 1 : -1;
     if (sortKey === 'name') {
       return a.name.localeCompare(b.name, 'ko') * dir;
+    }
+    if (sortKey === 'club') {
+      const clubA = clubMap[a.club_id] || '';
+      const clubB = clubMap[b.club_id] || '';
+      return clubA.localeCompare(clubB, 'ko') * dir;
     }
     if (sortKey === 'team') {
       const teamA = allTeams.find(t => t.id === a.team_id)?.name || '';
@@ -439,7 +444,12 @@ export default function MemberAttendancePage() {
                   </button>
                 </th>
                 {filterClubId === null && (
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">클럽</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <button onClick={() => toggleSort('club')} className="inline-flex items-center gap-1 hover:text-gray-700">
+                      클럽
+                      {sortKey === 'club' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+                    </button>
+                  </th>
                 )}
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   <button onClick={() => toggleSort('team')} className="inline-flex items-center gap-1 hover:text-gray-700">
