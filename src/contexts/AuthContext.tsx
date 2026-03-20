@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { deactivateTeacherSessions } from '../services/checkInService';
+import { clearLastRoute } from '../hooks/useRouteRestore';
 import type { Teacher, UserRole } from '../types/awana';
 
 interface AuthContextType {
@@ -185,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTeacher(null);
     teacherRef.current = null;
     setRole(null);
+    clearLastRoute(); // 로그아웃 시 저장된 경로 삭제 (재로그인 시 홈으로)
   }
 
   async function changePassword(newPassword: string) {

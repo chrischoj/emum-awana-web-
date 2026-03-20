@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ClubProvider } from './contexts/ClubContext';
 import { MemberProfileProvider } from './contexts/MemberProfileContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { useRouteRestore, consumeLastRoute } from './hooks/useRouteRestore';
 import AdminLayout from './components/AdminLayout';
 import TeacherLayout from './components/TeacherLayout';
 
@@ -51,6 +52,21 @@ function RoleRedirect() {
   }
 
   if (!session) return <Navigate to="/login" replace />;
+
+  // PWA 복원: 저장된 마지막 경로가 있으면 해당 페이지로 이동
+  const lastRoute = consumeLastRoute();
+  if (lastRoute) {
+    // role에 맞는 경로인지 간단 검증
+    const isAdmin = role === 'admin';
+    const isTeacher = role === 'admin' || role === 'teacher';
+    const isMember = role === 'member';
+    const routeValid =
+      (lastRoute.startsWith('/admin') && isAdmin) ||
+      (lastRoute.startsWith('/teacher') && isTeacher) ||
+      (lastRoute.startsWith('/member') && isMember);
+    if (routeValid) return <Navigate to={lastRoute} replace />;
+  }
+
   if (role === 'admin') return <Navigate to="/admin" replace />;
   if (role === 'member') return <Navigate to="/member" replace />;
   return <Navigate to="/teacher" replace />;
@@ -58,6 +74,7 @@ function RoleRedirect() {
 
 function AppRoutes() {
   const { session } = useAuth();
+  useRouteRestore(); // 현재 경로를 localStorage에 지속 저장
 
   return (
     <Routes>
