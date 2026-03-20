@@ -54,23 +54,42 @@ export function groupTeachersByCategory(
   // 각 그룹 내에서 정렬
   for (const key of Object.keys(groups)) {
     if ((key === 'sparks' || key === 'tnt') && assignments?.length) {
-      // 스팍스/T&T: 담임 → 팀별(가나다순) → 리더우선 → 이름순, 비담임은 이후 이름순
+      // 스팍스/T&T: 리더 최우선 → 담임(팀별) → 미배정
+      // 리더의 팀이 있으면 해당 팀부터 팀 정렬 시작
+      const leadersList = groups[key].filter(t => isLeader(t.position));
+      leadersList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+      // 마지막 리더의 팀을 찾아 팀 정렬 우선순위로 사용
+      let priorityTeam: string | null = null;
+      for (let i = leadersList.length - 1; i >= 0; i--) {
+        const la = assignments.find(x => x.teacher_id === leadersList[i].id);
+        if (la?.team_name) { priorityTeam = la.team_name; break; }
+      }
+
       groups[key].sort((a, b) => {
+        const aLeader = isLeader(a.position);
+        const bLeader = isLeader(b.position);
+        // 1. 리더 무조건 최우선
+        if (aLeader !== bLeader) return aLeader ? -1 : 1;
+        // 2. 리더끼리: 이름순
+        if (aLeader && bLeader) return (a.name || '').localeCompare(b.name || '', 'ko');
+        // 3. 비리더: 담임 우선
         const aAssign = assignments.find(x => x.teacher_id === a.id);
         const bAssign = assignments.find(x => x.teacher_id === b.id);
-        // 1. 담임 우선
         if (aAssign && !bAssign) return -1;
         if (!aAssign && bAssign) return 1;
-        // 2. 둘 다 담임: 팀명 가나다순
+        // 4. 둘 다 담임: 팀별 정렬 (리더 팀 우선 → 나머지 가나다순)
         if (aAssign && bAssign) {
-          const teamCmp = (aAssign.team_name || '').localeCompare(bAssign.team_name || '', 'ko');
-          if (teamCmp !== 0) return teamCmp;
-          // 같은 팀: 리더 우선
-          const aL = isLeader(a.position) ? 0 : 1;
-          const bL = isLeader(b.position) ? 0 : 1;
-          if (aL !== bL) return aL - bL;
+          const aTeam = aAssign.team_name || '';
+          const bTeam = bAssign.team_name || '';
+          if (aTeam !== bTeam) {
+            if (priorityTeam) {
+              if (aTeam === priorityTeam && bTeam !== priorityTeam) return -1;
+              if (bTeam === priorityTeam && aTeam !== priorityTeam) return 1;
+            }
+            return aTeam.localeCompare(bTeam, 'ko');
+          }
         }
-        // 3. 이름 가나다순
+        // 5. 이름 가나다순
         return (a.name || '').localeCompare(b.name || '', 'ko');
       });
     } else {
