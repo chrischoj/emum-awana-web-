@@ -80,9 +80,9 @@ function TeacherFaceTile({ teacher, subtitle }: { teacher: Teacher; subtitle?: s
   );
 }
 
-interface TeamSubmissionInfo {
-  teamId: string;
-  teamName: string;
+interface RoomSubmissionInfo {
+  roomId: string;
+  roomName: string;
   teamColor: string;
   status: SubmissionStatus | null;
   hasScores: boolean;
@@ -103,7 +103,7 @@ export default function TeacherHome() {
     error: assignmentError,
   } = useTeacherAssignment();
 
-  const [teamSubmissions, setTeamSubmissions] = useState<TeamSubmissionInfo[]>([]);
+  const [roomSubmissions, setRoomSubmissions] = useState<RoomSubmissionInfo[]>([]);
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
 
   // 전체 교사 + 배정 + 교실 데이터
@@ -248,10 +248,11 @@ export default function TeacherHome() {
     });
   };
 
-  // 오늘 제출 상태 + 점수 존재 여부 로드
+  // 오늘 제출 상태 + 점수 존재 여부 로드 (교실 단위)
+  const allAssigns = [...primaryAssignments, ...temporaryAssignments];
   useEffect(() => {
-    if (!currentClub || assignedTeamIds.length === 0) {
-      setTeamSubmissions([]);
+    if (!currentClub || allAssigns.length === 0) {
+      setRoomSubmissions([]);
       return;
     }
     let stale = false;
@@ -262,30 +263,27 @@ export default function TeacherHome() {
     ])
       .then(([submissions, scores]) => {
         if (stale) return;
-        const subMap = new Map(submissions.map(s => [s.team_id, s.status]));
-        const teamHasScores = new Set<string>();
+        const subMap = new Map(submissions.map(s => [s.room_id, s.status]));
+        const roomHasScores = new Set<string>();
         for (const score of scores) {
           const member = assignedMembers.find(m => m.id === score.member_id);
-          if (member?.team_id) {
-            teamHasScores.add(member.team_id);
+          if (member?.room_id) {
+            roomHasScores.add(member.room_id);
           }
         }
 
-        const infos: TeamSubmissionInfo[] = assignedTeamIds.map(teamId => {
-          const team = teams.find(t => t.id === teamId);
-          return {
-            teamId,
-            teamName: team?.name || '알 수 없음',
-            teamColor: team?.color || '#6B7280',
-            status: subMap.get(teamId) || null,
-            hasScores: teamHasScores.has(teamId),
-          };
-        });
-        setTeamSubmissions(infos);
+        const infos: RoomSubmissionInfo[] = allAssigns.map(a => ({
+          roomId: a.room_id,
+          roomName: a.room_name,
+          teamColor: a.team_color || '#6B7280',
+          status: subMap.get(a.room_id) || null,
+          hasScores: roomHasScores.has(a.room_id),
+        }));
+        setRoomSubmissions(infos);
       })
-      .catch(() => { if (!stale) setTeamSubmissions([]); });
+      .catch(() => { if (!stale) setRoomSubmissions([]); });
     return () => { stale = true; };
-  }, [currentClub, assignedTeamIds, assignedMembers, teams]);
+  }, [currentClub, allAssigns.length, assignedMembers]);
 
   const getStatusLabel = (status: SubmissionStatus | null, hasScores: boolean) => {
     if (!status) {
@@ -394,14 +392,14 @@ export default function TeacherHome() {
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <h2 className="font-semibold text-gray-900 mb-3">오늘의 할 일</h2>
           <div className="space-y-2">
-            {teamSubmissions.length > 0 ? (
-              teamSubmissions.map((ts) => {
-                const statusInfo = getStatusLabel(ts.status, ts.hasScores);
+            {roomSubmissions.length > 0 ? (
+              roomSubmissions.map((rs) => {
+                const statusInfo = getStatusLabel(rs.status, rs.hasScores);
                 return (
-                  <div key={ts.teamId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
+                  <div key={rs.roomId} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ts.teamColor }} />
-                      <span className="text-sm font-medium text-gray-900">{ts.teamName} 팀</span>
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: rs.teamColor }} />
+                      <span className="text-sm font-medium text-gray-900">{rs.roomName}</span>
                     </div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusInfo.bg} ${statusInfo.color}`}>
                       {statusInfo.text}

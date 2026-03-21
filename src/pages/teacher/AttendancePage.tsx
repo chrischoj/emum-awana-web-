@@ -36,7 +36,7 @@ export default function AttendancePage() {
   const { teacher } = useAuth();
   const { currentClub, curriculumTemplate, teams, members } = useClub();
   const { openMemberProfile } = useMemberProfile();
-  const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned } = useTeacherAssignment();
+  const { assignedTeamIds, assignedMembers, isReadOnly, isUnassigned, primaryAssignments, temporaryAssignments } = useTeacherAssignment();
   const { isOffline } = useNetworkStatus();
   const { enqueue, pendingCount } = useOfflineQueue();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<Record<string, MemberAttendanceState>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AttendanceStatus | 'all'>('all');
-  const [teamSubmissions, setTeamSubmissions] = useState<Record<string, SubmissionStatus>>({});
+  const [roomSubmissions, setRoomSubmissions] = useState<Record<string, SubmissionStatus>>({});
   type SortKey = 'team' | 'name' | 'status';
   const [sortKey, setSortKey] = useState<SortKey>('team');
   const [sortAsc, setSortAsc] = useState(true);
@@ -112,27 +112,34 @@ export default function AttendancePage() {
     return () => { stale = true; };
   }, [currentClub, selectedDate, baseMembers]);
 
-  // 팀별 제출 상태 로드
+  // 교실별 제출 상태 로드
   useEffect(() => {
     if (!currentClub) return;
     getSubmissionsByDate(currentClub.id, selectedDate)
       .then((subs) => {
         const map: Record<string, SubmissionStatus> = {};
         for (const sub of subs) {
-          map[sub.team_id] = sub.status;
+          if (sub.room_id) map[sub.room_id] = sub.status;
         }
-        setTeamSubmissions(map);
+        setRoomSubmissions(map);
       })
-      .catch(() => setTeamSubmissions({}));
+      .catch(() => setRoomSubmissions({}));
   }, [currentClub, selectedDate]);
+
+  // 선택된 팀의 교실 ID 파생 (ScoringPage 패턴과 동일)
+  const selectedRoomId = useMemo(() => {
+    if (!selectedTeamId) return null;
+    const allAssigns = [...primaryAssignments, ...temporaryAssignments];
+    return allAssigns.find(a => a.team_id === selectedTeamId)?.room_id ?? null;
+  }, [selectedTeamId, primaryAssignments, temporaryAssignments]);
 
   const isMemberLocked = useCallback((memberId: string) => {
     if (isReadOnly) return true;
     const member = baseMembers.find(m => m.id === memberId);
-    if (!member?.team_id) return false;
-    const status = teamSubmissions[member.team_id];
+    if (!member?.room_id) return false;
+    const status = roomSubmissions[member.room_id];
     return status === 'submitted' || status === 'approved';
-  }, [isReadOnly, baseMembers, teamSubmissions]);
+  }, [isReadOnly, baseMembers, roomSubmissions]);
 
   const handleStatusChange = useCallback(
     (memberId: string) => {
@@ -379,16 +386,16 @@ export default function AttendancePage() {
       )}
 
       {/* Lock banner */}
-      {selectedTeamId && (teamSubmissions[selectedTeamId] === 'submitted' || teamSubmissions[selectedTeamId] === 'approved') && (
+      {selectedRoomId && (roomSubmissions[selectedRoomId] === 'submitted' || roomSubmissions[selectedRoomId] === 'approved') && (
         <div className={cn(
           'mb-3 p-3 rounded-lg border',
-          teamSubmissions[selectedTeamId] === 'submitted' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
+          roomSubmissions[selectedRoomId] === 'submitted' ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'
         )}>
           <p className={cn(
             'text-sm font-medium',
-            teamSubmissions[selectedTeamId] === 'submitted' ? 'text-blue-700' : 'text-green-700'
+            roomSubmissions[selectedRoomId] === 'submitted' ? 'text-blue-700' : 'text-green-700'
           )}>
-            {teamSubmissions[selectedTeamId] === 'submitted' ? '제출 완료 - 승인 대기 중 (수정 불가)' : '승인 완료 (수정 불가)'}
+            {roomSubmissions[selectedRoomId] === 'submitted' ? '제출 완료 - 승인 대기 중 (수정 불가)' : '승인 완료 (수정 불가)'}
           </p>
         </div>
       )}
