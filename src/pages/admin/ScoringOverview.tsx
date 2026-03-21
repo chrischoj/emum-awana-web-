@@ -60,7 +60,7 @@ const STATUS_CONFIG: Record<SubmissionStatus, { label: string; className: string
 };
 
 export default function ScoringOverview() {
-  const { clubs, currentClub, setCurrentClub, teams, members } = useClub();
+  const { clubs, currentClub, setCurrentClub, teams, members, loading: clubLoading } = useClub();
   const { teacher: adminTeacher } = useAuth();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [viewMode, setViewMode] = useState<'all' | string>('all');
@@ -102,10 +102,10 @@ export default function ScoringOverview() {
   useEffect(() => {
     if (viewMode === 'all') {
       if (clubs.length > 0) loadAllData();
-    } else if (currentClub && currentClub.id === viewMode) {
+    } else if (currentClub && currentClub.id === viewMode && !clubLoading) {
       loadData();
     }
-  }, [viewMode, currentClub, selectedDate, clubs]);
+  }, [viewMode, currentClub, selectedDate, clubs, clubLoading]);
 
   // Realtime 구독 (300ms debounce)
   useEffect(() => {
