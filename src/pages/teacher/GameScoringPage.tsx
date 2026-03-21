@@ -326,7 +326,7 @@ export default function GameScoringPage() {
                 onClick={() => !isLocked && toggleTeam(team.id)}
                 disabled={isLocked}
                 className={cn(
-                  'py-3 rounded-xl text-sm font-bold border transition-all duration-150 touch-manipulation active:scale-95',
+                  'py-3.5 rounded-xl text-sm font-bold border transition-all duration-150 touch-manipulation active:scale-95',
                   isSelected ? 'border-transparent' : 'border-transparent'
                 )}
                 style={
