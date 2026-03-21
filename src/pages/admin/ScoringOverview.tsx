@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import toast from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -47,6 +47,8 @@ interface MemberScoreRow {
   memberName: string;
   avatarUrl: string | null;
   clubName?: string;
+  roomId?: string | null;
+  roomName?: string | null;
   scores: Partial<Record<ScoringCategory, number>>;
   total: number;
 }
@@ -167,6 +169,10 @@ export default function ScoringOverview() {
         supabase.from('rooms').select('*').eq('club_id', currentClub.id).eq('active', true),
       ]);
       const rooms = (roomsRes.data as Room[]) || [];
+      const roomNameMap = new Map<string, string>();
+      for (const room of rooms) {
+        roomNameMap.set(room.id, room.name);
+      }
 
       // member_id -> team_id 맵
       const memberTeamMap = new Map<string, string>();
@@ -222,6 +228,8 @@ export default function ScoringOverview() {
             memberId: m.id,
             memberName: m.name,
             avatarUrl: m.avatar_url,
+            roomId: m.room_id,
+            roomName: m.room_id ? roomNameMap.get(m.room_id) ?? null : null,
             scores,
             total,
           };
@@ -1138,51 +1146,104 @@ export default function ScoringOverview() {
                             </tr>
                           </thead>
                           <tbody>
-                            {t.memberScores.map((row, idx) => (
-                              <tr
-                                key={row.memberId}
-                                className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
-                              >
-                                <td className="px-5 py-2.5">
-                                  <button
-                                    onClick={() => openMemberProfile(row.memberId)}
-                                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-                                  >
-                                    <Avatar name={row.memberName} src={row.avatarUrl} size="sm" />
-                                    <span className="font-medium text-gray-800">{row.memberName}</span>
-                                    {row.clubName && <span className="text-xs text-gray-400">({row.clubName})</span>}
-                                  </button>
-                                </td>
-                                {CATEGORIES.map((cat) => (
-                                  <td key={cat} className="px-3 py-2.5 text-center text-gray-600">
-                                    {row.scores[cat] !== undefined ? row.scores[cat]!.toLocaleString() : (
-                                      <span className="text-gray-300">-</span>
-                                    )}
+                            {viewMode !== 'all' ? (() => {
+                              // 교실별 그룹핑
+                              const roomMap = new Map<string, MemberScoreRow[]>();
+                              const noRoom: MemberScoreRow[] = [];
+                              for (const row of t.memberScores) {
+                                if (row.roomId) {
+                                  const arr = roomMap.get(row.roomId) || [];
+                                  arr.push(row);
+                                  roomMap.set(row.roomId, arr);
+                                } else {
+                                  noRoom.push(row);
+                                }
+                              }
+                              const groups = [...roomMap.entries()].map(([rid, rows]) => ({
+                                id: rid, name: rows[0]?.roomName || '알 수 없음', rows,
+                              }));
+                              groups.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+                              if (noRoom.length > 0) groups.push({ id: '__none__', name: '미배정', rows: noRoom });
+
+                              const totalCols = CATEGORIES.length + 3;
+
+                              return groups.map((g) => (
+                                <Fragment key={`room-${g.id}`}>
+                                  <tr className="bg-gray-100/80 border-t border-gray-200">
+                                    <td colSpan={totalCols} className="px-5 py-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.teamColor }} />
+                                        <span className="text-xs font-semibold text-gray-600">{g.name}</span>
+                                        <span className="text-[10px] text-gray-400">({g.rows.length}명)</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {g.rows.map((row, idx) => (
+                                    <tr key={row.memberId} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                                      <td className="px-5 py-2.5">
+                                        <button
+                                          onClick={() => openMemberProfile(row.memberId)}
+                                          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                        >
+                                          <Avatar name={row.memberName} src={row.avatarUrl} size="sm" />
+                                          <span className="font-medium text-gray-800">{row.memberName}</span>
+                                        </button>
+                                      </td>
+                                      {CATEGORIES.map((cat) => (
+                                        <td key={cat} className="px-3 py-2.5 text-center text-gray-600">
+                                          {row.scores[cat] !== undefined ? row.scores[cat]!.toLocaleString() : <span className="text-gray-300">-</span>}
+                                        </td>
+                                      ))}
+                                      <td className="px-5 py-2.5 text-right font-bold text-gray-800">{row.total.toLocaleString()}</td>
+                                      <td className="px-3 py-2.5 text-center">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <button
+                                            onClick={() => handleOpenEdit(row, t.teamId)}
+                                            className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium"
+                                          >
+                                            수정
+                                          </button>
+                                          <button
+                                            onClick={() => handleViewHistory(row.memberId)}
+                                            className="text-xs px-2 py-1 rounded bg-gray-50 text-gray-500 hover:bg-gray-100 font-medium"
+                                          >
+                                            이력
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </Fragment>
+                              ));
+                            })() : (
+                              t.memberScores.map((row, idx) => (
+                                <tr
+                                  key={row.memberId}
+                                  className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}
+                                >
+                                  <td className="px-5 py-2.5">
+                                    <button
+                                      onClick={() => openMemberProfile(row.memberId)}
+                                      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                                    >
+                                      <Avatar name={row.memberName} src={row.avatarUrl} size="sm" />
+                                      <span className="font-medium text-gray-800">{row.memberName}</span>
+                                      {row.clubName && <span className="text-xs text-gray-400">({row.clubName})</span>}
+                                    </button>
                                   </td>
-                                ))}
-                                <td className="px-5 py-2.5 text-right font-bold text-gray-800">
-                                  {row.total.toLocaleString()}
-                                </td>
-                                {viewMode !== 'all' && (
-                                  <td className="px-3 py-2.5 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <button
-                                        onClick={() => handleOpenEdit(row, t.teamId)}
-                                        className="text-xs px-2 py-1 rounded bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-medium"
-                                      >
-                                        수정
-                                      </button>
-                                      <button
-                                        onClick={() => handleViewHistory(row.memberId)}
-                                        className="text-xs px-2 py-1 rounded bg-gray-50 text-gray-500 hover:bg-gray-100 font-medium"
-                                      >
-                                        이력
-                                      </button>
-                                    </div>
+                                  {CATEGORIES.map((cat) => (
+                                    <td key={cat} className="px-3 py-2.5 text-center text-gray-600">
+                                      {row.scores[cat] !== undefined ? row.scores[cat]!.toLocaleString() : (
+                                        <span className="text-gray-300">-</span>
+                                      )}
+                                    </td>
+                                  ))}
+                                  <td className="px-5 py-2.5 text-right font-bold text-gray-800">
+                                    {row.total.toLocaleString()}
                                   </td>
-                                )}
-                              </tr>
-                            ))}
+                                </tr>
+                              ))
+                            )}
                           </tbody>
                           <tfoot>
                             <tr className="border-t border-gray-200 bg-gray-50">
