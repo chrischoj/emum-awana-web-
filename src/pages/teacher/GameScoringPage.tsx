@@ -315,8 +315,8 @@ export default function GameScoringPage() {
           />
         </div>
 
-        {/* Team selection — interactive tap targets */}
-        <div className="grid grid-cols-4 gap-2.5 mb-3">
+        {/* Team selection */}
+        <div className="grid grid-cols-4 gap-2 mb-3">
           {teams.map((team) => {
             const isSelected = selectedTeamIds.has(team.id);
             return (
@@ -326,35 +326,23 @@ export default function GameScoringPage() {
                 onClick={() => !isLocked && toggleTeam(team.id)}
                 disabled={isLocked}
                 className={cn(
-                  'relative py-3.5 rounded-xl text-sm font-bold border-2 transition-all duration-150 touch-manipulation active:scale-[0.93]',
-                  isSelected
-                    ? 'shadow-lg ring-2 ring-offset-1'
-                    : 'shadow-sm hover:shadow-md border-dashed'
+                  'py-3 rounded-xl text-sm font-bold border transition-all duration-150 touch-manipulation active:scale-95',
+                  isSelected ? 'border-transparent' : 'border-transparent'
                 )}
                 style={
                   isSelected
                     ? {
                         backgroundColor: team.color,
-                        borderColor: team.color,
                         color: '#fff',
-                        boxShadow: `0 4px 14px ${team.color}50`,
-                        // @ts-expect-error ring color via CSS variable
-                        '--tw-ring-color': team.color + '60',
+                        boxShadow: `0 2px 8px ${team.color}40`,
                       }
                     : {
-                        backgroundColor: '#fff',
-                        borderColor: `${team.color}90`,
-                        color: team.color,
+                        backgroundColor: `${team.color}14`,
+                        color: `${team.color}CC`,
                       }
                 }
               >
                 {team.name}
-                <div className={cn(
-                  "text-xs mt-0.5 transition-all duration-150",
-                  isSelected ? "opacity-80" : "opacity-0 scale-75"
-                )}>
-                  ✓
-                </div>
               </button>
             );
           })}
