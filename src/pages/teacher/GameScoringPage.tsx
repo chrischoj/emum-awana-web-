@@ -248,24 +248,33 @@ export default function GameScoringPage() {
         </div>
       )}
 
-      {/* Team score overview */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-        <h2 className="text-sm font-medium text-gray-500 mb-3">오늘의 팀 점수</h2>
+      {/* Team score overview — scoreboard with color bar accent */}
+      <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4">
+        <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">오늘의 팀 점수</h2>
         <div className="grid grid-cols-4 gap-2">
           {teams.map((team) => (
             <div
               key={team.id}
               data-testid={`game-team-total-${team.id}`}
               className={cn(
-                'text-center py-3 px-2 rounded-lg transition-all',
+                'text-center py-2.5 px-1 rounded-md border-l-[3px] overflow-hidden transition-all',
                 flashTeamId === team.id && 'animate-pulse scale-105'
               )}
-              style={{ backgroundColor: team.color + '20' }}
+              style={{
+                backgroundColor: `${team.color}18`,
+                borderLeftColor: team.color,
+              }}
             >
-              <p className="text-xs font-bold" style={{ color: team.color }}>
+              <p
+                className="text-[10px] font-semibold tracking-wide mb-0.5"
+                style={{ color: `${team.color}B0` }}
+              >
                 {team.name}
               </p>
-              <p className="text-xl font-bold mt-1" style={{ color: team.color }}>
+              <p
+                className="text-xl font-extrabold tabular-nums tracking-tight"
+                style={{ color: team.color }}
+              >
                 {(teamTotals[team.id] || 0).toLocaleString()}
               </p>
             </div>
@@ -306,32 +315,49 @@ export default function GameScoringPage() {
           />
         </div>
 
-        {/* Team selection */}
-        <div className="grid grid-cols-4 gap-2 mb-3">
-          {teams.map((team) => (
-            <button
-              key={team.id}
-              data-testid={`game-team-btn-${team.id}`}
-              onClick={() => !isLocked && toggleTeam(team.id)}
-              disabled={isLocked}
-              className={cn(
-                'py-3 rounded-lg text-sm font-bold border-2 transition-all touch-manipulation',
-                selectedTeamIds.has(team.id)
-                  ? 'border-current text-white active:scale-95'
-                  : 'border-gray-200 text-gray-600 bg-gray-50 active:scale-95'
-              )}
-              style={
-                selectedTeamIds.has(team.id)
-                  ? { backgroundColor: team.color, borderColor: team.color }
-                  : undefined
-              }
-            >
-              {team.name}
-              <div className={cn("text-xs mt-0.5", selectedTeamIds.has(team.id) ? "opacity-70" : "opacity-0")}>
-                ✓
-              </div>
-            </button>
-          ))}
+        {/* Team selection — interactive tap targets */}
+        <div className="grid grid-cols-4 gap-2.5 mb-3">
+          {teams.map((team) => {
+            const isSelected = selectedTeamIds.has(team.id);
+            return (
+              <button
+                key={team.id}
+                data-testid={`game-team-btn-${team.id}`}
+                onClick={() => !isLocked && toggleTeam(team.id)}
+                disabled={isLocked}
+                className={cn(
+                  'relative py-3.5 rounded-xl text-sm font-bold border-2 transition-all duration-150 touch-manipulation active:scale-[0.93]',
+                  isSelected
+                    ? 'shadow-lg ring-2 ring-offset-1'
+                    : 'shadow-sm hover:shadow-md border-dashed'
+                )}
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: team.color,
+                        borderColor: team.color,
+                        color: '#fff',
+                        boxShadow: `0 4px 14px ${team.color}50`,
+                        // @ts-expect-error ring color via CSS variable
+                        '--tw-ring-color': team.color + '60',
+                      }
+                    : {
+                        backgroundColor: '#fff',
+                        borderColor: `${team.color}90`,
+                        color: team.color,
+                      }
+                }
+              >
+                {team.name}
+                <div className={cn(
+                  "text-xs mt-0.5 transition-all duration-150",
+                  isSelected ? "opacity-80" : "opacity-0 scale-75"
+                )}>
+                  ✓
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Points */}
