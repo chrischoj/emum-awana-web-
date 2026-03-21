@@ -314,14 +314,15 @@ export default function GameScoringPage() {
               placeholder="직접 입력..."
               className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 pr-8"
             />
-            {description && (
-              <button
-                onClick={() => setDescription('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs leading-none"
-              >
-                ✕
-              </button>
-            )}
+            <button
+              onClick={() => setDescription('')}
+              className={cn(
+                'absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs leading-none transition-opacity',
+                description ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              )}
+            >
+              ✕
+            </button>
           </div>
         </div>
 
