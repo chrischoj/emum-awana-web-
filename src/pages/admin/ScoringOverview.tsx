@@ -6,7 +6,7 @@ import { useClub } from '../../contexts/ClubContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getWeeklyScores, getSubmissionsByDate, approveSubmission, rejectSubmission, editScoreWithHistory, getScoreEditHistory } from '../../services/scoringService';
 import { getTeamGameTotals } from '../../services/gameScoreService';
-import { getToday, cn } from '../../lib/utils';
+import { getToday, cn, sortTeamsByColor, teamColorOrder } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
 import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
@@ -179,8 +179,8 @@ export default function ScoringOverview() {
         memberScoreMap.get(score.member_id)![score.category] = score.total_points;
       }
 
-      // 팀별 데이터 빌드
-      const result: TeamScoreData[] = teams.map((team) => {
+      // 팀별 데이터 빌드 (R, B, G, Y 순)
+      const result: TeamScoreData[] = sortTeamsByColor(teams).map((team) => {
         const teamMembers = members.filter((m) => m.team_id === team.id);
 
         const memberRows: MemberScoreRow[] = teamMembers.map((m) => {
@@ -220,7 +220,9 @@ export default function ScoringOverview() {
       result.sort((a, b) => {
         const sa = a.submission?.status ?? 'none';
         const sb = b.submission?.status ?? 'none';
-        return (statusOrder[sa] ?? 4) - (statusOrder[sb] ?? 4);
+        const statusDiff = (statusOrder[sa] ?? 4) - (statusOrder[sb] ?? 4);
+        if (statusDiff !== 0) return statusDiff;
+        return teamColorOrder(a.teamName) - teamColorOrder(b.teamName);
       });
       setTeamScores(result);
     } catch {
@@ -345,6 +347,7 @@ export default function ScoringOverview() {
         });
       }
 
+      result.sort((a, b) => teamColorOrder(a.teamName) - teamColorOrder(b.teamName));
       setTeamScores(result);
     } catch {
       toast.error('데이터 로드 실패');

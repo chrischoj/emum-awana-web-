@@ -6,7 +6,7 @@ import { useClub } from '../../contexts/ClubContext';
 import { getGameScoresByDate, getTeamGameTotals, updateGameScore, deleteGameScore, getGameScoreLock, lockGameScores, unlockGameScores } from '../../services/gameScoreService';
 import type { GameScoreLock } from '../../services/gameScoreService';
 import { useAuth } from '../../contexts/AuthContext';
-import { getToday, cn } from '../../lib/utils';
+import { getToday, cn, sortTeamsByColor } from '../../lib/utils';
 import type { GameScoreEntry, Team } from '../../types/awana';
 import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useAppResume } from '../../hooks/useAppResume';
@@ -114,7 +114,7 @@ export default function GameScoresAdmin() {
           .reduce((sum, e) => sum + e.points, 0);
         totals.push({ name, color, total });
       }
-      setColorTotals(totals);
+      setColorTotals(sortTeamsByColor(totals));
     } catch {
       toast.error('데이터 로드 실패');
     } finally {
@@ -304,7 +304,7 @@ export default function GameScoresAdmin() {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 mb-6 lg:grid-cols-4">
-          {teams.map((team) => (
+          {sortTeamsByColor(teams).map((team) => (
             <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-4" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
               <p className="text-sm font-bold" style={{ color: team.color }}>{team.name}</p>
               <p className="text-2xl font-bold text-center mt-1">{(teamTotals[team.id] || 0).toLocaleString()}</p>

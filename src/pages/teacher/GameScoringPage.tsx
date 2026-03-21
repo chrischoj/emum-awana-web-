@@ -9,7 +9,7 @@ import {
 } from '../../services/gameScoreService';
 import type { GameScoreLock } from '../../services/gameScoreService';
 import { supabase } from '../../lib/supabase';
-import { cn, getToday } from '../../lib/utils';
+import { cn, getToday, sortTeamsByColor } from '../../lib/utils';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
 import { SyncStatusIndicator } from '../../components/ui/SyncStatusIndicator';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -252,7 +252,7 @@ export default function GameScoringPage() {
       <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-4">
         <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">오늘의 팀 점수</h2>
         <div className="grid grid-cols-4 gap-2">
-          {teams.map((team) => (
+          {sortTeamsByColor(teams).map((team) => (
             <div
               key={team.id}
               data-testid={`game-team-total-${team.id}`}
@@ -328,7 +328,7 @@ export default function GameScoringPage() {
 
         {/* Team selection */}
         <div className="grid grid-cols-4 gap-2 mb-3">
-          {teams.map((team) => {
+          {sortTeamsByColor(teams).map((team) => {
             const isSelected = selectedTeamIds.has(team.id);
             return (
               <button
