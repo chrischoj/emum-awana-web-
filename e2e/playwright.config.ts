@@ -44,7 +44,7 @@ export default defineConfig({
     // 전체 흐름 테스트
     {
       name: 'full-flow',
-      testMatch: /submission-approval-flow|awards-aggregation|badge-request-flow|concurrent-stress/,
+      testMatch: /submission-approval-flow|awards-aggregation|badge-request-flow|concurrent-stress|room-submission-flow/,
       use: { ...devices['Desktop Chrome'] },
     },
     // 기본 Chromium

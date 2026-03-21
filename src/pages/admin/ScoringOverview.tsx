@@ -632,6 +632,7 @@ export default function ScoringOverview() {
         </div>
         <div className="flex gap-2">
           <button
+            data-testid="club-filter-all"
             onClick={() => setViewMode('all')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               viewMode === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -642,6 +643,7 @@ export default function ScoringOverview() {
           {clubs.map((club) => (
             <button
               key={club.id}
+              data-testid={`club-filter-${club.id}`}
               onClick={() => setViewMode(club.id)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 viewMode === club.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'

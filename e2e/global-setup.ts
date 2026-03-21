@@ -24,7 +24,7 @@ async function globalSetup(config: FullConfig) {
     const page = await context.newPage();
 
     await page.goto(`${baseURL}/login`);
-    await page.fill('#email', account.email);
+    await page.fill('#loginId', account.email);
     await page.fill('#password', account.password);
     await page.click('button[type="submit"]');
 
