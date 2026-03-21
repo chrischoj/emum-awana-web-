@@ -293,7 +293,7 @@ export default function GameScoringPage() {
               <button
                 key={desc}
                 data-testid={`game-desc-preset-${desc}`}
-                onClick={() => setDescription(desc)}
+                onClick={() => setDescription(description === desc ? '' : desc)}
                 className={cn(
                   'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
                   description === desc
@@ -305,14 +305,24 @@ export default function GameScoringPage() {
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            data-testid="game-description-input"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="직접 입력..."
-            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              data-testid="game-description-input"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="직접 입력..."
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 pr-8"
+            />
+            {description && (
+              <button
+                onClick={() => setDescription('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs leading-none"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Team selection */}
