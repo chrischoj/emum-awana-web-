@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useClub } from '../../contexts/ClubContext';
@@ -59,6 +59,13 @@ export default function ScoringPage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const selectedTeamIdRef = useRef(selectedTeamId);
   selectedTeamIdRef.current = selectedTeamId;
+  const selectedRoomId = useMemo(() => {
+    if (!selectedTeamId) return null;
+    const allAssigns = [...primaryAssignments, ...temporaryAssignments];
+    return allAssigns.find(a => a.team_id === selectedTeamId)?.room_id ?? null;
+  }, [selectedTeamId, primaryAssignments, temporaryAssignments]);
+  const selectedRoomIdRef = useRef(selectedRoomId);
+  selectedRoomIdRef.current = selectedRoomId;
   const location = useLocation();
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
   const [loading, setLoading] = useState(true);
@@ -192,9 +199,9 @@ export default function ScoringPage() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'weekly_score_submissions', filter: `club_id=eq.${currentClub.id}` },
         () => {
-          const tid = selectedTeamIdRef.current;
-          if (tid && currentClub) {
-            getSubmission(currentClub.id, tid, selectedDate)
+          const rid = selectedRoomIdRef.current;
+          if (rid) {
+            getSubmission(rid, selectedDate)
               .then((sub) => {
                 if (sub) {
                   setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
@@ -215,11 +222,11 @@ export default function ScoringPage() {
 
   // Load submission status
   useEffect(() => {
-    if (!currentClub || !selectedTeamId) {
+    if (!currentClub || !selectedRoomId) {
       setSubmission(null);
       return;
     }
-    getSubmission(currentClub.id, selectedTeamId, selectedDate)
+    getSubmission(selectedRoomId, selectedDate)
       .then((sub) => {
         if (sub) {
           setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
@@ -228,11 +235,11 @@ export default function ScoringPage() {
         }
       })
       .catch(() => setSubmission(null));
-  }, [currentClub, selectedTeamId, selectedDate]);
+  }, [currentClub, selectedRoomId, selectedDate]);
 
   // 알림 클릭에 의한 adaptive refresh (동일 경로여도 강제 갱신)
   useEffect(() => {
-    const state = location.state as { fromNotification?: boolean; team_id?: string; training_date?: string } | null;
+    const state = location.state as { fromNotification?: boolean; team_id?: string; room_id?: string; training_date?: string } | null;
     if (!state?.fromNotification) return;
 
     // 날짜/팀 설정 (다르면 기존 useEffect가 자동 갱신, 같으면 아래에서 강제 갱신)
@@ -242,9 +249,9 @@ export default function ScoringPage() {
     // 동일 팀/날짜여도 submission 강제 갱신
     if (currentClub) {
       const date = state.training_date || selectedDate;
-      const tid = state.team_id || selectedTeamId;
-      if (tid) {
-        getSubmission(currentClub.id, tid, date)
+      const rid = state.room_id;
+      if (rid) {
+        getSubmission(rid, date)
           .then((sub) => {
             if (sub) {
               setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
@@ -427,7 +434,7 @@ export default function ScoringPage() {
   };
 
   const handleSubmit = async () => {
-    if (!currentClub || !selectedTeamId || !teacher) return;
+    if (!currentClub || !selectedTeamId || !selectedRoomId || !teacher) return;
     // flush pending syncs - 대기 중인 sync를 즉시 실행
     const flushPromises: Promise<void>[] = [];
     for (const [key, timeout] of pendingSyncs.current) {
@@ -474,6 +481,7 @@ export default function ScoringPage() {
       await submitScores({
         clubId: currentClub.id,
         teamId: selectedTeamId,
+        roomId: selectedRoomId,
         trainingDate: selectedDate,
         submittedBy: teacher.id,
       });
@@ -488,11 +496,10 @@ export default function ScoringPage() {
   };
 
   const handleReopen = async () => {
-    if (!currentClub || !selectedTeamId) return;
+    if (!selectedRoomId) return;
     try {
       await reopenSubmission({
-        clubId: currentClub.id,
-        teamId: selectedTeamId,
+        roomId: selectedRoomId,
         trainingDate: selectedDate,
       });
       setSubmission({ status: 'draft' });
@@ -820,7 +827,7 @@ export default function ScoringPage() {
                submission.status === 'approved' ? '승인됨' : '반려됨'}
             </span>
           )}
-          {!isLocked && selectedTeamId && (
+          {!isLocked && selectedTeamId && selectedRoomId && (
             <button
               data-testid="submit-scores-btn"
               onClick={() => setShowSubmitConfirm(true)}

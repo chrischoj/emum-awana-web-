@@ -10,7 +10,13 @@ import { getToday, cn, sortTeamsByColor, teamColorOrder } from '../../lib/utils'
 import { Avatar } from '../../components/ui/Avatar';
 import { DatePickerWithToday } from '../../components/ui/DatePickerWithToday';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
-import type { WeeklyScore, ScoringCategory, Team, Member, SubmissionStatus, WeeklyScoreSubmission, ScoreEditHistory } from '../../types/awana';
+import type { WeeklyScore, ScoringCategory, Team, Member, SubmissionStatus, WeeklyScoreSubmission, ScoreEditHistory, Room } from '../../types/awana';
+
+interface RoomSubmissionData {
+  roomId: string;
+  roomName: string;
+  submission: WeeklyScoreSubmission | null;
+}
 
 interface SubTeamData {
   teamId: string;
@@ -20,6 +26,7 @@ interface SubTeamData {
   gameTotal: number;
   grandTotal: number;
   submission: WeeklyScoreSubmission | null;
+  roomSubmissions: RoomSubmissionData[];
 }
 
 interface TeamScoreData {
@@ -30,6 +37,7 @@ interface TeamScoreData {
   gameTotal: number;
   grandTotal: number;
   submission: WeeklyScoreSubmission | null;
+  roomSubmissions: RoomSubmissionData[];
   memberScores: MemberScoreRow[];
   subTeams?: SubTeamData[];
 }
@@ -58,6 +66,19 @@ const STATUS_CONFIG: Record<SubmissionStatus, { label: string; className: string
   approved:  { label: '승인됨',  className: 'bg-green-100 text-green-700' },
   rejected:  { label: '반려됨',  className: 'bg-red-100 text-red-700' },
 };
+
+/** room submissions에서 가장 긴급한(우선순위 높은) submission 파생 */
+function deriveTeamSubmission(roomSubs: RoomSubmissionData[]): WeeklyScoreSubmission | null {
+  const priority: Record<string, number> = { submitted: 0, rejected: 1, draft: 2, approved: 3 };
+  let best: WeeklyScoreSubmission | null = null;
+  let bestP = 999;
+  for (const rs of roomSubs) {
+    if (!rs.submission) continue;
+    const p = priority[rs.submission.status] ?? 4;
+    if (p < bestP) { bestP = p; best = rs.submission; }
+  }
+  return best;
+}
 
 export default function ScoringOverview() {
   const { clubs, currentClub, setCurrentClub, teams, members, loading: clubLoading } = useClub();
@@ -139,11 +160,13 @@ export default function ScoringOverview() {
     if (!currentClub) return;
     if (showLoading) setLoading(true);
     try {
-      const [weeklyScores, gameTotals, submissions] = await Promise.all([
+      const [weeklyScores, gameTotals, submissions, roomsRes] = await Promise.all([
         getWeeklyScores(currentClub.id, selectedDate),
         getTeamGameTotals(currentClub.id, selectedDate),
         getSubmissionsByDate(currentClub.id, selectedDate),
+        supabase.from('rooms').select('*').eq('club_id', currentClub.id).eq('active', true),
       ]);
+      const rooms = (roomsRes.data as Room[]) || [];
 
       // member_id -> team_id 맵
       const memberTeamMap = new Map<string, string>();
@@ -157,10 +180,19 @@ export default function ScoringOverview() {
         memberNameMap.set(m.id, m.name);
       }
 
-      // submission 맵
-      const submissionMap = new Map<string, WeeklyScoreSubmission>();
+      // submission 맵 (room_id -> submission)
+      const submissionByRoom = new Map<string, WeeklyScoreSubmission>();
       for (const s of submissions) {
-        submissionMap.set(s.team_id, s);
+        if (s.room_id) submissionByRoom.set(s.room_id, s);
+      }
+
+      // rooms by team
+      const roomsByTeam = new Map<string, Room[]>();
+      for (const room of rooms) {
+        if (!room.team_id) continue;
+        const list = roomsByTeam.get(room.team_id) || [];
+        list.push(room);
+        roomsByTeam.set(room.team_id, list);
       }
 
       // 팀별 핸드북 점수 집계
@@ -198,6 +230,13 @@ export default function ScoringOverview() {
         const handbookTotal = teamHandbookMap.get(team.id) || 0;
         const gameTotal = gameTotals[team.id] || 0;
 
+        const teamRooms = roomsByTeam.get(team.id) || [];
+        const roomSubmissions: RoomSubmissionData[] = teamRooms.map(r => ({
+          roomId: r.id,
+          roomName: r.name,
+          submission: submissionByRoom.get(r.id) || null,
+        }));
+
         return {
           teamId: team.id,
           teamName: team.name,
@@ -205,7 +244,8 @@ export default function ScoringOverview() {
           handbookTotal,
           gameTotal,
           grandTotal: handbookTotal + gameTotal,
-          submission: submissionMap.get(team.id) || null,
+          submission: deriveTeamSubmission(roomSubmissions),
+          roomSubmissions,
           memberScores: memberRows,
         };
       });
@@ -236,12 +276,13 @@ export default function ScoringOverview() {
     if (clubs.length === 0) return;
     if (showLoading) setLoading(true);
     try {
-      const [teamsRes, membersRes, scoresRes, gameRes, submissionsRes] = await Promise.all([
+      const [teamsRes, membersRes, scoresRes, gameRes, submissionsRes, roomsRes] = await Promise.all([
         supabase.from('teams').select('*').order('name'),
         supabase.from('members').select('*').eq('active', true).eq('enrollment_status', 'active').order('name'),
         supabase.from('weekly_scores').select('*').eq('training_date', selectedDate),
         supabase.from('game_score_entries').select('*').eq('training_date', selectedDate),
         supabase.from('weekly_score_submissions').select('*').eq('training_date', selectedDate),
+        supabase.from('rooms').select('*').eq('active', true),
       ]);
 
       const allTeams = (teamsRes.data as Team[]) || [];
@@ -249,11 +290,21 @@ export default function ScoringOverview() {
       const allScores = (scoresRes.data as WeeklyScore[]) || [];
       const allGameEntries = (gameRes.data as { team_id: string; points: number }[]) || [];
       const allSubmissions = (submissionsRes.data as WeeklyScoreSubmission[]) || [];
+      const allRooms = (roomsRes.data as Room[]) || [];
 
-      // submission 맵 (team_id -> submission)
-      const submissionMap = new Map<string, WeeklyScoreSubmission>();
+      // submission 맵 (room_id -> submission)
+      const submissionByRoom = new Map<string, WeeklyScoreSubmission>();
       for (const s of allSubmissions) {
-        submissionMap.set(s.team_id, s);
+        if (s.room_id) submissionByRoom.set(s.room_id, s);
+      }
+
+      // rooms by team
+      const roomsByTeam = new Map<string, Room[]>();
+      for (const room of allRooms) {
+        if (!room.team_id) continue;
+        const list = roomsByTeam.get(room.team_id) || [];
+        list.push(room);
+        roomsByTeam.set(room.team_id, list);
       }
 
       const memberTeamMap = new Map<string, string>();
@@ -323,6 +374,12 @@ export default function ScoringOverview() {
         // subTeams: 각 클럽별 개별 데이터
         const subTeams: SubTeamData[] = teamIds.map((tid) => {
           const clubId = teamClubMap.get(tid) || '';
+          const subRooms = roomsByTeam.get(tid) || [];
+          const roomSubmissions: RoomSubmissionData[] = subRooms.map(r => ({
+            roomId: r.id,
+            roomName: r.name,
+            submission: submissionByRoom.get(r.id) || null,
+          }));
           return {
             teamId: tid,
             clubId,
@@ -330,7 +387,8 @@ export default function ScoringOverview() {
             handbookTotal: teamHandbookMap.get(tid) || 0,
             gameTotal: teamGameMap.get(tid) || 0,
             grandTotal: (teamHandbookMap.get(tid) || 0) + (teamGameMap.get(tid) || 0),
-            submission: submissionMap.get(tid) || null,
+            submission: deriveTeamSubmission(roomSubmissions),
+            roomSubmissions,
           };
         });
 
@@ -342,6 +400,7 @@ export default function ScoringOverview() {
           gameTotal,
           grandTotal: handbookTotal + gameTotal,
           submission: null,
+          roomSubmissions: [],
           memberScores: memberRows,
           subTeams,
         });
@@ -365,17 +424,18 @@ export default function ScoringOverview() {
     });
   }
 
-  async function handleApprove(teamScore: TeamScoreData) {
-    if (!currentClub || !adminTeacher) return;
-    setActionLoading(teamScore.teamId);
+  async function handleApproveRoom(rs: RoomSubmissionData, teamId: string) {
+    if (!currentClub || !adminTeacher || !rs.submission) return;
+    setActionLoading(rs.roomId);
     try {
       await approveSubmission({
+        roomId: rs.roomId,
         clubId: currentClub.id,
-        teamId: teamScore.teamId,
+        teamId,
         trainingDate: selectedDate,
         approvedBy: adminTeacher.id,
       });
-      toast.success(`${teamScore.teamName} 팀 승인됨`);
+      toast.success(`${rs.roomName} 승인됨`);
       await loadData();
     } catch {
       toast.error('승인 처리 실패');
@@ -384,20 +444,21 @@ export default function ScoringOverview() {
     }
   }
 
-  async function handleReject(teamScore: TeamScoreData) {
+  async function handleRejectRoom(rs: RoomSubmissionData, teamId: string) {
     if (!currentClub) return;
-    setActionLoading(teamScore.teamId);
+    setActionLoading(rs.roomId);
     try {
-      const note = rejectionNotes[teamScore.teamId] || '';
+      const note = rejectionNotes[rs.roomId] || '';
       await rejectSubmission({
+        roomId: rs.roomId,
         clubId: currentClub.id,
-        teamId: teamScore.teamId,
+        teamId,
         trainingDate: selectedDate,
         rejectionNote: note,
       });
-      toast.success(`${teamScore.teamName} 팀 반려됨`);
+      toast.success(`${rs.roomName} 반려됨`);
       setRejectingTeam(null);
-      setRejectionNotes((prev) => { const n = { ...prev }; delete n[teamScore.teamId]; return n; });
+      setRejectionNotes((prev) => { const n = { ...prev }; delete n[rs.roomId]; return n; });
       await loadData();
     } catch {
       toast.error('반려 처리 실패');
@@ -406,17 +467,18 @@ export default function ScoringOverview() {
     }
   }
 
-  async function handleAllViewApprove(sub: SubTeamData) {
-    if (!adminTeacher) return;
-    setActionLoading(sub.teamId);
+  async function handleAllViewApproveRoom(rs: RoomSubmissionData, sub: SubTeamData) {
+    if (!adminTeacher || !rs.submission) return;
+    setActionLoading(rs.roomId);
     try {
       await approveSubmission({
+        roomId: rs.roomId,
         clubId: sub.clubId,
         teamId: sub.teamId,
         trainingDate: selectedDate,
         approvedBy: adminTeacher.id,
       });
-      toast.success(`승인됨`);
+      toast.success(`${rs.roomName} 승인됨`);
       await loadAllData(false);
     } catch {
       toast.error('승인 처리 실패');
@@ -425,19 +487,20 @@ export default function ScoringOverview() {
     }
   }
 
-  async function handleAllViewReject(sub: SubTeamData) {
-    setActionLoading(sub.teamId);
+  async function handleAllViewRejectRoom(rs: RoomSubmissionData, sub: SubTeamData) {
+    setActionLoading(rs.roomId);
     try {
-      const note = rejectionNotes[sub.teamId] || '';
+      const note = rejectionNotes[rs.roomId] || '';
       await rejectSubmission({
+        roomId: rs.roomId,
         clubId: sub.clubId,
         teamId: sub.teamId,
         trainingDate: selectedDate,
         rejectionNote: note,
       });
-      toast.success(`반려됨`);
+      toast.success(`${rs.roomName} 반려됨`);
       setRejectingTeam(null);
-      setRejectionNotes((prev) => { const n = { ...prev }; delete n[sub.teamId]; return n; });
+      setRejectionNotes((prev) => { const n = { ...prev }; delete n[rs.roomId]; return n; });
       await loadAllData(false);
     } catch {
       toast.error('반려 처리 실패');
@@ -507,20 +570,23 @@ export default function ScoringOverview() {
     }
   }
 
-  const submittedCount = teamScores.filter((t) => t.submission?.status === 'submitted').length;
-  const approvedCount = teamScores.filter((t) => t.submission?.status === 'approved').length;
-  const rejectedCount = teamScores.filter((t) => t.submission?.status === 'rejected').length;
-  const draftingCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal > 0).length;
-  const gameOnlyCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal > 0).length;
-  const unsubmittedCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal === 0).length;
+  // 개별 클럽 뷰 통계 (room 기반)
+  const allClubRoomSubs = teamScores.flatMap(t => t.roomSubmissions);
+  const submittedCount = allClubRoomSubs.filter(r => r.submission?.status === 'submitted').length;
+  const approvedCount = allClubRoomSubs.filter(r => r.submission?.status === 'approved').length;
+  const rejectedCount = allClubRoomSubs.filter(r => r.submission?.status === 'rejected').length;
+  // 팀 단위 점수 기반 통계는 유지
+  const noSubmissionTeams = teamScores.filter(t => !t.submission || t.submission.status === 'draft');
+  const draftingCount = noSubmissionTeams.filter(t => t.handbookTotal > 0).length;
+  const gameOnlyCount = noSubmissionTeams.filter(t => t.handbookTotal === 0 && t.gameTotal > 0).length;
+  const unsubmittedCount = noSubmissionTeams.filter(t => t.handbookTotal === 0 && t.gameTotal === 0).length;
 
-  // all 뷰용 전체 통계
-  const allSubTeams = teamScores.flatMap((t) => t.subTeams || []);
-  const allSubmittedCount = allSubTeams.filter((s) => s.submission?.status === 'submitted').length;
-  const allApprovedCount = allSubTeams.filter((s) => s.submission?.status === 'approved').length;
-  const allDraftingCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal > 0).length;
-  const allGameOnlyCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal === 0 && s.gameTotal > 0).length;
-  const allUnsubmittedCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal === 0 && s.gameTotal === 0).length;
+  // all 뷰용 전체 통계 (room 기반)
+  const allRoomSubs = teamScores.flatMap(t => (t.subTeams || []).flatMap(s => s.roomSubmissions));
+  const allSubmittedCount = allRoomSubs.filter(r => r.submission?.status === 'submitted').length;
+  const allApprovedCount = allRoomSubs.filter(r => r.submission?.status === 'approved').length;
+  const allRejectedCount = allRoomSubs.filter(r => r.submission?.status === 'rejected').length;
+  const allNoSubmissionCount = allRoomSubs.filter(r => !r.submission || r.submission.status === 'draft').length;
 
   return (
     <div>
@@ -542,9 +608,8 @@ export default function ScoringOverview() {
             <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
               {allApprovedCount > 0 && <span className="text-green-600">승인 {allApprovedCount}</span>}
               {allSubmittedCount > 0 && <span className="text-blue-600">대기 {allSubmittedCount}</span>}
-              {allDraftingCount > 0 && <span className="text-orange-500">작성중 {allDraftingCount}</span>}
-              {allGameOnlyCount > 0 && <span className="text-blue-500">게임 {allGameOnlyCount}</span>}
-              {allUnsubmittedCount > 0 && <span className="text-gray-400">미제출 {allUnsubmittedCount}</span>}
+              {allRejectedCount > 0 && <span className="text-red-500">반려 {allRejectedCount}</span>}
+              {allNoSubmissionCount > 0 && <span className="text-gray-400">미제출 {allNoSubmissionCount}</span>}
             </p>
           ) : (
             <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
@@ -671,64 +736,99 @@ export default function ScoringOverview() {
                         </div>
                       </div>
 
-                      {/* 승인/반려 버튼 (submitted 상태일 때만, 개별 클럽 뷰) */}
-                      {status === 'submitted' && !hasSubTeams && (
-                        <div className="space-y-2 mt-3 pt-3 border-t border-gray-100">
-                          {rejectingTeam === t.teamId ? (
-                            <>
-                              <textarea
-                                data-testid={`admin-reject-input-${t.teamId}`}
-                                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
-                                rows={2}
-                                placeholder="반려 사유 입력..."
-                                value={rejectionNotes[t.teamId] || ''}
-                                onChange={(e) =>
-                                  setRejectionNotes((prev) => ({ ...prev, [t.teamId]: e.target.value }))
-                                }
-                              />
-                              <div className="flex gap-1.5">
-                                <button
-                                  data-testid={`admin-reject-confirm-${t.teamId}`}
-                                  onClick={() => handleReject(t)}
-                                  disabled={actionLoading === t.teamId}
-                                  className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-                                >
-                                  {actionLoading === t.teamId ? '처리중...' : '반려 확인'}
-                                </button>
-                                <button
-                                  onClick={() => setRejectingTeam(null)}
-                                  className="flex-1 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                >
-                                  취소
-                                </button>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex gap-1.5">
-                              <button
-                                data-testid={`admin-approve-btn-${t.teamId}`}
-                                onClick={() => handleApprove(t)}
-                                disabled={actionLoading === t.teamId}
-                                className="flex-1 py-1 rounded-lg text-xs font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                      {/* 교실별 제출 현황 (개별 클럽 뷰) */}
+                      {!hasSubTeams && t.roomSubmissions.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">교실별 현황</p>
+                          {t.roomSubmissions.map((rs) => {
+                            const rsStatus = rs.submission?.status ?? null;
+                            const rsCfg = rsStatus ? STATUS_CONFIG[rsStatus] : null;
+                            return (
+                              <div
+                                key={rs.roomId}
+                                data-testid={`admin-room-card-${rs.roomId}`}
+                                className={cn(
+                                  'rounded-lg p-2.5 text-xs',
+                                  rsStatus === 'submitted' && 'bg-blue-50',
+                                  rsStatus === 'approved' && 'bg-green-50',
+                                  rsStatus === 'rejected' && 'bg-red-50',
+                                  !rsStatus && 'bg-gray-50 opacity-60',
+                                )}
                               >
-                                {actionLoading === t.teamId ? '처리중...' : '승인'}
-                              </button>
-                              <button
-                                data-testid={`admin-reject-btn-${t.teamId}`}
-                                onClick={() => setRejectingTeam(t.teamId)}
-                                className="flex-1 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-600 hover:bg-red-200"
-                              >
-                                반려
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-semibold text-gray-700">{rs.roomName}</span>
+                                  {rsCfg ? (
+                                    <span data-testid={`admin-room-status-${rs.roomId}`} className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${rsCfg.className}`}>
+                                      {rsCfg.label}
+                                    </span>
+                                  ) : (
+                                    <span data-testid={`admin-room-status-${rs.roomId}`} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400">
+                                      미제출
+                                    </span>
+                                  )}
+                                </div>
 
-                      {/* 반려된 경우 메모 표시 (개별 클럽 뷰) */}
-                      {status === 'rejected' && t.submission?.rejection_note && !hasSubTeams && (
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <p className="text-xs text-red-500">반려 사유: {t.submission.rejection_note}</p>
+                                {/* 승인/반려 버튼 */}
+                                {rsStatus === 'submitted' && (
+                                  <div className="mt-1.5">
+                                    {rejectingTeam === rs.roomId ? (
+                                      <div className="space-y-1.5">
+                                        <textarea
+                                          data-testid={`admin-room-reject-input-${rs.roomId}`}
+                                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
+                                          rows={2}
+                                          placeholder="반려 사유 입력..."
+                                          value={rejectionNotes[rs.roomId] || ''}
+                                          onChange={(e) =>
+                                            setRejectionNotes((prev) => ({ ...prev, [rs.roomId]: e.target.value }))
+                                          }
+                                        />
+                                        <div className="flex gap-1">
+                                          <button
+                                            data-testid={`admin-room-reject-confirm-${rs.roomId}`}
+                                            onClick={() => handleRejectRoom(rs, t.teamId)}
+                                            disabled={actionLoading === rs.roomId}
+                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                                          >
+                                            {actionLoading === rs.roomId ? '처리중...' : '반려 확인'}
+                                          </button>
+                                          <button
+                                            onClick={() => setRejectingTeam(null)}
+                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                          >
+                                            취소
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex gap-1">
+                                        <button
+                                          data-testid={`admin-room-approve-btn-${rs.roomId}`}
+                                          onClick={() => handleApproveRoom(rs, t.teamId)}
+                                          disabled={actionLoading === rs.roomId}
+                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
+                                        >
+                                          {actionLoading === rs.roomId ? '처리중...' : '승인'}
+                                        </button>
+                                        <button
+                                          data-testid={`admin-room-reject-btn-${rs.roomId}`}
+                                          onClick={() => setRejectingTeam(rs.roomId)}
+                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-red-100 text-red-600 hover:bg-red-200"
+                                        >
+                                          반려
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* 반려 사유 */}
+                                {rsStatus === 'rejected' && rs.submission?.rejection_note && (
+                                  <p className="text-[10px] text-red-500 mt-1">사유: {rs.submission.rejection_note}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -781,59 +881,87 @@ export default function ScoringOverview() {
                                   </div>
                                 </div>
 
-                                {/* 승인/반려 버튼 */}
-                                {subStatus === 'submitted' && (
-                                  <div className="mt-1.5">
-                                    {rejectingTeam === sub.teamId ? (
-                                      <div className="space-y-1.5">
-                                        <textarea
-                                          className="w-full border border-gray-300 rounded px-2 py-1 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
-                                          rows={2}
-                                          placeholder="반려 사유 입력..."
-                                          value={rejectionNotes[sub.teamId] || ''}
-                                          onChange={(e) =>
-                                            setRejectionNotes((prev) => ({ ...prev, [sub.teamId]: e.target.value }))
-                                          }
-                                        />
-                                        <div className="flex gap-1">
-                                          <button
-                                            onClick={() => handleAllViewReject(sub)}
-                                            disabled={actionLoading === sub.teamId}
-                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-                                          >
-                                            {actionLoading === sub.teamId ? '처리중...' : '반려 확인'}
-                                          </button>
-                                          <button
-                                            onClick={() => setRejectingTeam(null)}
-                                            className="flex-1 py-1 rounded text-[10px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                          >
-                                            취소
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="flex gap-1">
-                                        <button
-                                          onClick={() => handleAllViewApprove(sub)}
-                                          disabled={actionLoading === sub.teamId}
-                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-green-500 text-white hover:bg-green-600 disabled:opacity-50"
-                                        >
-                                          {actionLoading === sub.teamId ? '처리중...' : '승인'}
-                                        </button>
-                                        <button
-                                          onClick={() => setRejectingTeam(sub.teamId)}
-                                          className="flex-1 py-1 rounded text-[10px] font-medium bg-red-100 text-red-600 hover:bg-red-200"
-                                        >
-                                          반려
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                {/* 교실별 현황 */}
+                                {sub.roomSubmissions.length > 0 && (
+                                  <div className="mt-1.5 space-y-1">
+                                    {sub.roomSubmissions.map((rs) => {
+                                      const rsStatus = rs.submission?.status ?? null;
+                                      const rsCfg = rsStatus ? STATUS_CONFIG[rsStatus] : null;
+                                      return (
+                                        <div key={rs.roomId} className={cn(
+                                          'rounded p-1.5',
+                                          rsStatus === 'submitted' && 'bg-blue-100/50',
+                                          rsStatus === 'approved' && 'bg-green-100/50',
+                                          rsStatus === 'rejected' && 'bg-red-100/50',
+                                          !rsStatus && 'bg-gray-100/50',
+                                        )}>
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[10px] text-gray-600">{rs.roomName}</span>
+                                            {rsCfg ? (
+                                              <span className={`px-1 py-0.5 rounded text-[9px] font-medium ${rsCfg.className}`}>
+                                                {rsCfg.label}
+                                              </span>
+                                            ) : (
+                                              <span className="px-1 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-400">미제출</span>
+                                            )}
+                                          </div>
 
-                                {/* 반려 사유 */}
-                                {subStatus === 'rejected' && sub.submission?.rejection_note && (
-                                  <p className="text-[10px] text-red-500 mt-1">사유: {sub.submission.rejection_note}</p>
+                                          {rsStatus === 'submitted' && (
+                                            <div className="mt-1">
+                                              {rejectingTeam === rs.roomId ? (
+                                                <div className="space-y-1">
+                                                  <textarea
+                                                    className="w-full border border-gray-300 rounded px-1.5 py-0.5 text-[10px] resize-none focus:outline-none focus:ring-1 focus:ring-red-300"
+                                                    rows={1}
+                                                    placeholder="반려 사유..."
+                                                    value={rejectionNotes[rs.roomId] || ''}
+                                                    onChange={(e) =>
+                                                      setRejectionNotes((prev) => ({ ...prev, [rs.roomId]: e.target.value }))
+                                                    }
+                                                  />
+                                                  <div className="flex gap-0.5">
+                                                    <button
+                                                      onClick={() => handleAllViewRejectRoom(rs, sub)}
+                                                      disabled={actionLoading === rs.roomId}
+                                                      className="flex-1 py-0.5 rounded text-[9px] font-medium bg-red-500 text-white disabled:opacity-50"
+                                                    >
+                                                      {actionLoading === rs.roomId ? '...' : '반려'}
+                                                    </button>
+                                                    <button
+                                                      onClick={() => setRejectingTeam(null)}
+                                                      className="flex-1 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-600"
+                                                    >
+                                                      취소
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="flex gap-0.5">
+                                                  <button
+                                                    onClick={() => handleAllViewApproveRoom(rs, sub)}
+                                                    disabled={actionLoading === rs.roomId}
+                                                    className="flex-1 py-0.5 rounded text-[9px] font-medium bg-green-500 text-white disabled:opacity-50"
+                                                  >
+                                                    {actionLoading === rs.roomId ? '...' : '승인'}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => setRejectingTeam(rs.roomId)}
+                                                    className="flex-1 py-0.5 rounded text-[9px] font-medium bg-red-100 text-red-600"
+                                                  >
+                                                    반려
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {rsStatus === 'rejected' && rs.submission?.rejection_note && (
+                                            <p className="text-[9px] text-red-500 mt-0.5">사유: {rs.submission.rejection_note}</p>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )}
                               </div>
                             );

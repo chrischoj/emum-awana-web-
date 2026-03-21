@@ -59,6 +59,16 @@ export const ADMIN_SCORING = {
   submissionStatus: (teamId: string) => `[data-testid="admin-submission-status-${teamId}"]`,
 } as const;
 
+// ── Admin: Scoring Overview (Room-level) ──
+export const ADMIN_ROOM_SCORING = {
+  roomCard: (roomId: string) => `[data-testid="admin-room-card-${roomId}"]`,
+  roomStatus: (roomId: string) => `[data-testid="admin-room-status-${roomId}"]`,
+  roomApproveButton: (roomId: string) => `[data-testid="admin-room-approve-btn-${roomId}"]`,
+  roomRejectButton: (roomId: string) => `[data-testid="admin-room-reject-btn-${roomId}"]`,
+  roomRejectInput: (roomId: string) => `[data-testid="admin-room-reject-input-${roomId}"]`,
+  roomRejectConfirmButton: (roomId: string) => `[data-testid="admin-room-reject-confirm-${roomId}"]`,
+} as const;
+
 // ── Badge Request ──
 export const BADGE_REQUEST = {
   openButton: (memberId: string) => `[data-testid="badge-open-${memberId}"]`,

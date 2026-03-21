@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { WeeklyScore, ScoringCategory, MemberWeeklySummary, Member, WeeklyScoreSubmission, ScoreEditHistory } from '../types/awana';
-import { createNotifications, getAdminTeacherIds, getTeamName, getClubName, createNotification } from './notificationService';
+import { createNotifications, getAdminTeacherIds, getTeamName, getClubName, createNotification, getRoomName } from './notificationService';
 
 export async function getWeeklyScores(clubId: string, trainingDate: string): Promise<WeeklyScore[]> {
   const { data, error } = await supabase
@@ -131,17 +131,15 @@ export async function getTeamScoreTotals(
 // Score Submission Workflow (점수 제출 워크플로우)
 // ============================================
 
-/** 제출 상태 조회 (팀+날짜) */
+/** 제출 상태 조회 (교실+날짜) */
 export async function getSubmission(
-  clubId: string,
-  teamId: string,
+  roomId: string,
   trainingDate: string
 ): Promise<WeeklyScoreSubmission | null> {
   const { data, error } = await supabase
     .from('weekly_score_submissions')
     .select('*')
-    .eq('club_id', clubId)
-    .eq('team_id', teamId)
+    .eq('room_id', roomId)
     .eq('training_date', trainingDate)
     .maybeSingle();
   if (error) throw error;
@@ -166,6 +164,7 @@ export async function getSubmissionsByDate(
 export async function submitScores(params: {
   clubId: string;
   teamId: string;
+  roomId: string;
   trainingDate: string;
   submittedBy: string;
 }): Promise<WeeklyScoreSubmission> {
@@ -175,13 +174,14 @@ export async function submitScores(params: {
       {
         club_id: params.clubId,
         team_id: params.teamId,
+        room_id: params.roomId,
         training_date: params.trainingDate,
         status: 'submitted',
         submitted_by: params.submittedBy,
         submitted_at: new Date().toISOString(),
         rejection_note: null,
       },
-      { onConflict: 'club_id,team_id,training_date' }
+      { onConflict: 'room_id,training_date' }
     )
     .select()
     .single();
@@ -189,16 +189,17 @@ export async function submitScores(params: {
 
   // 알림: admin들에게 점수 제출 알림
   try {
-    const [adminIds, teamName, clubName] = await Promise.all([
+    const [adminIds, teamName, clubName, roomName] = await Promise.all([
       getAdminTeacherIds(),
       getTeamName(params.teamId),
       getClubName(params.clubId),
+      getRoomName(params.roomId),
     ]);
     await createNotifications({
       recipientIds: adminIds,
       type: 'score_submitted',
-      title: `${teamName}(${clubName}) 점수가 제출되었습니다`,
-      metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate },
+      title: `${roomName}(${teamName}/${clubName}) 점수가 제출되었습니다`,
+      metadata: { team_id: params.teamId, club_id: params.clubId, room_id: params.roomId, training_date: params.trainingDate },
     });
   } catch (e) {
     console.error('점수 제출 알림 생성 실패:', e);
@@ -209,15 +210,13 @@ export async function submitScores(params: {
 
 /** 교사: rejected -> draft 로 되돌리기 (수정 시작) */
 export async function reopenSubmission(params: {
-  clubId: string;
-  teamId: string;
+  roomId: string;
   trainingDate: string;
 }): Promise<void> {
   const { error } = await supabase
     .from('weekly_score_submissions')
     .update({ status: 'draft', updated_at: new Date().toISOString() })
-    .eq('club_id', params.clubId)
-    .eq('team_id', params.teamId)
+    .eq('room_id', params.roomId)
     .eq('training_date', params.trainingDate)
     .eq('status', 'rejected');
   if (error) throw error;
@@ -225,10 +224,11 @@ export async function reopenSubmission(params: {
 
 /** 관리자: submitted -> approved */
 export async function approveSubmission(params: {
-  clubId: string;
-  teamId: string;
+  roomId: string;
   trainingDate: string;
   approvedBy: string;
+  clubId: string;
+  teamId: string;
 }): Promise<void> {
   const { error } = await supabase
     .from('weekly_score_submissions')
@@ -238,8 +238,7 @@ export async function approveSubmission(params: {
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('club_id', params.clubId)
-    .eq('team_id', params.teamId)
+    .eq('room_id', params.roomId)
     .eq('training_date', params.trainingDate);
   if (error) throw error;
 
@@ -248,20 +247,20 @@ export async function approveSubmission(params: {
     const { data: submission } = await supabase
       .from('weekly_score_submissions')
       .select('submitted_by')
-      .eq('club_id', params.clubId)
-      .eq('team_id', params.teamId)
+      .eq('room_id', params.roomId)
       .eq('training_date', params.trainingDate)
       .single();
     if (submission?.submitted_by) {
-      const [teamName, clubName] = await Promise.all([
+      const [teamName, clubName, roomName] = await Promise.all([
         getTeamName(params.teamId),
         getClubName(params.clubId),
+        getRoomName(params.roomId),
       ]);
       await createNotification({
         recipientId: submission.submitted_by,
         type: 'score_approved',
-        title: `${teamName}(${clubName}) 점수가 승인되었습니다`,
-        metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate },
+        title: `${roomName}(${teamName}/${clubName}) 점수가 승인되었습니다`,
+        metadata: { team_id: params.teamId, club_id: params.clubId, room_id: params.roomId, training_date: params.trainingDate },
       });
     }
   } catch (e) {
@@ -271,10 +270,11 @@ export async function approveSubmission(params: {
 
 /** 관리자: submitted -> rejected */
 export async function rejectSubmission(params: {
-  clubId: string;
-  teamId: string;
+  roomId: string;
   trainingDate: string;
   rejectionNote: string;
+  clubId: string;
+  teamId: string;
 }): Promise<void> {
   const { error } = await supabase
     .from('weekly_score_submissions')
@@ -283,8 +283,7 @@ export async function rejectSubmission(params: {
       rejection_note: params.rejectionNote,
       updated_at: new Date().toISOString(),
     })
-    .eq('club_id', params.clubId)
-    .eq('team_id', params.teamId)
+    .eq('room_id', params.roomId)
     .eq('training_date', params.trainingDate);
   if (error) throw error;
 
@@ -293,21 +292,21 @@ export async function rejectSubmission(params: {
     const { data: submission } = await supabase
       .from('weekly_score_submissions')
       .select('submitted_by')
-      .eq('club_id', params.clubId)
-      .eq('team_id', params.teamId)
+      .eq('room_id', params.roomId)
       .eq('training_date', params.trainingDate)
       .single();
     if (submission?.submitted_by) {
-      const [teamName, clubName] = await Promise.all([
+      const [teamName, clubName, roomName] = await Promise.all([
         getTeamName(params.teamId),
         getClubName(params.clubId),
+        getRoomName(params.roomId),
       ]);
       await createNotification({
         recipientId: submission.submitted_by,
         type: 'score_rejected',
-        title: `${teamName}(${clubName}) 점수가 반려되었습니다`,
+        title: `${roomName}(${teamName}/${clubName}) 점수가 반려되었습니다`,
         body: params.rejectionNote,
-        metadata: { team_id: params.teamId, club_id: params.clubId, training_date: params.trainingDate, rejection_note: params.rejectionNote },
+        metadata: { team_id: params.teamId, club_id: params.clubId, room_id: params.roomId, training_date: params.trainingDate, rejection_note: params.rejectionNote },
       });
     }
   } catch (e) {

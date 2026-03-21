@@ -339,6 +339,7 @@ export interface WeeklyScoreSubmission {
   id: string;
   club_id: string;
   team_id: string;
+  room_id: string | null;
   training_date: string;
   status: SubmissionStatus;
   submitted_by: string | null;

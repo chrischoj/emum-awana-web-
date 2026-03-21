@@ -191,3 +191,44 @@ export async function getGameScoreLock(clubId: string, trainingDate: string) {
   if (error) throw new Error(`DB 조회 실패: ${error.message}`);
   return data;
 }
+
+// ── Room-level submission helpers ──
+
+/** 제출 상태 조회 (room 단위) */
+export async function getSubmissionByRoom(
+  roomId: string,
+  trainingDate: string
+) {
+  const { data, error } = await supabaseAdmin
+    .from('weekly_score_submissions')
+    .select('*')
+    .eq('room_id', roomId)
+    .eq('training_date', trainingDate)
+    .maybeSingle();
+
+  if (error) throw new Error(`DB 조회 실패: ${error.message}`);
+  return data;
+}
+
+/** 특정 팀의 교실 목록 조회 */
+export async function getRoomsForTeam(teamId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('rooms')
+    .select('*')
+    .eq('team_id', teamId)
+    .eq('active', true);
+
+  if (error) throw new Error(`DB 조회 실패: ${error.message}`);
+  return data ?? [];
+}
+
+/** 교사의 배정된 교실 조회 */
+export async function getTeacherAssignedRooms(teacherId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('active_teacher_assignments')
+    .select('*')
+    .eq('teacher_id', teacherId);
+
+  if (error) throw new Error(`DB 조회 실패: ${error.message}`);
+  return data ?? [];
+}

@@ -127,3 +127,9 @@ export async function getClubName(clubId: string): Promise<string> {
   const { data } = await supabase.from('clubs').select('name').eq('id', clubId).single();
   return data?.name || '클럽';
 }
+
+/** 교실(room) 이름 조회 */
+export async function getRoomName(roomId: string): Promise<string> {
+  const { data } = await supabase.from('rooms').select('name').eq('id', roomId).single();
+  return data?.name || '교실';
+}
