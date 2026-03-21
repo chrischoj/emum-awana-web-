@@ -3,11 +3,13 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { Phone } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { AvatarUpload } from '../../components/ui/AvatarUpload';
 import { Avatar } from '../../components/ui/Avatar';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
+import { formatPhone } from '../../utils/phone';
 import type { Member, EnrollmentStatus } from '../../types/awana';
 
 // ---- 유틸 ----
@@ -493,7 +495,14 @@ function MemberCard({ member, tab, clubs, onAction, onAvatarClick, onProfileClic
             <span>보호자: {member.parent_name}</span>
           )}
           {member.parent_phone && (
-            <span>연락처: {member.parent_phone}</span>
+            <a
+              href={`tel:${member.parent_phone.replace(/[^0-9]/g, '')}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-0.5 hover:text-indigo-600 active:text-indigo-700 transition-colors"
+            >
+              <Phone className="w-3 h-3" />
+              연락처: {formatPhone(member.parent_phone)}
+            </a>
           )}
           {member.uniform_size && (
             <span>유니폼: {member.uniform_size}</span>

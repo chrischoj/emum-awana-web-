@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Camera, RefreshCw, UserPlus, Key, ChevronDown, ChevronRight } from 'lucide-react';
+import { Camera, RefreshCw, UserPlus, Key, ChevronDown, ChevronRight, Phone } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -145,7 +145,14 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
             </div>
             <div className="flex items-center gap-1 mt-0.5">
               {teacher.phone && (
-                <p className="text-xs text-gray-500">{formatPhone(teacher.phone || '')}</p>
+                <a
+                  href={`tel:${teacher.phone.replace(/[^0-9]/g, '')}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-0.5 text-xs text-gray-500 hover:text-indigo-600 active:text-indigo-700 transition-colors"
+                >
+                  <Phone className="w-3 h-3" />
+                  {formatPhone(teacher.phone)}
+                </a>
               )}
               {teacher.user_id && (
                 <button
