@@ -5,6 +5,7 @@ import { useClub } from '../../contexts/ClubContext';
 import { getWeeklyScores, upsertScore, getSubmission, submitScores, reopenSubmission } from '../../services/scoringService';
 import { recordAttendance, getAttendancePoints, getAttendanceByDate } from '../../services/attendanceService';
 import { supabase } from '../../lib/supabase';
+import { useLocation } from 'react-router-dom';
 import { cn, getToday } from '../../lib/utils';
 import { Avatar } from '../../components/ui/Avatar';
 import { OfflineBanner } from '../../components/ui/OfflineBanner';
@@ -56,6 +57,9 @@ export default function ScoringPage() {
   const { enqueue, pendingCount } = useOfflineQueue();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const selectedTeamIdRef = useRef(selectedTeamId);
+  selectedTeamIdRef.current = selectedTeamId;
+  const location = useLocation();
   const [scores, setScores] = useState<Record<string, MemberScoreState>>({});
   const [loading, setLoading] = useState(true);
   const [recitationMemberId, setRecitationMemberId] = useState<string | null>(null);
@@ -184,6 +188,24 @@ export default function ScoringPage() {
         { event: '*', schema: 'public', table: 'weekly_scores', filter: `club_id=eq.${currentClub.id}` },
         () => loadScores(false)
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'weekly_score_submissions', filter: `club_id=eq.${currentClub.id}` },
+        () => {
+          const tid = selectedTeamIdRef.current;
+          if (tid && currentClub) {
+            getSubmission(currentClub.id, tid, selectedDate)
+              .then((sub) => {
+                if (sub) {
+                  setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
+                } else {
+                  setSubmission(null);
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      )
       .subscribe();
 
     return () => {
@@ -207,6 +229,37 @@ export default function ScoringPage() {
       })
       .catch(() => setSubmission(null));
   }, [currentClub, selectedTeamId, selectedDate]);
+
+  // 알림 클릭에 의한 adaptive refresh (동일 경로여도 강제 갱신)
+  useEffect(() => {
+    const state = location.state as { fromNotification?: boolean; team_id?: string; training_date?: string } | null;
+    if (!state?.fromNotification) return;
+
+    // 날짜/팀 설정 (다르면 기존 useEffect가 자동 갱신, 같으면 아래에서 강제 갱신)
+    if (state.training_date) setSelectedDate(state.training_date);
+    if (state.team_id) setSelectedTeamId(state.team_id);
+
+    // 동일 팀/날짜여도 submission 강제 갱신
+    if (currentClub) {
+      const date = state.training_date || selectedDate;
+      const tid = state.team_id || selectedTeamId;
+      if (tid) {
+        getSubmission(currentClub.id, tid, date)
+          .then((sub) => {
+            if (sub) {
+              setSubmission({ status: sub.status, rejectionNote: sub.rejection_note });
+            } else {
+              setSubmission(null);
+            }
+          })
+          .catch(() => {});
+      }
+      loadScores(false);
+    }
+
+    // navigation state 클리어 (재진입 시 재트리거 방지)
+    window.history.replaceState({}, document.title);
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced sync to Supabase (오프라인 시 큐에 저장)
   const syncScore = useCallback(

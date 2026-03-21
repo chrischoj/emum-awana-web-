@@ -66,7 +66,12 @@ export function NotificationBell({ dropUp = false }: { dropUp?: boolean }) {
     }
     const config = TYPE_CONFIG[notification.type];
     if (config) {
-      navigate(config.route);
+      navigate(config.route, {
+        state: {
+          fromNotification: true,
+          ...notification.metadata,
+        },
+      });
     }
     setOpen(false);
   };
