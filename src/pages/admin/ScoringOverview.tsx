@@ -505,13 +505,19 @@ export default function ScoringOverview() {
   }
 
   const submittedCount = teamScores.filter((t) => t.submission?.status === 'submitted').length;
-  const unsubmittedCount = teamScores.filter((t) => !t.submission || t.submission.status === 'draft').length;
+  const approvedCount = teamScores.filter((t) => t.submission?.status === 'approved').length;
+  const rejectedCount = teamScores.filter((t) => t.submission?.status === 'rejected').length;
+  const draftingCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal > 0).length;
+  const gameOnlyCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal > 0).length;
+  const unsubmittedCount = teamScores.filter((t) => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal === 0).length;
 
   // all 뷰용 전체 통계
   const allSubTeams = teamScores.flatMap((t) => t.subTeams || []);
   const allSubmittedCount = allSubTeams.filter((s) => s.submission?.status === 'submitted').length;
   const allApprovedCount = allSubTeams.filter((s) => s.submission?.status === 'approved').length;
-  const allUnsubmittedCount = allSubTeams.filter((s) => !s.submission || s.submission.status === 'draft').length;
+  const allDraftingCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal > 0).length;
+  const allGameOnlyCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal === 0 && s.gameTotal > 0).length;
+  const allUnsubmittedCount = allSubTeams.filter((s) => (!s.submission || s.submission.status === 'draft') && s.handbookTotal === 0 && s.gameTotal === 0).length;
 
   return (
     <div>
@@ -530,26 +536,22 @@ export default function ScoringOverview() {
             </button>
           </div>
           {viewMode === 'all' ? (
-            <>
-              {allSubmittedCount > 0 && (
-                <p className="text-sm text-blue-600 mt-0.5">승인 대기 {allSubmittedCount}팀 · 승인됨 {allApprovedCount}팀 · 미제출 {allUnsubmittedCount}팀</p>
-              )}
-              {allSubmittedCount === 0 && allApprovedCount > 0 && (
-                <p className="text-sm text-green-600 mt-0.5">전체 {allApprovedCount}팀 승인 완료 · 미제출 {allUnsubmittedCount}팀</p>
-              )}
-              {allSubmittedCount === 0 && allApprovedCount === 0 && allUnsubmittedCount > 0 && (
-                <p className="text-sm text-gray-400 mt-0.5">전체 {allUnsubmittedCount}팀 미제출</p>
-              )}
-            </>
+            <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
+              {allApprovedCount > 0 && <span className="text-green-600">승인 {allApprovedCount}</span>}
+              {allSubmittedCount > 0 && <span className="text-blue-600">대기 {allSubmittedCount}</span>}
+              {allDraftingCount > 0 && <span className="text-orange-500">작성중 {allDraftingCount}</span>}
+              {allGameOnlyCount > 0 && <span className="text-blue-500">게임 {allGameOnlyCount}</span>}
+              {allUnsubmittedCount > 0 && <span className="text-gray-400">미제출 {allUnsubmittedCount}</span>}
+            </p>
           ) : (
-            <>
-              {submittedCount > 0 && (
-                <p className="text-sm text-blue-600 mt-0.5">{submittedCount}개 팀이 승인 대기 중입니다</p>
-              )}
-              {unsubmittedCount > 0 && (
-                <p className="text-sm text-gray-400 mt-0.5">{unsubmittedCount}개 팀이 아직 제출하지 않았습니다</p>
-              )}
-            </>
+            <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap gap-x-2">
+              {approvedCount > 0 && <span className="text-green-600">승인 {approvedCount}</span>}
+              {submittedCount > 0 && <span className="text-blue-600">대기 {submittedCount}</span>}
+              {rejectedCount > 0 && <span className="text-red-500">반려 {rejectedCount}</span>}
+              {draftingCount > 0 && <span className="text-orange-500">작성중 {draftingCount}</span>}
+              {gameOnlyCount > 0 && <span className="text-blue-500">게임 {gameOnlyCount}</span>}
+              {unsubmittedCount > 0 && <span className="text-gray-400">미제출 {unsubmittedCount}</span>}
+            </p>
           )}
         </div>
         <div className="flex gap-2">
@@ -600,7 +602,10 @@ export default function ScoringOverview() {
               const status = t.submission?.status ?? null;
               const statusCfg = status ? STATUS_CONFIG[status] : null;
               const hasSubTeams = (t.subTeams?.length ?? 0) > 0;
-              const isUnsubmitted = hasSubTeams ? false : (!status || status === 'draft');
+              const noSubmission = !status || status === 'draft';
+              const isGameOnly = !hasSubTeams && noSubmission && t.handbookTotal === 0 && t.gameTotal > 0;
+              const isDrafting = !hasSubTeams && noSubmission && t.handbookTotal > 0;
+              const isUnsubmitted = !hasSubTeams && noSubmission && t.handbookTotal === 0 && t.gameTotal === 0;
 
               return (
                 <div
@@ -608,8 +613,9 @@ export default function ScoringOverview() {
                   className={cn(
                     'bg-white rounded-xl border p-5 transition-all',
                     isUnsubmitted && 'opacity-50 grayscale',
+                    isDrafting && 'opacity-75',
                     status === 'rejected' && 'border-red-200 bg-red-50/30',
-                    !isUnsubmitted && status !== 'rejected' && 'border-gray-200',
+                    !isUnsubmitted && !isDrafting && status !== 'rejected' && 'border-gray-200',
                   )}
                   style={{ borderTopColor: t.teamColor, borderTopWidth: 3 }}
                 >
@@ -617,9 +623,19 @@ export default function ScoringOverview() {
                     <p className="font-bold text-sm" style={{ color: t.teamColor }}>{t.teamName}</p>
                     {!hasSubTeams && (
                       <>
-                        {statusCfg && !isUnsubmitted && (
+                        {statusCfg && !isUnsubmitted && !isDrafting && !isGameOnly && (
                           <span data-testid={`admin-submission-status-${t.teamId}`} className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg.className}`}>
                             {statusCfg.label}
+                          </span>
+                        )}
+                        {isGameOnly && (
+                          <span data-testid={`admin-submission-status-${t.teamId}`} className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600">
+                            게임
+                          </span>
+                        )}
+                        {isDrafting && (
+                          <span data-testid={`admin-submission-status-${t.teamId}`} className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-100 text-orange-600">
+                            작성중
                           </span>
                         )}
                         {isUnsubmitted && (
@@ -719,13 +735,18 @@ export default function ScoringOverview() {
                           {t.subTeams.map((sub) => {
                             const subStatus = sub.submission?.status ?? null;
                             const subStatusCfg = subStatus ? STATUS_CONFIG[subStatus] : null;
-                            const isSubUnsubmitted = !subStatus || subStatus === 'draft';
+                            const subNoSubmission = !subStatus || subStatus === 'draft';
+                            const isSubGameOnly = subNoSubmission && sub.handbookTotal === 0 && sub.gameTotal > 0;
+                            const isSubDrafting = subNoSubmission && sub.handbookTotal > 0;
+                            const isSubUnsubmitted = subNoSubmission && sub.handbookTotal === 0 && sub.gameTotal === 0;
                             return (
                               <div
                                 key={sub.teamId}
                                 className={cn(
                                   'rounded-lg p-2.5 text-xs',
                                   isSubUnsubmitted && 'bg-gray-50 opacity-60',
+                                  isSubDrafting && 'bg-orange-50/50',
+                                  isSubGameOnly && 'bg-blue-50/50',
                                   subStatus === 'rejected' && 'bg-red-50',
                                   subStatus === 'submitted' && 'bg-blue-50',
                                   subStatus === 'approved' && 'bg-green-50',
@@ -737,9 +758,17 @@ export default function ScoringOverview() {
                                     <span className="text-gray-500">
                                       {sub.grandTotal.toLocaleString()}점
                                     </span>
-                                    {subStatusCfg && !isSubUnsubmitted ? (
+                                    {subStatusCfg && !isSubUnsubmitted && !isSubDrafting && !isSubGameOnly ? (
                                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${subStatusCfg.className}`}>
                                         {subStatusCfg.label}
+                                      </span>
+                                    ) : isSubGameOnly ? (
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-600">
+                                        게임
+                                      </span>
+                                    ) : isSubDrafting ? (
+                                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-600">
+                                        작성중
                                       </span>
                                     ) : (
                                       <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-400">
@@ -861,17 +890,47 @@ export default function ScoringOverview() {
                   </div>
                 )}
 
+                {/* 작성중 섹션 */}
+                {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal > 0).length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-orange-400" />
+                      <h3 className="text-sm font-semibold text-orange-600">
+                        작성중 ({teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal > 0).length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal > 0).map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 게임 전용 섹션 */}
+                {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal > 0).length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-2 h-2 rounded-full bg-blue-400" />
+                      <h3 className="text-sm font-semibold text-blue-600">
+                        게임 ({teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal > 0).length})
+                      </h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                      {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal > 0).map(renderTeamCard)}
+                    </div>
+                  </div>
+                )}
+
                 {/* 미제출 섹션 */}
-                {teamScores.filter(t => !t.submission || t.submission.status === 'draft').length > 0 && (
+                {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal === 0).length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-2 h-2 rounded-full bg-gray-300" />
                       <h3 className="text-sm font-semibold text-gray-400">
-                        미제출 ({teamScores.filter(t => !t.submission || t.submission.status === 'draft').length})
+                        미제출 ({teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal === 0).length})
                       </h3>
                     </div>
                     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                      {teamScores.filter(t => !t.submission || t.submission.status === 'draft').map(renderTeamCard)}
+                      {teamScores.filter(t => (!t.submission || t.submission.status === 'draft') && t.handbookTotal === 0 && t.gameTotal === 0).map(renderTeamCard)}
                     </div>
                   </div>
                 )}
@@ -903,7 +962,13 @@ export default function ScoringOverview() {
                         ({t.memberScores.length}명)
                       </span>
                       {(!t.submission || t.submission.status === 'draft') && viewMode !== 'all' && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium">미제출</span>
+                        t.handbookTotal === 0 && t.gameTotal > 0 ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-medium">게임</span>
+                        ) : t.handbookTotal > 0 ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-600 font-medium">작성중</span>
+                        ) : (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 font-medium">미제출</span>
+                        )
                       )}
                     </div>
                     <div className="flex items-center gap-4">
