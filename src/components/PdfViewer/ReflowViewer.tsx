@@ -1,4 +1,4 @@
-import { useRef, Fragment } from 'react';
+import { useRef, useLayoutEffect, useEffect, Fragment } from 'react';
 import { Document } from 'react-pdf';
 import { FileImage } from 'lucide-react';
 import { useReflowExtractor } from './hooks';
@@ -12,6 +12,7 @@ interface ReflowViewerProps {
   setScale: (s: number) => void;
   onDocumentLoadSuccess: (pdf: any) => void;
   onDocumentLoadError: (error: Error) => void;
+  onReflowPageInfo?: (info: { current: number; total: number }) => void;
 }
 
 /** \n을 <br/>로 변환하여 개행 렌더링 */
@@ -26,11 +27,13 @@ function renderTextWithBreaks(text: string) {
   ));
 }
 
-const FONT_TRANSITION = 'font-size 350ms cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-
 export function ReflowViewer(props: ReflowViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const prevScaleRef = useRef(props.scale);
+  const onReflowPageInfoRef = useRef(props.onReflowPageInfo);
+  onReflowPageInfoRef.current = props.onReflowPageInfo;
 
   const { reflowBlocks, isExtracting } = useReflowExtractor(
     props.pdfDoc,
@@ -45,6 +48,83 @@ export function ReflowViewer(props: ReflowViewerProps) {
     setScale: props.setScale,
     enabled: !isExtracting && reflowBlocks.length > 0,
   });
+
+  // 스크롤 비율 실시간 추적 (줌 시 읽던 위치 복원용)
+  const scrollRatioRef = useRef(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const track = () => {
+      const max = el.scrollHeight - el.clientHeight;
+      scrollRatioRef.current = max > 0 ? el.scrollTop / max : 0;
+    };
+    el.addEventListener('scroll', track, { passive: true });
+    return () => el.removeEventListener('scroll', track);
+  }, []);
+
+  // 줌 변경 시 리플로우 중 글자 크기 변화를 감추고, 완료 후 표시
+  useLayoutEffect(() => {
+    if (prevScaleRef.current === props.scale) return;
+    prevScaleRef.current = props.scale;
+
+    const content = contentRef.current;
+    const scrollEl = scrollRef.current;
+    const wrapper = transformRef.current;
+    if (!content) return;
+
+    const savedRatio = scrollRatioRef.current;
+
+    content.style.opacity = '0';
+    if (wrapper) {
+      wrapper.style.transition = 'none';
+      wrapper.style.transform = '';
+      wrapper.style.transformOrigin = '';
+      wrapper.style.willChange = '';
+    }
+
+    requestAnimationFrame(() => {
+      // 읽던 위치 복원
+      if (scrollEl) {
+        const max = scrollEl.scrollHeight - scrollEl.clientHeight;
+        if (max > 0) scrollEl.scrollTop = savedRatio * max;
+      }
+      content.style.opacity = '1';
+    });
+  }, [props.scale]);
+
+  // 스크롤 위치 기반 가상 페이지 추적
+  useEffect(() => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl || isExtracting || reflowBlocks.length === 0) return;
+
+    const update = () => {
+      const vh = scrollEl.clientHeight;
+      const sh = scrollEl.scrollHeight;
+      const st = scrollEl.scrollTop;
+      if (vh <= 0) return;
+      const total = Math.max(1, Math.ceil(sh / vh));
+      const maxScroll = sh - vh;
+      const current = maxScroll <= 0
+        ? 1
+        : Math.min(total, Math.floor((st / maxScroll) * (total - 1)) + 1);
+      onReflowPageInfoRef.current?.({ current, total });
+    };
+
+    // 스케일 변경 후 리플로우 완료 대기
+    let rafId = requestAnimationFrame(() => {
+      rafId = requestAnimationFrame(update);
+    });
+
+    scrollEl.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    if (transformRef.current) observer.observe(transformRef.current);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      scrollEl.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, [isExtracting, reflowBlocks.length, props.scale]);
 
   return (
     <div
@@ -66,11 +146,11 @@ export function ReflowViewer(props: ReflowViewerProps) {
       ) : (
         <div ref={transformRef}>
           <div
+            ref={contentRef}
             className="px-4 py-5 max-w-none"
             style={{
               fontSize: `${Math.round(16 * props.scale)}px`,
               lineHeight: 1.8,
-              transition: FONT_TRANSITION,
             }}
           >
             {reflowBlocks.map((block, i) => {

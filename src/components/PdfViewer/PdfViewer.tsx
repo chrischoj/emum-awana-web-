@@ -19,6 +19,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const [isReflowMode, setIsReflowMode] = useState(false);
   const [baseWidth, setBaseWidth] = useState(0);
   const [isCanvasAnimating, setIsCanvasAnimating] = useState(false);
+  const [reflowPageInfo, setReflowPageInfo] = useState({ current: 1, total: 1 });
 
   const {
     pdfDoc, numPages, pdfError,
@@ -67,6 +68,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
             setScale={setScale}
             onDocumentLoadSuccess={handleDocumentLoadSuccess}
             onDocumentLoadError={handleDocumentLoadError}
+            onReflowPageInfo={setReflowPageInfo}
           />
         ) : (
           <CanvasViewer
@@ -103,6 +105,8 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
         onResetZoom={resetZoom}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        reflowCurrentPage={reflowPageInfo.current}
+        reflowTotalPages={reflowPageInfo.total}
       />
     </div>
   );

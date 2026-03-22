@@ -4,7 +4,6 @@ import { MIN_SCALE, MAX_SCALE } from '../constants';
 
 const DOUBLE_TAP_DELAY = 300;
 const DOUBLE_TAP_DISTANCE = 30;
-const SETTLE_MS = 350;
 const RUBBER_BAND = 0.25;
 
 function clamp(v: number, min: number, max: number) {
@@ -23,9 +22,9 @@ interface ReflowPinchOptions {
  * 리플로우 모드 전용 핀치 줌.
  *
  * - 핀치 중: transform wrapper에 CSS scale (60fps, 리플로우 없음)
- * - 놓을 때: transform → scale(1) 애니메이션 + font-size 전환 동시 실행
- *   → 시각적으로 부드럽게 글자 크기가 변하면서 리플로우 (네이버 시리즈 스타일)
- * - 더블탭: 1x ↔ 2x 토글 (font-size transition으로 부드럽게)
+ * - 놓을 때: 즉시 숨김 → transform 제거 + font-size 변경 → 페이드 인
+ *   (부모 ReflowViewer의 scale 변경 감지 useEffect가 페이드 처리)
+ * - 더블탭: 1x ↔ 2x 토글
  */
 export function useReflowPinchZoom({
   scrollRef,
@@ -114,48 +113,40 @@ export function useReflowPinchZoom({
     }
   }, [transformRef]);
 
-  // --- 핀치 끝 ---
+  // --- 핀치 끝: 즉시 숨김 → 스케일 반영 → 부모가 페이드 인 ---
   const handlePinchEnd = useCallback(() => {
     const ps = pinchRef.current;
     if (!ps.active) return;
     ps.active = false;
 
     const wrapper = transformRef.current;
-    if (!wrapper) {
-      setScale(clamp(ps.startScale * ps.currentRatio, MIN_SCALE, MAX_SCALE));
-      return;
-    }
-
     const finalScale = clamp(
       Math.round(ps.startScale * ps.currentRatio * 20) / 20,
       MIN_SCALE,
       MAX_SCALE,
     );
 
+    if (!wrapper) {
+      setScale(finalScale);
+      return;
+    }
+
     settlingRef.current = true;
-    const curve = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
-    // transform wrapper: scale → 1 애니메이션
-    wrapper.style.transition = `transform ${SETTLE_MS}ms ${curve}`;
-    wrapper.style.transform = 'scale(1)';
+    // transform 즉시 제거 (useLayoutEffect가 content opacity로 플래시 방지)
+    wrapper.style.transition = 'none';
+    wrapper.style.transform = '';
+    wrapper.style.transformOrigin = '';
+    wrapper.style.willChange = '';
 
-    // scale 업데이트 → font-size transition 동시 실행 (시각적으로 상쇄)
+    // scale 반영 → ReflowViewer useLayoutEffect가 숨김→리플로우→표시
     setScale(finalScale);
 
-    const cleanup = () => {
-      wrapper.removeEventListener('transitionend', onEnd);
-      clearTimeout(fb);
-      wrapper.style.transform = '';
-      wrapper.style.transformOrigin = '';
-      wrapper.style.transition = '';
-      wrapper.style.willChange = '';
-      settlingRef.current = false;
-    };
-    const onEnd = (ev: TransitionEvent) => {
-      if (ev.target === wrapper) cleanup();
-    };
-    wrapper.addEventListener('transitionend', onEnd);
-    const fb = setTimeout(cleanup, SETTLE_MS + 50);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        settlingRef.current = false;
+      });
+    });
   }, [transformRef, setScale]);
 
   // --- 이벤트 등록 ---

@@ -24,6 +24,8 @@ interface ControlBarProps {
   onResetZoom: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  reflowCurrentPage?: number;
+  reflowTotalPages?: number;
 }
 
 export function ControlBar(props: ControlBarProps) {
@@ -33,7 +35,7 @@ export function ControlBar(props: ControlBarProps) {
         <div className="flex items-center gap-1">
           {props.isReflowMode ? (
             <span className="text-xs font-medium text-indigo-600 px-2">
-              리플로우 · {props.numPages > 0 ? `${props.numPages}p` : '-'}
+              리플로우 {props.reflowCurrentPage ?? 1} / {props.reflowTotalPages ?? 1}
             </span>
           ) : (
             <>
