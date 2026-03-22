@@ -10,6 +10,7 @@ import { teacherNavItems, adminNavSections } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
 import { NotificationBell } from './NotificationBell';
+import { RealtimeIndicator } from './RealtimeIndicator';
 
 export default function TeacherLayout() {
   const { teacher, role, signOut } = useAuth();
@@ -87,6 +88,7 @@ export default function TeacherLayout() {
         <Link to="/teacher" className="flex items-center gap-2">
           <img src="/eeum-logo.png" alt="이음교회" className="h-7 object-contain" />
           <h1 className="text-lg font-bold text-indigo-600">AWANA</h1>
+          <RealtimeIndicator />
         </Link>
         <div className="ml-auto flex items-center gap-2">
           <NotificationBell />
