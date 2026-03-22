@@ -65,7 +65,7 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
   const didInitialScrollRef = useRef(false);
   useEffect(() => {
     if (didInitialScrollRef.current) return;
-    if (isExtracting || reflowBlocks.length === 0) return;
+    if (reflowBlocks.length === 0) return;
     if (!props.initialPdfPage || props.initialPdfPage <= 1) {
       didInitialScrollRef.current = true;
       return;
@@ -73,14 +73,15 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
 
+    // 목표 페이지의 구분선이 DOM에 렌더링될 때까지 대기
+    const divider = scrollEl.querySelector(`[data-pdf-page="${props.initialPdfPage}"]`);
+    if (!divider) return; // 아직 추출 안 됨 → reflowBlocks 업데이트 시 재시도
+
     didInitialScrollRef.current = true;
     requestAnimationFrame(() => {
-      const divider = scrollEl.querySelector(`[data-pdf-page="${props.initialPdfPage}"]`);
-      if (divider) {
-        (divider as HTMLElement).scrollIntoView({ block: 'start' });
-      }
+      (divider as HTMLElement).scrollIntoView({ block: 'start' });
     });
-  }, [isExtracting, reflowBlocks.length, props.initialPdfPage]);
+  }, [reflowBlocks.length, props.initialPdfPage]);
 
   useReflowPinchZoom({
     scrollRef,

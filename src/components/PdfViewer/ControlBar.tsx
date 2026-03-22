@@ -164,7 +164,7 @@ export function ControlBar(props: ControlBarProps) {
           <div className="w-px h-6 bg-gray-200 mx-0.5" />
           <button
             onClick={props.onToggleReflow}
-            className={`flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1 px-3 h-9 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
               props.isReflowMode
                 ? 'bg-gray-100 text-gray-600 active:bg-gray-200'
                 : 'bg-indigo-50 text-indigo-600 active:bg-indigo-100'
