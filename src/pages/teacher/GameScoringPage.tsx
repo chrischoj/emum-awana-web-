@@ -19,7 +19,7 @@ import { useOptimisticGameQueue } from '../../hooks/useOptimisticGameQueue';
 import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
-const POINT_PRESETS = [100, 200, 300, 400, 500, 600];
+const POINT_PRESETS = [100, 200, 400];
 const STAGES = ['릴레이 게임', '개별 게임', '응원 점수', '보너스'] as const;
 type Stage = (typeof STAGES)[number];
 
@@ -38,6 +38,9 @@ export default function GameScoringPage() {
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
+  // Pending scores per team (accumulated before confirm)
+  const [pendingScores, setPendingScores] = useState<Record<string, number>>({});
+
   // BottomSheet edit state
   const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
   const [editPoints, setEditPoints] = useState(0);
@@ -49,6 +52,7 @@ export default function GameScoringPage() {
 
   const handleClubSwitch = (club: typeof currentClub) => {
     if (!club || club.id === currentClub?.id) return;
+    setPendingScores({});
     setCurrentClub(club);
   };
 
@@ -119,7 +123,7 @@ export default function GameScoringPage() {
     return map;
   }, [recentEntries, activeStage]);
 
-  // ── Entries grouped by team ───────────────────────────────────
+  // ── Entries grouped by team (oldest first = newest at bottom) ─
   const entriesByTeam = useMemo(() => {
     const map: Record<string, GameScoreEntry[]> = {};
     for (const team of sortedTeams) {
@@ -130,33 +134,72 @@ export default function GameScoringPage() {
         map[entry.team_id].push(entry);
       }
     }
+    // Reverse: oldest first so newest appears at bottom
+    for (const teamId of Object.keys(map)) {
+      map[teamId] = map[teamId].slice().reverse();
+    }
     return map;
   }, [recentEntries, sortedTeams]);
 
+  // ── Has any pending score? ────────────────────────────────────
+  const hasPendingScores = useMemo(
+    () => Object.values(pendingScores).some((v) => v > 0),
+    [pendingScores],
+  );
+
   // ── Handlers ──────────────────────────────────────────────────
 
-  const handleQuickScore = (teamId: string, points: number) => {
-    if (!currentClub || isLocked) return;
+  const handleAddPoints = (teamId: string, points: number) => {
+    if (isLocked) return;
+    navigator.vibrate?.(15);
+    setPendingScores((prev) => ({
+      ...prev,
+      [teamId]: (prev[teamId] || 0) + points,
+    }));
+  };
+
+  const handleResetTeam = (teamId: string) => {
+    setPendingScores((prev) => {
+      const next = { ...prev };
+      delete next[teamId];
+      return next;
+    });
+  };
+
+  const handleResetAll = () => {
+    setPendingScores({});
+  };
+
+  const handleConfirm = () => {
+    if (!currentClub || !hasPendingScores) return;
 
     if (gameLock) {
       toast.error('관리자가 점수를 잠금 처리했습니다');
       return;
     }
 
-    enqueueAdd({
-      teamIds: [teamId],
-      clubId: currentClub.id,
-      trainingDate: selectedDate,
-      points,
-      description: activeStage,
-      recordedBy: teacher?.id,
+    const teamsToScore = sortedTeams.filter((t) => (pendingScores[t.id] || 0) > 0);
+
+    for (const team of teamsToScore) {
+      const pts = pendingScores[team.id];
+      enqueueAdd({
+        teamIds: [team.id],
+        clubId: currentClub.id,
+        trainingDate: selectedDate,
+        points: pts,
+        description: activeStage,
+        recordedBy: teacher?.id,
+      });
+    }
+
+    // Flash animation for all scored teams
+    teamsToScore.forEach((team, i) => {
+      setTimeout(() => setFlashTeamId(team.id), i * 150);
     });
+    setTimeout(() => setFlashTeamId(null), teamsToScore.length * 150 + 300);
 
-    // Flash animation
-    setFlashTeamId(teamId);
-    setTimeout(() => setFlashTeamId(null), 400);
-
-    toast.success(`+${points}점!`, { duration: 1200 });
+    toast.success(`${teamsToScore.length}팀 ${activeStage} 점수 반영!`);
+    setPendingScores({});
   };
 
   const handleStartEdit = (entry: GameScoreEntry) => {
@@ -276,10 +319,11 @@ export default function GameScoringPage() {
       </div>
 
       {/* Team cards 2×2 grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-3">
         {sortedTeams.map((team) => {
           const total = teamTotals[team.id] || 0;
           const stageSub = stageSubtotals[team.id] || 0;
+          const pending = pendingScores[team.id] || 0;
           const isFlashing = flashTeamId === team.id;
 
           return (
@@ -293,27 +337,40 @@ export default function GameScoringPage() {
               )}
               style={isFlashing ? { ringColor: team.color } : undefined}
             >
-              {/* Card header with team color gradient */}
+              {/* Card header */}
               <div
-                className="px-3 py-2.5 text-white"
+                className="px-3 py-2 text-white"
                 style={{ background: teamColorGradient(team.color) }}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold drop-shadow-sm">{team.name}</span>
-                  <span className="text-[11px] font-medium opacity-90">{activeStage}: {stageSub.toLocaleString()}점</span>
+                  <span className="text-[11px] font-medium opacity-90">{activeStage}: {stageSub.toLocaleString()}</span>
                 </div>
                 <p className="text-2xl font-extrabold tabular-nums mt-0.5 drop-shadow-sm">
                   {total.toLocaleString()}점
                 </p>
               </div>
 
-              {/* Point preset buttons 3×2 */}
+              {/* Pending score display + reset */}
+              {pending > 0 && (
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-100">
+                  <span className="text-sm font-bold text-indigo-700 tabular-nums">+{pending.toLocaleString()}점 대기</span>
+                  <button
+                    onClick={() => handleResetTeam(team.id)}
+                    className="text-xs text-indigo-400 hover:text-indigo-600 font-medium px-1"
+                  >
+                    초기화
+                  </button>
+                </div>
+              )}
+
+              {/* Point preset buttons */}
               <div className="grid grid-cols-3 gap-1.5 p-2.5 bg-white">
                 {POINT_PRESETS.map((pts) => (
                   <button
                     key={pts}
                     data-testid={`game-quick-${team.id}-${pts}`}
-                    onClick={() => handleQuickScore(team.id, pts)}
+                    onClick={() => handleAddPoints(team.id, pts)}
                     disabled={isLocked}
                     className={cn(
                       'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation',
@@ -334,7 +391,27 @@ export default function GameScoringPage() {
         })}
       </div>
 
-      {/* Team-based history */}
+      {/* Confirm / Reset bar */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={handleResetAll}
+          disabled={!hasPendingScores}
+          className="px-4 py-3 rounded-lg bg-gray-100 text-gray-600 text-sm font-semibold disabled:opacity-40 active:bg-gray-200 transition-all touch-manipulation"
+        >
+          초기화
+        </button>
+        <button
+          onClick={handleConfirm}
+          disabled={!hasPendingScores || isLocked}
+          className="flex-1 py-3 rounded-lg bg-indigo-600 text-white font-bold text-base disabled:opacity-40 active:scale-[0.98] transition-all touch-manipulation"
+        >
+          {hasPendingScores
+            ? `${activeStage} 점수 반영`
+            : '팀별 점수를 입력하세요'}
+        </button>
+      </div>
+
+      {/* Team-based history (oldest first → newest at bottom) */}
       <div className="bg-white rounded-xl border border-gray-200 p-3">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">오늘의 팀별 기록</h2>
 
@@ -357,7 +434,7 @@ export default function GameScoringPage() {
                     <p className="text-sm font-extrabold text-white tabular-nums">{teamTotal.toLocaleString()}</p>
                   </div>
 
-                  {/* Entries */}
+                  {/* Entries (oldest first, newest at bottom) */}
                   <div className="border border-t-0 border-gray-100 rounded-b-lg bg-gray-50 min-h-[60px]">
                     {entries.length === 0 ? (
                       <p className="text-[10px] text-gray-300 text-center py-3">-</p>
