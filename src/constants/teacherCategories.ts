@@ -39,7 +39,7 @@ export function isLeader(position: string | null): boolean {
 /** 교사를 팀별 세로 컬럼용으로 서브그룹핑 (스팍스/T&T) */
 export function groupTeachersByTeam(
   teachers: Teacher[],
-  assignments: { teacher_id: string; team_name: string; team_color: string }[]
+  assignments: { teacher_id: string; team_name: string; team_color: string; room_name?: string }[]
 ): { leaders: Teacher[]; teams: { name: string; color: string; teachers: Teacher[] }[]; unassigned: Teacher[] } {
   const unattachedLeaders: Teacher[] = [];
   const teamMap = new Map<string, { color: string; teachers: Teacher[] }>();
@@ -62,6 +62,18 @@ export function groupTeachersByTeam(
     } else {
       unassigned.push(t);
     }
+  }
+
+  // 팀 내부 교사를 룸 이름 오름차순 정렬 (리더 최우선 유지)
+  for (const [, data] of teamMap) {
+    data.teachers.sort((a, b) => {
+      const aLeader = isLeader(a.position);
+      const bLeader = isLeader(b.position);
+      if (aLeader !== bLeader) return aLeader ? -1 : 1;
+      const aRoom = assignments.find(x => x.teacher_id === a.id)?.room_name || '';
+      const bRoom = assignments.find(x => x.teacher_id === b.id)?.room_name || '';
+      return aRoom.localeCompare(bRoom, 'ko', { numeric: true });
+    });
   }
 
   const teams = [...teamMap.entries()]

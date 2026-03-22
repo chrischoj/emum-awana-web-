@@ -781,7 +781,7 @@ export default function TeacherHome() {
                             style={{ backgroundColor: teacherAssignment.team_color || '#6B7280' }}
                             title={teacherAssignment.room_name}
                           >
-                            {teacherAssignment.room_name}
+                            {teacherAssignment.room_name?.replace(cat.label, '').trim()}
                           </span>
                         )}
                       </div>
@@ -831,7 +831,7 @@ export default function TeacherHome() {
                               style={{ backgroundColor: teacherAssignment.team_color || '#6B7280' }}
                               title={teacherAssignment.room_name}
                             >
-                              {teacherAssignment.room_name}
+                              {teacherAssignment.room_name?.replace(cat.label, '').trim()}
                             </span>
                           )}
                         </div>

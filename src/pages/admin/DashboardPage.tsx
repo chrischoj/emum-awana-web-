@@ -1114,8 +1114,9 @@ export default function DashboardPage() {
                           for (const a of teacherAssigns) {
                             const roomName = allRooms.find(r => r.id === a.room_id)?.name;
                             if (roomName) {
+                              const shortName = roomName.replace(cat.label, '').trim();
                               badges.push({
-                                label: a.assignment_type === 'primary' ? `${roomName} 담임` : `${roomName} 지원`,
+                                label: a.assignment_type === 'primary' ? `${shortName} 담임` : `${shortName} 지원`,
                                 color: a.team_color || '#6366f1',
                               });
                             }
@@ -1161,8 +1162,9 @@ export default function DashboardPage() {
                             for (const a of teacherAssigns) {
                               const roomName = allRooms.find(r => r.id === a.room_id)?.name;
                               if (roomName) {
+                                const shortName = roomName.replace(cat.label, '').trim();
                                 badges.push({
-                                  label: a.assignment_type === 'primary' ? `${roomName} 담임` : `${roomName} 지원`,
+                                  label: a.assignment_type === 'primary' ? `${shortName} 담임` : `${shortName} 지원`,
                                   color: a.team_color || '#6366f1',
                                 });
                               }
