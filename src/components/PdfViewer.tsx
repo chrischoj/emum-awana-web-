@@ -175,7 +175,9 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [baseWidth, setBaseWidth] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const animFrameRef = useRef<number>(0);
   const soundPlayedRef = useRef(false);
@@ -188,6 +190,19 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     measure();
     const observer = new ResizeObserver(measure);
     if (measureRef.current) observer.observe(measureRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // 콘텐츠 높이 측정 (줌 스크롤 영역 계산용)
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContentHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
@@ -337,7 +352,9 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     if (s.isPinching && e.touches.length === 2) {
       if (e.cancelable) e.preventDefault();
       const currentDist = getTouchDistanceNative(e.touches);
-      const ratio = currentDist / pinchRef.current.startDist;
+      const rawRatio = currentDist / pinchRef.current.startDist;
+      // 감도 2배: 변화량을 2배로 증폭
+      const ratio = 1 + (rawRatio - 1) * 2;
       setScale(parseFloat(Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinchRef.current.startScale * ratio)).toFixed(2)));
       return;
     }
@@ -532,118 +549,119 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
             </div>
           ) : (
             <div
+              ref={contentRef}
               className="relative"
               style={{
                 minWidth: isZoomed && pageWidth ? `${pageWidth}px` : undefined,
                 transition: isPinching ? 'none' : 'min-width 0.3s ease-out',
               }}
             >
-              {/* ===== Layer 1: 대상 페이지 (컬 아래에 보이는 페이지) ===== */}
-              {isCurling && destinationPage && (
-                <div
-                  className="absolute inset-0"
-                  style={{ zIndex: 1 }}
-                >
-                  <Document file={fileUrl} loading={<></>}>
-                    <Page
-                      pageNumber={destinationPage}
-                      width={pageWidth}
+                  {/* ===== Layer 1: 대상 페이지 (컬 아래에 보이는 페이지) ===== */}
+                  {isCurling && destinationPage && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ zIndex: 1 }}
+                    >
+                      <Document file={fileUrl} loading={<></>}>
+                        <Page
+                          pageNumber={destinationPage}
+                          width={pageWidth}
+                          loading={
+                            <div
+                              className="flex items-center justify-center py-8"
+                              style={{ width: pageWidth }}
+                            >
+                              <div className="w-6 h-6 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          }
+                        />
+                      </Document>
+                    </div>
+                  )}
+
+                  {/* ===== Layer 2: 현재 페이지 (컬 중에는 clip-path 적용) ===== */}
+                  <div
+                    style={{
+                      position: 'relative',
+                      zIndex: 2,
+                      clipPath: isCurling && curlGeometry ? curlGeometry.clipPath : undefined,
+                      WebkitClipPath: isCurling && curlGeometry ? curlGeometry.clipPath : undefined,
+                      transition: (!isDragging && !isAnimating) ? 'clip-path 0.3s ease-out' : 'none',
+                      willChange: isCurling ? 'clip-path' : 'auto',
+                    }}
+                  >
+                    <Document
+                      file={fileUrl}
+                      onLoadSuccess={handleDocumentLoadSuccess}
+                      onLoadError={handleDocumentLoadError}
                       loading={
-                        <div
-                          className="flex items-center justify-center py-8"
-                          style={{ width: pageWidth }}
-                        >
-                          <div className="w-6 h-6 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                        <div className="flex items-center justify-center py-16">
+                          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
                         </div>
                       }
-                    />
-                  </Document>
-                </div>
-              )}
+                    >
+                      <Page
+                        pageNumber={currentPage}
+                        width={pageWidth}
+                        loading={
+                          <div
+                            className="flex items-center justify-center py-8"
+                            style={{ width: pageWidth }}
+                          >
+                            <div className="w-6 h-6 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        }
+                        className="shadow-xl"
+                      />
+                    </Document>
+                  </div>
 
-              {/* ===== Layer 2: 현재 페이지 (컬 중에는 clip-path 적용) ===== */}
-              <div
-                style={{
-                  position: 'relative',
-                  zIndex: 2,
-                  clipPath: isCurling && curlGeometry ? curlGeometry.clipPath : undefined,
-                  WebkitClipPath: isCurling && curlGeometry ? curlGeometry.clipPath : undefined,
-                  transition: (!isDragging && !isAnimating) ? 'clip-path 0.3s ease-out' : 'none',
-                  willChange: isCurling ? 'clip-path' : 'auto',
-                }}
-              >
-                <Document
-                  file={fileUrl}
-                  onLoadSuccess={handleDocumentLoadSuccess}
-                  onLoadError={handleDocumentLoadError}
-                  loading={
-                    <div className="flex items-center justify-center py-16">
-                      <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  }
-                >
-                  <Page
-                    pageNumber={currentPage}
-                    width={pageWidth}
-                    loading={
+                  {/* ===== Layer 3: 컬 뒷면 (접힌 페이지의 뒷면) ===== */}
+                  {isCurling && curlGeometry && curlGeometry.curlWidth > 0 && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        zIndex: 3,
+                        clipPath: curlGeometry.curlBackClip,
+                        WebkitClipPath: curlGeometry.curlBackClip,
+                        background: `linear-gradient(${
+                          curlDirection === 'next' ? 'to right' : 'to left'
+                        }, rgba(240,238,235,0.95), rgba(220,218,215,0.9))`,
+                        willChange: 'clip-path',
+                      }}
+                    >
+                      {/* 컬 뒷면 질감: 약간의 세로줄 패턴 */}
                       <div
-                        className="flex items-center justify-center py-8"
-                        style={{ width: pageWidth }}
-                      >
-                        <div className="w-6 h-6 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    }
-                    className="shadow-xl"
-                  />
-                </Document>
-              </div>
+                        className="absolute inset-0"
+                        style={{
+                          background: curlDirection === 'next'
+                            ? `repeating-linear-gradient(to right, transparent, transparent 3px, rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px)`
+                            : `repeating-linear-gradient(to left, transparent, transparent 3px, rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px)`,
+                        }}
+                      />
+                      {/* 원통형 컬 하이라이트/그림자 */}
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          background: curlDirection === 'next'
+                            ? `linear-gradient(to right, rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.15) 50%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0.1) 100%)`
+                            : `linear-gradient(to left, rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.15) 50%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0.1) 100%)`,
+                        }}
+                      />
+                    </div>
+                  )}
 
-              {/* ===== Layer 3: 컬 뒷면 (접힌 페이지의 뒷면) ===== */}
-              {isCurling && curlGeometry && curlGeometry.curlWidth > 0 && (
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    zIndex: 3,
-                    clipPath: curlGeometry.curlBackClip,
-                    WebkitClipPath: curlGeometry.curlBackClip,
-                    background: `linear-gradient(${
-                      curlDirection === 'next' ? 'to right' : 'to left'
-                    }, rgba(240,238,235,0.95), rgba(220,218,215,0.9))`,
-                    willChange: 'clip-path',
-                  }}
-                >
-                  {/* 컬 뒷면 질감: 약간의 세로줄 패턴 */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background: curlDirection === 'next'
-                        ? `repeating-linear-gradient(to right, transparent, transparent 3px, rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px)`
-                        : `repeating-linear-gradient(to left, transparent, transparent 3px, rgba(0,0,0,0.02) 3px, rgba(0,0,0,0.02) 4px)`,
-                    }}
-                  />
-                  {/* 원통형 컬 하이라이트/그림자 */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      background: curlDirection === 'next'
-                        ? `linear-gradient(to right, rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.15) 50%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0.1) 100%)`
-                        : `linear-gradient(to left, rgba(0,0,0,0.12) 0%, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.15) 50%, rgba(0,0,0,0.05) 80%, rgba(0,0,0,0.1) 100%)`,
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* ===== Layer 4: 접힘선 그림자 ===== */}
-              {isCurling && curlGeometry && (
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    zIndex: 4,
-                    background: curlGeometry.shadowGradient,
-                    willChange: 'background',
-                  }}
-                />
-              )}
+                  {/* ===== Layer 4: 접힘선 그림자 ===== */}
+                  {isCurling && curlGeometry && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{
+                        zIndex: 4,
+                        background: curlGeometry.shadowGradient,
+                        willChange: 'background',
+                      }}
+                    />
+                  )}
             </div>
           )}
         </div>
