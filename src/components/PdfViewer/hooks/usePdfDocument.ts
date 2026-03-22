@@ -1,20 +1,20 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 /**
  * PDF Document 로딩 관리 훅.
  * react-pdf의 Document onLoadSuccess/onLoadError 콜백을 캡슐화하고,
- * 내부적으로 pdfDoc ref를 유지하여 리플로우 텍스트 추출 등에 활용할 수 있도록 한다.
+ * pdfDoc을 state로 관리하여 Document 재로드 시 리렌더를 보장한다.
  */
 export function usePdfDocument() {
   const [numPages, setNumPages] = useState(0);
   const [pdfError, setPdfError] = useState(false);
-  const pdfDocRef = useRef<any>(null);
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
 
   const handleDocumentLoadSuccess = useCallback((pdf: any) => {
     setNumPages(pdf.numPages);
     setPdfError(false);
-    pdfDocRef.current = pdf;
+    setPdfDoc(pdf);
   }, []);
 
   const handleDocumentLoadError = useCallback((error: Error) => {
@@ -27,12 +27,11 @@ export function usePdfDocument() {
   const resetDocument = useCallback(() => {
     setNumPages(0);
     setPdfError(false);
-    pdfDocRef.current = null;
+    setPdfDoc(null);
   }, []);
 
   return {
-    /** 로드된 pdfjs Document 객체 (리플로우 추출용) */
-    pdfDoc: pdfDocRef.current,
+    pdfDoc,
     numPages,
     pdfError,
     handleDocumentLoadSuccess,
