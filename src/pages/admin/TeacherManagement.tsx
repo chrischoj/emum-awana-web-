@@ -54,6 +54,8 @@ interface TeacherCardProps {
 
 function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onManageAssignment }: TeacherCardProps) {
   const [loading, setLoading] = useState(false);
+  const [showPositionModal, setShowPositionModal] = useState(false);
+  const [tempPosition, setTempPosition] = useState(teacher.position || '');
 
   async function handleChangePosition(newPosition: string) {
     setLoading(true);
@@ -192,20 +194,17 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
               <div className="w-5 h-5 border-2 border-gray-300 border-t-indigo-500 rounded-full animate-spin" />
             ) : (
               <>
-                <input
-                  type="text"
-                  value={teacher.position || ''}
-                  onChange={(e) => handleChangePosition(e.target.value)}
+                <button
+                  onClick={() => { setTempPosition(teacher.position || ''); setShowPositionModal(true); }}
                   disabled={loading}
-                  className="text-xs font-medium text-gray-700 bg-transparent border border-gray-300 rounded-md px-2 py-1 focus:border-indigo-500 focus:outline-none w-24"
-                  placeholder="직책"
-                  list="position-presets"
-                />
-                <datalist id="position-presets">
-                  {POSITION_PRESETS.map((pos) => (
-                    <option key={pos} value={pos} />
-                  ))}
-                </datalist>
+                  className={`text-xs font-medium rounded-md px-2 py-1 border transition-colors truncate max-w-[6rem] ${
+                    teacher.position
+                      ? 'text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100'
+                      : 'text-gray-400 bg-transparent border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {teacher.position || '직책'}
+                </button>
                 <Switch
                   checked={teacher.active}
                   onChange={(checked) => checked ? handleActivate() : handleDeactivate()}
@@ -285,6 +284,38 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
           </button>
         </div>
       </div>
+
+      {/* 직책 편집 모달 */}
+      <Modal
+        open={showPositionModal}
+        onClose={() => setShowPositionModal(false)}
+        title={`${teacher.name} - 직책 변경`}
+      >
+        <div className="space-y-4">
+          <PositionInput
+            value={tempPosition}
+            onChange={setTempPosition}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPositionModal(false)}
+              className="flex-1 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              onClick={async () => {
+                await handleChangePosition(tempPosition);
+                setShowPositionModal(false);
+              }}
+              disabled={loading}
+              className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
