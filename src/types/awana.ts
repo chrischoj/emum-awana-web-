@@ -34,6 +34,19 @@ export interface Teacher {
   role: UserRole;
   position: string | null;
   active: boolean;
+  is_game_assistant?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubHandbook {
+  id: string;
+  club_id: string;
+  title: string;
+  file_url: string;
+  file_name: string;
+  file_size: number | null;
+  uploaded_by: string | null;
   created_at: string;
   updated_at: string;
 }

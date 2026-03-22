@@ -6,7 +6,7 @@ import { TeacherAssignmentProvider } from '../contexts/TeacherAssignmentContext'
 import { BadgeRequestsProvider } from '../contexts/BadgeRequestsContext';
 import { useAutoCheckIn } from '../hooks/useAutoCheckIn';
 import { useSessionCleanup } from '../hooks/useSessionCleanup';
-import { teacherNavItems, adminNavSections } from '../config/navigation';
+import { teacherNavItems, adminNavSections, type NavItem } from '../config/navigation';
 import { cn } from '../lib/utils';
 import { Avatar } from './ui/Avatar';
 import { NotificationBell } from './NotificationBell';
@@ -130,7 +130,10 @@ export default function TeacherLayout() {
       {/* Bottom tab bar (mobile optimized) */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 safe-area-bottom">
         <div className="flex justify-around items-center h-16">
-          {teacherNavItems.map((item) => (
+          {teacherNavItems.filter((item) => {
+            if (!item.requireGameAssistant) return true;
+            return role === 'admin' || teacher?.is_game_assistant === true;
+          }).map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

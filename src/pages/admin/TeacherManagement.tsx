@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Camera, RefreshCw, UserPlus, Key, ChevronDown, ChevronRight, Phone } from 'lucide-react';
+import { Camera, RefreshCw, UserPlus, Key, ChevronDown, ChevronRight, Phone, Gamepad2 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -115,6 +115,21 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
     setLoading(false);
   }
 
+  async function handleToggleGameAssistant(value: boolean) {
+    setLoading(true);
+    const { error } = await supabase
+      .from('teachers')
+      .update({ is_game_assistant: value })
+      .eq('id', teacher.id);
+    if (error) {
+      toast.error('게임 보조 변경 실패');
+    } else {
+      toast.success(value ? `${teacher.name}을(를) 게임 보조로 지정했습니다.` : `${teacher.name}의 게임 보조를 해제했습니다.`);
+      onAction();
+    }
+    setLoading(false);
+  }
+
   return (
     <div className={`bg-white rounded-xl border overflow-hidden transition-all duration-200 ${
       teacher.active
@@ -203,7 +218,7 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
           </div>
         </div>
 
-        {/* 하단: 클럽 선택 */}
+        {/* 하단: 클럽 선택 + 게임 보조 */}
         <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
           <span>클럽:</span>
           <select
@@ -219,6 +234,20 @@ function TeacherCard({ teacher, clubs, assignments, onAction, onAvatarClick, onM
               </option>
             ))}
           </select>
+          <span className="mx-1 text-gray-300">|</span>
+          <button
+            onClick={() => handleToggleGameAssistant(!teacher.is_game_assistant)}
+            disabled={loading}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
+              teacher.is_game_assistant
+                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+            }`}
+            title={teacher.is_game_assistant ? '게임 보조 해제' : '게임 보조 지정'}
+          >
+            <Gamepad2 className="w-3 h-3" />
+            게임보조
+          </button>
         </div>
 
         {/* 담임 배정 정보 */}

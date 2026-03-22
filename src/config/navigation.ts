@@ -15,6 +15,7 @@ import {
   UserPlus,
   UserCog,
   UsersRound,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export interface NavItem {
   label: string;
   path: string;
   icon: LucideIcon;
+  requireGameAssistant?: boolean;
 }
 
 export interface NavSection {
@@ -62,6 +64,12 @@ export const adminNavSections: NavSection[] = [
     ],
   },
   {
+    title: '콘텐츠',
+    items: [
+      { label: '핸드북 관리', path: '/admin/handbook', icon: BookOpen },
+    ],
+  },
+  {
     title: '시스템',
     items: [
       { label: '보고서', path: '/admin/reports', icon: BarChart3 },
@@ -77,5 +85,6 @@ export const teacherNavItems: NavItem[] = [
   { label: '홈', path: '/teacher', icon: Home },
   { label: '출석', path: '/teacher/attendance', icon: ClipboardCheck },
   { label: '반별 점수', path: '/teacher/scoring', icon: PenLine },
-  { label: '게임 점수', path: '/teacher/game', icon: Gamepad2 },
+  { label: '게임 점수', path: '/teacher/game', icon: Gamepad2, requireGameAssistant: true },
+  { label: '핸드북', path: '/teacher/handbook', icon: BookOpen },
 ];
