@@ -348,7 +348,7 @@ export default function GameScoresAdmin() {
                 </div>
 
                 {/* Entries (oldest first, newest at bottom) */}
-                <div className="border border-t-0 border-gray-100 rounded-b-lg bg-gray-50 min-h-[80px] max-h-[400px] overflow-y-auto">
+                <div className="border border-t-0 border-gray-100 rounded-b-lg bg-gray-50 min-h-[80px]">
                   {col.entries.length === 0 ? (
                     <p className="text-xs text-gray-300 text-center py-4">-</p>
                   ) : (
@@ -367,9 +367,7 @@ export default function GameScoresAdmin() {
                                 +{entry.points}
                               </span>
                             </div>
-                            {entry.description && (
-                              <p className="text-[11px] text-gray-500 truncate mt-0.5">{entry.description}</p>
-                            )}
+                            <p className="text-[11px] text-gray-500 truncate mt-0.5 min-h-[16px]">{entry.description || '\u00A0'}</p>
                             {viewMode === 'all' && (
                               <p className="text-[10px] text-gray-400 mt-0.5">{clubMap.get(entry.club_id) || ''}</p>
                             )}

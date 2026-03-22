@@ -38,8 +38,8 @@ export default function GameScoringPage() {
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
-  // Pending scores per team (accumulated before confirm)
-  const [pendingScores, setPendingScores] = useState<Record<string, number>>({});
+  // Selected preset buttons per team (toggle on/off)
+  const [selectedPresets, setSelectedPresets] = useState<Record<string, Set<number>>>({});
 
   // BottomSheet edit state
   const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
@@ -52,7 +52,7 @@ export default function GameScoringPage() {
 
   const handleClubSwitch = (club: typeof currentClub) => {
     if (!club || club.id === currentClub?.id) return;
-    setPendingScores({});
+    setSelectedPresets({});
     setCurrentClub(club);
   };
 
@@ -141,33 +141,39 @@ export default function GameScoringPage() {
     return map;
   }, [recentEntries, sortedTeams]);
 
-  // ── Has any pending score? ────────────────────────────────────
+  // ── Pending totals derived from selections ───────────────────
+  const pendingTotals = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [teamId, presets] of Object.entries(selectedPresets)) {
+      const sum = Array.from(presets).reduce((a, b) => a + b, 0);
+      if (sum > 0) map[teamId] = sum;
+    }
+    return map;
+  }, [selectedPresets]);
+
   const hasPendingScores = useMemo(
-    () => Object.values(pendingScores).some((v) => v > 0),
-    [pendingScores],
+    () => Object.keys(pendingTotals).length > 0,
+    [pendingTotals],
   );
 
   // ── Handlers ──────────────────────────────────────────────────
 
-  const handleAddPoints = (teamId: string, points: number) => {
+  const handleTogglePreset = (teamId: string, points: number) => {
     if (isLocked) return;
     navigator.vibrate?.(15);
-    setPendingScores((prev) => ({
-      ...prev,
-      [teamId]: (prev[teamId] || 0) + points,
-    }));
-  };
-
-  const handleResetTeam = (teamId: string) => {
-    setPendingScores((prev) => {
-      const next = { ...prev };
-      delete next[teamId];
-      return next;
+    setSelectedPresets((prev) => {
+      const current = new Set(prev[teamId] || []);
+      if (current.has(points)) {
+        current.delete(points);
+      } else {
+        current.add(points);
+      }
+      return { ...prev, [teamId]: current };
     });
   };
 
   const handleResetAll = () => {
-    setPendingScores({});
+    setSelectedPresets({});
   };
 
   const handleConfirm = () => {
@@ -178,15 +184,14 @@ export default function GameScoringPage() {
       return;
     }
 
-    const teamsToScore = sortedTeams.filter((t) => (pendingScores[t.id] || 0) > 0);
+    const teamsToScore = sortedTeams.filter((t) => (pendingTotals[t.id] || 0) > 0);
 
     for (const team of teamsToScore) {
-      const pts = pendingScores[team.id];
       enqueueAdd({
         teamIds: [team.id],
         clubId: currentClub.id,
         trainingDate: selectedDate,
-        points: pts,
+        points: pendingTotals[team.id],
         description: activeStage,
         recordedBy: teacher?.id,
       });
@@ -199,7 +204,7 @@ export default function GameScoringPage() {
     setTimeout(() => setFlashTeamId(null), teamsToScore.length * 150 + 300);
 
     toast.success(`${teamsToScore.length}팀 ${activeStage} 점수 반영!`);
-    setPendingScores({});
+    setSelectedPresets({});
   };
 
   const handleStartEdit = (entry: GameScoreEntry) => {
@@ -323,7 +328,8 @@ export default function GameScoringPage() {
         {sortedTeams.map((team) => {
           const total = teamTotals[team.id] || 0;
           const stageSub = stageSubtotals[team.id] || 0;
-          const pending = pendingScores[team.id] || 0;
+          const teamSelected = selectedPresets[team.id] || new Set<number>();
+          const pending = pendingTotals[team.id] || 0;
           const isFlashing = flashTeamId === team.id;
 
           return (
@@ -346,45 +352,45 @@ export default function GameScoringPage() {
                   <span className="text-sm font-bold drop-shadow-sm">{team.name}</span>
                   <span className="text-[11px] font-medium opacity-90">{activeStage}: {stageSub.toLocaleString()}</span>
                 </div>
-                <p className="text-2xl font-extrabold tabular-nums mt-0.5 drop-shadow-sm">
-                  {total.toLocaleString()}점
-                </p>
+                <div className="flex items-baseline justify-between mt-0.5">
+                  <p className="text-2xl font-extrabold tabular-nums drop-shadow-sm">
+                    {total.toLocaleString()}점
+                  </p>
+                  {pending > 0 && (
+                    <span className="text-sm font-bold bg-white/30 rounded-full px-2 py-0.5 tabular-nums">
+                      +{pending.toLocaleString()}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Pending score display + reset */}
-              {pending > 0 && (
-                <div className="flex items-center justify-between px-2.5 py-1.5 bg-indigo-50 border-b border-indigo-100">
-                  <span className="text-sm font-bold text-indigo-700 tabular-nums">+{pending.toLocaleString()}점 대기</span>
-                  <button
-                    onClick={() => handleResetTeam(team.id)}
-                    className="text-xs text-indigo-400 hover:text-indigo-600 font-medium px-1"
-                  >
-                    초기화
-                  </button>
-                </div>
-              )}
-
-              {/* Point preset buttons */}
+              {/* Point preset toggle buttons */}
               <div className="grid grid-cols-3 gap-1.5 p-2.5 bg-white">
-                {POINT_PRESETS.map((pts) => (
-                  <button
-                    key={pts}
-                    data-testid={`game-quick-${team.id}-${pts}`}
-                    onClick={() => handleAddPoints(team.id, pts)}
-                    disabled={isLocked}
-                    className={cn(
-                      'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation',
-                      'active:scale-95 disabled:opacity-40 disabled:active:scale-100',
-                      'border border-gray-200 hover:border-gray-300'
-                    )}
-                    style={{
-                      backgroundColor: `${team.color}0A`,
-                      color: team.color,
-                    }}
-                  >
-                    +{pts}
-                  </button>
-                ))}
+                {POINT_PRESETS.map((pts) => {
+                  const isSelected = teamSelected.has(pts);
+                  return (
+                    <button
+                      key={pts}
+                      data-testid={`game-quick-${team.id}-${pts}`}
+                      onClick={() => handleTogglePreset(team.id, pts)}
+                      disabled={isLocked}
+                      className={cn(
+                        'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation',
+                        'active:scale-95 disabled:opacity-40 disabled:active:scale-100',
+                        isSelected
+                          ? 'border-2 shadow-sm'
+                          : 'border border-gray-200'
+                      )}
+                      style={
+                        isSelected
+                          ? { backgroundColor: team.color, color: '#fff', borderColor: team.color }
+                          : { backgroundColor: `${team.color}0A`, color: team.color }
+                      }
+                    >
+                      +{pts}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
@@ -446,9 +452,7 @@ export default function GameScoringPage() {
                             onClick={() => !isLocked && handleStartEdit(entry)}
                             className="w-full text-left px-2 py-1.5 hover:bg-white transition-colors active:bg-gray-100"
                           >
-                            {entry.description && (
-                              <p className="text-[10px] text-gray-400 truncate leading-tight">{entry.description}</p>
-                            )}
+                            <p className="text-[10px] text-gray-400 truncate leading-tight min-h-[14px]">{entry.description || '\u00A0'}</p>
                             <p className="text-sm font-bold tabular-nums" style={{ color: team.color }}>
                               +{entry.points}
                             </p>
