@@ -28,6 +28,7 @@ interface ControlBarProps {
   onToggleFullscreen: () => void;
   reflowCurrentPage?: number;
   reflowTotalPages?: number;
+  maxScale?: number;
 }
 
 /** 탭하면 인라인 입력으로 전환되는 페이지 인디케이터 */
@@ -154,7 +155,7 @@ export function ControlBar(props: ControlBarProps) {
           </button>
           <button
             onClick={props.onZoomIn}
-            disabled={props.scale >= MAX_SCALE}
+            disabled={props.scale >= (props.maxScale ?? MAX_SCALE)}
             className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
           >
             <ZoomIn className="w-4 h-4 text-gray-700" />

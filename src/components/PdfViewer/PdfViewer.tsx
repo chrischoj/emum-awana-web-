@@ -7,6 +7,7 @@ import { usePdfDocument, useZoom, useFullscreen } from './hooks';
 import { CanvasViewer, type CanvasViewerHandle } from './CanvasViewer';
 import { ReflowViewer, type ReflowViewerHandle } from './ReflowViewer';
 import { ControlBar } from './ControlBar';
+import { REFLOW_MAX_SCALE, MAX_SCALE, ZOOM_LEVELS } from './constants';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -20,7 +21,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const [isReflowMode, setIsReflowMode] = useState(false);
   const [baseWidth, setBaseWidth] = useState(0);
   const [isCanvasAnimating, setIsCanvasAnimating] = useState(false);
-  const [reflowPageInfo, setReflowPageInfo] = useState({ current: 1, total: 1 });
+  const [reflowPageInfo, setReflowPageInfo] = useState({ current: 1, total: 1, pdfPage: 1 });
 
   const {
     pdfDoc, numPages, pdfError,
@@ -52,6 +53,21 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     setCurrentPage(page);
   }, []);
 
+  // 리플로우 모드에서는 줌 상한 제한
+  const effectiveMaxScale = isReflowMode ? REFLOW_MAX_SCALE : MAX_SCALE;
+
+  const handleZoomIn = useCallback(() => {
+    setScale((prev) => {
+      const next = ZOOM_LEVELS.find((z) => z > prev);
+      if (!next || next > effectiveMaxScale) return prev;
+      return next;
+    });
+  }, [effectiveMaxScale, setScale]);
+
+  const handleZoomOut = useCallback(() => {
+    zoomOut();
+  }, [zoomOut]);
+
   const handlePageJump = useCallback((page: number) => {
     if (isReflowMode) {
       reflowViewerRef.current?.scrollToPage(page);
@@ -76,6 +92,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
             numPages={numPages}
             scale={scale}
             setScale={setScale}
+            initialPdfPage={currentPage}
             onDocumentLoadSuccess={handleDocumentLoadSuccess}
             onDocumentLoadError={handleDocumentLoadError}
             onReflowPageInfo={setReflowPageInfo}
@@ -102,7 +119,15 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
       {/* 컨트롤 바 */}
       <ControlBar
         isReflowMode={isReflowMode}
-        onToggleReflow={() => setIsReflowMode((prev) => !prev)}
+        onToggleReflow={() => {
+          setIsReflowMode((prev) => {
+            if (prev) {
+              // 리플로우 → 캔버스: 보고 있던 PDF 페이지로 이동
+              setCurrentPage(reflowPageInfo.pdfPage);
+            }
+            return !prev;
+          });
+        }}
         currentPage={currentPage}
         numPages={numPages}
         isAnimating={isCanvasAnimating}
@@ -111,8 +136,9 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
         onPageJump={handlePageJump}
         scale={scale}
         isZoomed={isZoomed}
-        onZoomIn={zoomIn}
-        onZoomOut={zoomOut}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        maxScale={effectiveMaxScale}
         onResetZoom={resetZoom}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}

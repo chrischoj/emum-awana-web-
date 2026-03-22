@@ -16,7 +16,9 @@ interface ReflowViewerProps {
   setScale: (s: number) => void;
   onDocumentLoadSuccess: (pdf: any) => void;
   onDocumentLoadError: (error: Error) => void;
-  onReflowPageInfo?: (info: { current: number; total: number }) => void;
+  onReflowPageInfo?: (info: { current: number; total: number; pdfPage: number }) => void;
+  /** 캔버스 모드에서 보던 PDF 페이지 (마운트 시 해당 위치로 스크롤) */
+  initialPdfPage?: number;
 }
 
 /** \n을 <br/>로 변환하여 개행 렌더링 */
@@ -58,6 +60,27 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
     props.numPages,
     true,
   );
+
+  // 마운트 시 캔버스에서 보던 PDF 페이지 위치로 스크롤
+  const didInitialScrollRef = useRef(false);
+  useEffect(() => {
+    if (didInitialScrollRef.current) return;
+    if (isExtracting || reflowBlocks.length === 0) return;
+    if (!props.initialPdfPage || props.initialPdfPage <= 1) {
+      didInitialScrollRef.current = true;
+      return;
+    }
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+
+    didInitialScrollRef.current = true;
+    requestAnimationFrame(() => {
+      const divider = scrollEl.querySelector(`[data-pdf-page="${props.initialPdfPage}"]`);
+      if (divider) {
+        (divider as HTMLElement).scrollIntoView({ block: 'start' });
+      }
+    });
+  }, [isExtracting, reflowBlocks.length, props.initialPdfPage]);
 
   useReflowPinchZoom({
     scrollRef,
@@ -115,7 +138,10 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
     const scrollEl = scrollRef.current;
     if (!scrollEl || isExtracting || reflowBlocks.length === 0) return;
 
+    let rafPending = false;
+
     const update = () => {
+      rafPending = false;
       const vh = scrollEl.clientHeight;
       const sh = scrollEl.scrollHeight;
       const st = scrollEl.scrollTop;
@@ -125,21 +151,37 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
       const current = maxScroll <= 0
         ? 1
         : Math.min(total, Math.floor((st / maxScroll) * (total - 1)) + 1);
-      onReflowPageInfoRef.current?.({ current, total });
+
+      // 현재 보이는 원본 PDF 페이지 추적 (구분선 기준)
+      let pdfPage = 1;
+      const dividers = scrollEl.querySelectorAll<HTMLElement>('[data-pdf-page]');
+      const midY = scrollEl.getBoundingClientRect().top + vh * 0.3;
+      for (const div of dividers) {
+        if (div.getBoundingClientRect().top <= midY) {
+          pdfPage = parseInt(div.dataset.pdfPage!, 10);
+        }
+      }
+      onReflowPageInfoRef.current?.({ current, total, pdfPage });
+    };
+
+    const throttled = () => {
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(update);
     };
 
     // 스케일 변경 후 리플로우 완료 대기
-    let rafId = requestAnimationFrame(() => {
-      rafId = requestAnimationFrame(update);
+    let initRafId = requestAnimationFrame(() => {
+      initRafId = requestAnimationFrame(update);
     });
 
-    scrollEl.addEventListener('scroll', update, { passive: true });
-    const observer = new ResizeObserver(update);
+    scrollEl.addEventListener('scroll', throttled, { passive: true });
+    const observer = new ResizeObserver(throttled);
     if (transformRef.current) observer.observe(transformRef.current);
 
     return () => {
-      cancelAnimationFrame(rafId);
-      scrollEl.removeEventListener('scroll', update);
+      cancelAnimationFrame(initRafId);
+      scrollEl.removeEventListener('scroll', throttled);
       observer.disconnect();
     };
   }, [isExtracting, reflowBlocks.length, props.scale]);
@@ -174,7 +216,7 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
             {reflowBlocks.map((block, i) => {
               if (block.type === 'divider') {
                 return (
-                  <div key={i} className="my-6 flex items-center gap-3">
+                  <div key={i} data-pdf-page={block.pageNum} className="my-6 flex items-center gap-3">
                     <div className="flex-1 border-t border-gray-200" />
                     <span className="text-xs text-gray-400 shrink-0">페이지 {block.pageNum}</span>
                     <div className="flex-1 border-t border-gray-200" />

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, type RefObject } from 'react';
 import { getTouchDistanceNative } from '../utils/touchUtils';
-import { MIN_SCALE, MAX_SCALE } from '../constants';
+import { MIN_SCALE, REFLOW_REFLOW_MAX_SCALE } from '../constants';
 
 const DOUBLE_TAP_DELAY = 300;
 const DOUBLE_TAP_DISTANCE = 30;
@@ -100,8 +100,8 @@ export function useReflowPinchZoom({
 
     // 경계 밖 러버밴드
     let visualRatio = ratio;
-    if (targetScale > MAX_SCALE) {
-      visualRatio = (MAX_SCALE + (targetScale - MAX_SCALE) * RUBBER_BAND) / ps.startScale;
+    if (targetScale > REFLOW_MAX_SCALE) {
+      visualRatio = (REFLOW_MAX_SCALE + (targetScale - REFLOW_MAX_SCALE) * RUBBER_BAND) / ps.startScale;
     } else if (targetScale < MIN_SCALE) {
       visualRatio = (MIN_SCALE - (MIN_SCALE - targetScale) * RUBBER_BAND) / ps.startScale;
     }
@@ -123,7 +123,7 @@ export function useReflowPinchZoom({
     const finalScale = clamp(
       Math.round(ps.startScale * ps.currentRatio * 20) / 20,
       MIN_SCALE,
-      MAX_SCALE,
+      REFLOW_MAX_SCALE,
     );
 
     if (!wrapper) {
