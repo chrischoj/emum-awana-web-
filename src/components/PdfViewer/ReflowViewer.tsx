@@ -6,6 +6,7 @@ import { useReflowPinchZoom } from './hooks/useReflowPinchZoom';
 
 export interface ReflowViewerHandle {
   scrollToPage: (page: number) => void;
+  scrollByPage: (delta: number) => void;
 }
 
 interface ReflowViewerProps {
@@ -52,6 +53,13 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
       if (maxScroll <= 0 || total <= 1) return;
       const ratio = (page - 1) / (total - 1);
       el.scrollTo({ top: ratio * maxScroll, behavior: 'smooth' });
+    },
+    scrollByPage: (delta: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const viewportH = el.clientHeight;
+      // 90% 뷰포트 높이로 이동 (약간의 겹침으로 맥락 유지)
+      el.scrollBy({ top: delta * viewportH * 0.9, behavior: 'smooth' });
     },
   }));
 

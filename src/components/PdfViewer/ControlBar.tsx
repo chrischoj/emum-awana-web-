@@ -29,6 +29,7 @@ interface ControlBarProps {
   onToggleFullscreen: () => void;
   reflowCurrentPage?: number;
   reflowTotalPages?: number;
+  reflowPdfPage?: number;
   maxScale?: number;
 }
 
@@ -107,12 +108,33 @@ export function ControlBar(props: ControlBarProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           {props.isReflowMode ? (
-            <PageIndicator
-              current={props.reflowCurrentPage ?? 1}
-              total={props.reflowTotalPages ?? 1}
-              onJump={props.onPageJump}
-              className="text-xs font-medium text-indigo-600 px-1"
-            />
+            <>
+              <button
+                onClick={props.onPrev}
+                disabled={(props.reflowCurrentPage ?? 1) <= 1}
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5 text-gray-700" />
+              </button>
+              <div className="flex flex-col items-center">
+                <PageIndicator
+                  current={props.reflowCurrentPage ?? 1}
+                  total={props.reflowTotalPages ?? 1}
+                  onJump={props.onPageJump}
+                  className="text-xs font-medium text-indigo-600 min-w-[52px] text-center"
+                />
+                <span className="text-[10px] text-gray-400 -mt-0.5">
+                  원본 p.{props.reflowPdfPage ?? 1}
+                </span>
+              </div>
+              <button
+                onClick={props.onNext}
+                disabled={(props.reflowCurrentPage ?? 1) >= (props.reflowTotalPages ?? 1)}
+                className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
+              >
+                <ChevronRight className="w-5 h-5 text-gray-700" />
+              </button>
+            </>
           ) : (
             <>
               <button

@@ -131,8 +131,20 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
         currentPage={currentPage}
         numPages={numPages}
         isAnimating={isCanvasAnimating}
-        onPrev={() => canvasViewerRef.current?.changePage('prev')}
-        onNext={() => canvasViewerRef.current?.changePage('next')}
+        onPrev={() => {
+          if (isReflowMode) {
+            reflowViewerRef.current?.scrollByPage(-1);
+          } else {
+            canvasViewerRef.current?.changePage('prev');
+          }
+        }}
+        onNext={() => {
+          if (isReflowMode) {
+            reflowViewerRef.current?.scrollByPage(1);
+          } else {
+            canvasViewerRef.current?.changePage('next');
+          }
+        }}
         onPageJump={handlePageJump}
         scale={scale}
         isZoomed={isZoomed}
@@ -144,6 +156,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
         onToggleFullscreen={toggleFullscreen}
         reflowCurrentPage={reflowPageInfo.current}
         reflowTotalPages={reflowPageInfo.total}
+        reflowPdfPage={reflowPageInfo.pdfPage}
       />
     </div>
   );
