@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
@@ -15,6 +15,7 @@ interface ColorTotal {
   name: string;
   color: string;
   total: number;
+  teamIds: string[];
 }
 
 export default function GameScoresAdmin() {
@@ -39,7 +40,6 @@ export default function GameScoresAdmin() {
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const teacherNamesLoaded = useRef(false);
 
-  // 교사 이름은 최초 1회만 로드 (불변 데이터)
   useEffect(() => {
     if (teacherNamesLoaded.current) return;
     supabase.from('teachers').select('id, name').then(({ data }) => {
@@ -112,7 +112,7 @@ export default function GameScoresAdmin() {
         const total = fetchedEntries
           .filter((e) => teamIds.includes(e.team_id))
           .reduce((sum, e) => sum + e.points, 0);
-        totals.push({ name, color, total });
+        totals.push({ name, color, total, teamIds });
       }
       setColorTotals(sortTeamsByColor(totals));
     } catch {
@@ -123,7 +123,6 @@ export default function GameScoresAdmin() {
     }
   }
 
-  // 백그라운드→포그라운드 복귀 시 데이터 갱신
   useAppResume(() => {
     if (viewMode === 'all') loadAllData();
     else loadClubData();
@@ -222,6 +221,39 @@ export default function GameScoresAdmin() {
 
   const clubMap = new Map(clubs.map((c) => [c.id, c.name]));
 
+  // ── Entries grouped by team/color column (oldest first = newest at bottom) ─
+  const columnData = useMemo(() => {
+    if (viewMode === 'all') {
+      // Group by color name across clubs
+      return colorTotals.map((ct) => ({
+        key: ct.name,
+        name: ct.name,
+        color: ct.color,
+        total: ct.total,
+        entries: entries
+          .filter((e) => ct.teamIds.includes(e.team_id))
+          .slice()
+          .reverse(), // oldest first, newest at bottom
+      }));
+    } else {
+      // Per-club: group by team
+      const sorted = sortTeamsByColor(teams);
+      return sorted.map((team) => ({
+        key: team.id,
+        name: team.name,
+        color: team.color,
+        total: teamTotals[team.id] || 0,
+        entries: entries
+          .filter((e) => e.team_id === team.id)
+          .slice()
+          .reverse(), // oldest first, newest at bottom
+      }));
+    }
+  }, [viewMode, colorTotals, teams, teamTotals, entries]);
+
+  const teamColorGradient = (color: string) =>
+    `linear-gradient(135deg, ${color}DD, ${color}99)`;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -292,62 +324,80 @@ export default function GameScoresAdmin() {
         </div>
       )}
 
-      {/* Team/Color totals */}
-      {viewMode === 'all' ? (
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {colorTotals.map((ct) => (
-            <div key={ct.name} className="bg-white rounded-xl border border-gray-200 p-4 text-center" style={{ borderTopColor: ct.color, borderTopWidth: 3 }}>
-              <p className="text-sm font-bold" style={{ color: ct.color }}>{ct.name}</p>
-              <p className="text-2xl font-bold mt-1">{ct.total.toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-3 mb-6 lg:grid-cols-4">
-          {sortTeamsByColor(teams).map((team) => (
-            <div key={team.id} className="bg-white rounded-xl border border-gray-200 p-4" style={{ borderTopColor: team.color, borderTopWidth: 3 }}>
-              <p className="text-sm font-bold" style={{ color: team.color }}>{team.name}</p>
-              <p className="text-2xl font-bold text-center mt-1">{(teamTotals[team.id] || 0).toLocaleString()}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Entry list */}
+      {/* Team-based column history */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">점수 기록</h2>
+        <h2 className="font-semibold mb-3">팀별 점수 기록</h2>
         {loading ? (
           <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600" /></div>
         ) : entries.length === 0 ? (
           <p className="text-gray-400 text-center py-4 text-sm">기록이 없습니다</p>
         ) : (
-          <div className="space-y-2">
-            {entries.map((entry) => {
-              const team = viewMode === 'all'
-                ? allTeams.find((t) => t.id === entry.team_id)
-                : teams.find((t) => t.id === entry.team_id);
-              const teacherName = entry.recorded_by ? teacherNames.get(entry.recorded_by) : null;
-              return (
-                <div key={entry.id} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{new Date(entry.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
-                    {viewMode === 'all' && (
-                      <span className="text-xs text-gray-500">[{clubMap.get(entry.club_id) || ''}]</span>
-                    )}
-                    {team && <span className="px-2 py-0.5 rounded text-xs font-medium text-white" style={{ backgroundColor: team.color }}>{team.name}</span>}
-                    {entry.description && <span className="text-gray-500">{entry.description}</span>}
-                    {teacherName && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{teacherName}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-indigo-600">+{entry.points}</span>
-                    <button onClick={() => handleStartEdit(entry)} className="text-xs text-gray-400 hover:text-indigo-600 px-1">수정</button>
-                    <button onClick={() => handleDeleteEntry(entry.id)} className="text-xs text-gray-400 hover:text-red-600 px-1">삭제</button>
-                  </div>
+          <div className={cn(
+            'grid gap-3',
+            columnData.length <= 4 ? 'grid-cols-4' : `grid-cols-${Math.min(columnData.length, 6)}`
+          )}>
+            {columnData.map((col) => (
+              <div key={col.key} className="min-w-0">
+                {/* Column header */}
+                <div
+                  className="rounded-t-lg px-3 py-2 text-center"
+                  style={{ background: teamColorGradient(col.color) }}
+                >
+                  <p className="text-xs font-bold text-white truncate">{col.name}</p>
+                  <p className="text-lg font-extrabold text-white tabular-nums">{col.total.toLocaleString()}</p>
                 </div>
-              );
-            })}
+
+                {/* Entries (oldest first, newest at bottom) */}
+                <div className="border border-t-0 border-gray-100 rounded-b-lg bg-gray-50 min-h-[80px] max-h-[400px] overflow-y-auto">
+                  {col.entries.length === 0 ? (
+                    <p className="text-xs text-gray-300 text-center py-4">-</p>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {col.entries.map((entry) => {
+                        const teacherName = entry.recorded_by ? teacherNames.get(entry.recorded_by) : null;
+                        const time = new Date(entry.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                        return (
+                          <div
+                            key={entry.id}
+                            className="px-2.5 py-2 hover:bg-white transition-colors group"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-400">{time}</span>
+                              <span className="text-sm font-bold tabular-nums" style={{ color: col.color }}>
+                                +{entry.points}
+                              </span>
+                            </div>
+                            {entry.description && (
+                              <p className="text-[11px] text-gray-500 truncate mt-0.5">{entry.description}</p>
+                            )}
+                            {viewMode === 'all' && (
+                              <p className="text-[10px] text-gray-400 mt-0.5">{clubMap.get(entry.club_id) || ''}</p>
+                            )}
+                            {teacherName && (
+                              <p className="text-[10px] text-gray-400">{teacherName}</p>
+                            )}
+                            <div className="flex gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleStartEdit(entry)}
+                                className="text-[10px] text-indigo-500 hover:text-indigo-700 font-medium"
+                              >
+                                수정
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEntry(entry.id)}
+                                className="text-[10px] text-red-400 hover:text-red-600 font-medium"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
