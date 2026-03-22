@@ -174,7 +174,9 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [baseWidth, setBaseWidth] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const animFrameRef = useRef<number>(0);
   const soundPlayedRef = useRef(false);
 
@@ -308,7 +310,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (stateRef.current.isAnimating) return;
     if (e.touches.length === 2) {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       setIsPinching(true);
       setIsDragging(false);
       setCurlProgress(0);
@@ -437,6 +439,27 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
+  // ---- 전체화면 ----
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await containerRef.current?.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // 전체화면 미지원 환경 무시
+    }
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
   // ---- 줌 (스냅 레벨) ----
   const zoomIn = () => {
     const next = ZOOM_LEVELS.find((z) => z > scale);
@@ -468,7 +491,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const isCurling = curlProgress > 0 && curlDirection !== null;
 
   return (
-    <div className="flex flex-col" style={{ height }}>
+    <div ref={containerRef} className={`flex flex-col ${isFullscreen ? 'bg-gray-900' : ''}`} style={{ height: isFullscreen ? '100vh' : height }}>
       {/* PDF 뷰어 영역 */}
       <div
         ref={measureRef}
@@ -650,6 +673,17 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
               className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
             >
               <ZoomIn className="w-4 h-4 text-gray-700" />
+            </button>
+            <div className="w-px h-6 bg-gray-200 mx-0.5" />
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 transition-colors"
+              title={isFullscreen ? '전체화면 해제' : '전체화면'}
+            >
+              {isFullscreen
+                ? <Minimize2 className="w-4 h-4 text-gray-700" />
+                : <Maximize2 className="w-4 h-4 text-gray-700" />
+              }
             </button>
           </div>
         </div>
