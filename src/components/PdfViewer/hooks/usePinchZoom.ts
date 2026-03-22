@@ -3,22 +3,26 @@ import { getTouchDistanceNative } from '../utils/touchUtils';
 import { MIN_SCALE, MAX_SCALE } from '../constants';
 
 // ---- 상수 ----
-const RUBBER_BAND = 0.25;
+/** 경계 초과 시 탄성 저항 */
+const RUBBER = 0.2;
+/** 스프링 바운스 백 */
 const SPRING = 'transform 0.32s cubic-bezier(0.2, 0.82, 0.3, 1.06)';
-const DOUBLE_TAP_MS = 300;
-const DOUBLE_TAP_PX = 30;
-const DOUBLE_TAP_SCALE = 2.5;
+/** 더블탭 감지 */
+const DBL_TAP_MS = 300;
+const DBL_TAP_PX = 30;
+const DBL_TAP_SCALE = 2.5;
 
-function touchCenter(t: TouchList) {
+function center(t: TouchList) {
   return {
     x: (t[0].clientX + t[1].clientX) / 2,
     y: (t[0].clientY + t[1].clientY) / 2,
   };
 }
 
-function rubberBand(s: number) {
-  if (s > MAX_SCALE) return MAX_SCALE + (s - MAX_SCALE) * RUBBER_BAND;
-  if (s < MIN_SCALE) return MIN_SCALE - (MIN_SCALE - s) * RUBBER_BAND;
+/** 경계 초과 시 러버밴드 */
+function rubber(s: number) {
+  if (s > MAX_SCALE) return MAX_SCALE + (s - MAX_SCALE) * RUBBER;
+  if (s < MIN_SCALE) return MIN_SCALE - (MIN_SCALE - s) * RUBBER;
   return s;
 }
 
@@ -26,7 +30,7 @@ function clamp(s: number) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 }
 
-interface PinchZoomOptions {
+interface Options {
   containerRef: RefObject<HTMLDivElement | null>;
   contentRef: RefObject<HTMLDivElement | null>;
   scale: number;
@@ -37,10 +41,15 @@ interface PinchZoomOptions {
 /**
  * 갤러리 수준 핀치 줌.
  *
- * PDF는 항상 baseWidth로 렌더하고, 줌은 전적으로 CSS transform으로 처리한다.
- * 핀치 중에는 `translate + scale`을 DOM에 직접 적용하고,
- * 핀치 끝에는 translate를 scroll로 전환한 뒤 setScale만 호출한다.
- * **transform 제거 단계가 없으므로 깜박임이 원천 제거된다.**
+ * **핵심 수학**: 항상 `transform-origin: 0 0`을 유지하고,
+ * translate로 포커스 포인트가 손가락 아래에 고정되도록 보정한다.
+ *
+ * 스크롤 좌표계에서 핀치 중심의 위치를 `L`이라 하면 (L = screenPos - rect + scroll):
+ *   tx = L * (1 - S1/S0) + panX
+ *   ty = L * (1 - S1/S0) + panY
+ *
+ * 이 공식으로 핀치 중심 아래 콘텐츠가 정확히 손가락을 따라간다.
+ * finalize 시 `scroll -= tx`로 translate를 scroll에 흡수하면 시각 변화 제로.
  */
 export function usePinchZoom({
   containerRef,
@@ -48,7 +57,7 @@ export function usePinchZoom({
   scale,
   setScale,
   enabled,
-}: PinchZoomOptions) {
+}: Options) {
   const [isPinching, setIsPinching] = useState(false);
 
   const ps = useRef({
@@ -56,16 +65,16 @@ export function usePinchZoom({
     settling: false,
     startDist: 0,
     startScale: 1,
-    // 화면 좌표 기준 시작 중심
-    startCX: 0,
-    startCY: 0,
-    // 컨테이너 내부 좌표 (origin용)
-    originX: 0,
-    originY: 0,
-    // 현재 누적값
-    visualScale: 1,
+    // 핀치 시작 시 스크롤 좌표계 위치 (= screenPos - rect + scroll)
+    localX: 0,
+    localY: 0,
+    // 현재 핀치 상태
+    totalScale: 1,
     tx: 0,
     ty: 0,
+    // 화면 좌표 기준 시작 중심 (팬 계산용)
+    startScreenX: 0,
+    startScreenY: 0,
   });
 
   const scaleRef = useRef(scale);
@@ -74,12 +83,11 @@ export function usePinchZoom({
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
   const lastTap = useRef({ t: 0, x: 0, y: 0 });
 
-  // ---- 핀치 → scroll 전환 유틸 ----
-  const commitTransform = useCallback((
+  // ---- finalize: translate → scroll 전환 ----
+  const finalize = useCallback((
     finalScale: number,
     tx: number,
     ty: number,
-    animated: boolean,
   ) => {
     const content = contentRef.current;
     const scroll = containerRef.current;
@@ -90,52 +98,29 @@ export function usePinchZoom({
     }
 
     const clamped = clamp(finalScale);
-    const needsBounce = animated && (finalScale !== clamped);
 
-    if (needsBounce) {
-      // 러버밴드 → 클램프로 스프링 바운스
-      const bouncedRelative = clamped / ps.current.startScale;
-      ps.current.settling = true;
-      content.style.transition = SPRING;
-      content.style.transform = `translate(${tx}px, ${ty}px) scale(${bouncedRelative})`;
-      content.style.transformOrigin = `${ps.current.originX}px ${ps.current.originY}px`;
-
-      const done = () => {
-        content.removeEventListener('transitionend', done);
-        clearTimeout(fb);
-        finalize(clamped, tx, ty, content, scroll);
-      };
-      content.addEventListener('transitionend', done, { once: true });
-      const fb = setTimeout(done, 380);
-    } else {
-      finalize(clamped, tx, ty, content, scroll);
-    }
-  }, [containerRef, contentRef, setScale]);
-
-  const finalize = useCallback((
-    finalScale: number,
-    tx: number,
-    ty: number,
-    content: HTMLDivElement,
-    scroll: HTMLDivElement,
-  ) => {
-    // translate를 scroll 위치로 전환 (동기 → 깜박임 없음)
+    // translate를 scroll 위치로 흡수 (동기 → 시각 변화 제로)
     content.style.transition = 'none';
-    content.style.transform = `scale(${finalScale})`;
+    content.style.transform = `scale(${clamped})`;
     content.style.transformOrigin = '0 0';
     content.style.willChange = '';
 
-    // 핀치 중심점이 같은 화면 위치에 유지되도록 스크롤 조정
-    scroll.scrollLeft = Math.max(0, scroll.scrollLeft - tx);
-    scroll.scrollTop = Math.max(0, scroll.scrollTop - ty);
+    // 핀치 중심이 같은 화면 위치에 유지되도록 스크롤 보정
+    // finalScale 기준의 tx를 재계산 (러버밴드로 인해 clamped와 다를 수 있음)
+    const p = ps.current;
+    const clampedTx = p.localX * (1 - clamped / p.startScale) + (p.tx - p.localX * (1 - p.totalScale / p.startScale));
+    const clampedTy = p.localY * (1 - clamped / p.startScale) + (p.ty - p.localY * (1 - p.totalScale / p.startScale));
+
+    scroll.scrollLeft = Math.max(0, scroll.scrollLeft - clampedTx);
+    scroll.scrollTop = Math.max(0, scroll.scrollTop - clampedTy);
 
     ps.current.settling = false;
-    setScale(finalScale);
+    setScale(clamped);
     setIsPinching(false);
-  }, [setScale]);
+  }, [containerRef, contentRef, setScale]);
 
   // ---- 핀치 시작 ----
-  const onPinchStart = useCallback((e: TouchEvent) => {
+  const onStart = useCallback((e: TouchEvent) => {
     if (!enabledRef.current || ps.current.settling) return;
     if (e.touches.length !== 2) return;
     if (e.cancelable) e.preventDefault();
@@ -144,59 +129,93 @@ export function usePinchZoom({
     p.startDist = getTouchDistanceNative(e.touches);
     p.startScale = scaleRef.current;
     p.active = true;
-    p.visualScale = 1;
+    p.totalScale = p.startScale;
     p.tx = 0;
     p.ty = 0;
 
-    const c = touchCenter(e.touches);
-    p.startCX = c.x;
-    p.startCY = c.y;
+    const c = center(e.touches);
+    p.startScreenX = c.x;
+    p.startScreenY = c.y;
 
+    // 스크롤 좌표계에서의 핀치 중심 위치
     const el = containerRef.current;
     if (el) {
       const r = el.getBoundingClientRect();
-      p.originX = c.x - r.left + el.scrollLeft;
-      p.originY = c.y - r.top + el.scrollTop;
+      p.localX = c.x - r.left + el.scrollLeft;
+      p.localY = c.y - r.top + el.scrollTop;
     }
 
     setIsPinching(true);
   }, [containerRef]);
 
   // ---- 핀치 이동 ----
-  const onPinchMove = useCallback((e: TouchEvent) => {
+  const onMove = useCallback((e: TouchEvent) => {
     const p = ps.current;
     if (!p.active || e.touches.length !== 2) return;
     if (e.cancelable) e.preventDefault();
 
     const dist = getTouchDistanceNative(e.touches);
     const ratio = dist / p.startDist;
-    const target = p.startScale * ratio;
-    const elastic = rubberBand(target);
-    p.visualScale = elastic / p.startScale;
+    const raw = p.startScale * ratio;
+    const elastic = rubber(raw);
+    p.totalScale = elastic;
 
-    // 핀치 중 팬: 중심점 이동 추적
-    const c = touchCenter(e.touches);
-    p.tx = c.x - p.startCX;
-    p.ty = c.y - p.startCY;
+    // 팬: 핀치 중심 화면 이동량
+    const c = center(e.touches);
+    const panX = c.x - p.startScreenX;
+    const panY = c.y - p.startScreenY;
 
+    // 핵심 공식: 핀치 중심이 손가락 아래에 고정되도록 translate 계산
+    // tx = localX * (1 - S1/S0) + panX
+    p.tx = p.localX * (1 - elastic / p.startScale) + panX;
+    p.ty = p.localY * (1 - elastic / p.startScale) + panY;
+
+    // GPU 가속 transform 직접 조작 (origin 항상 0,0)
     const el = contentRef.current;
     if (el) {
-      el.style.transform = `translate(${p.tx}px, ${p.ty}px) scale(${p.visualScale})`;
-      el.style.transformOrigin = `${p.originX}px ${p.originY}px`;
+      el.style.transform = `translate(${p.tx}px, ${p.ty}px) scale(${elastic})`;
+      el.style.transformOrigin = '0 0';
       el.style.transition = 'none';
       el.style.willChange = 'transform';
     }
   }, [contentRef]);
 
   // ---- 핀치 끝 ----
-  const onPinchEnd = useCallback(() => {
+  const onEnd = useCallback(() => {
     const p = ps.current;
     if (!p.active) return;
     p.active = false;
 
-    const raw = p.startScale * p.visualScale;
-    commitTransform(raw, p.tx, p.ty, true);
-  }, [commitTransform]);
+    const clamped = clamp(p.totalScale);
+    const needsBounce = p.totalScale !== clamped;
+
+    if (needsBounce) {
+      // 러버밴드에서 경계로 스프링 바운스
+      const content = contentRef.current;
+      if (!content) { finalize(p.totalScale, p.tx, p.ty); return; }
+
+      ps.current.settling = true;
+      const bounceTx = p.localX * (1 - clamped / p.startScale) + (p.tx - p.localX * (1 - p.totalScale / p.startScale));
+      const bounceTy = p.localY * (1 - clamped / p.startScale) + (p.ty - p.localY * (1 - p.totalScale / p.startScale));
+
+      content.style.transition = SPRING;
+      content.style.transform = `translate(${bounceTx}px, ${bounceTy}px) scale(${clamped})`;
+
+      const done = () => {
+        content.removeEventListener('transitionend', done);
+        clearTimeout(fb);
+        // 바운스 완료 후 최종 translate를 사용하여 finalize
+        p.totalScale = clamped;
+        p.tx = bounceTx;
+        p.ty = bounceTy;
+        finalize(clamped, bounceTx, bounceTy);
+      };
+      content.addEventListener('transitionend', done, { once: true });
+      const fb = setTimeout(done, 380);
+    } else {
+      finalize(p.totalScale, p.tx, p.ty);
+    }
+  }, [contentRef, finalize]);
 
   // ---- 더블탭 줌 ----
   const onDoubleTap = useCallback((e: TouchEvent) => {
@@ -210,9 +229,9 @@ export function usePinchZoom({
     const dd = Math.sqrt((t.clientX - lt.x) ** 2 + (t.clientY - lt.y) ** 2);
 
     lastTap.current = { t: now, x: t.clientX, y: t.clientY };
-    if (dt > DOUBLE_TAP_MS || dd > DOUBLE_TAP_PX) return;
+    if (dt > DBL_TAP_MS || dd > DBL_TAP_PX) return;
 
-    // 더블탭 감지
+    // 더블탭 감지!
     if (e.cancelable) e.preventDefault();
     lastTap.current = { t: 0, x: 0, y: 0 };
 
@@ -221,36 +240,37 @@ export function usePinchZoom({
     if (!content || !scroll) return;
 
     const cur = scaleRef.current;
-    const target = cur > 1.05 ? 1 : DOUBLE_TAP_SCALE;
+    const target = cur > 1.05 ? 1 : DBL_TAP_SCALE;
     const rect = scroll.getBoundingClientRect();
 
-    // 탭 위치의 컨테이너 내부 좌표
-    const ox = t.clientX - rect.left + scroll.scrollLeft;
-    const oy = t.clientY - rect.top + scroll.scrollTop;
+    // 탭 위치의 스크롤 좌표계 위치
+    const lx = t.clientX - rect.left + scroll.scrollLeft;
+    const ly = t.clientY - rect.top + scroll.scrollTop;
+
+    // 같은 수학: 탭 포인트가 화면 고정되도록 translate 계산
+    const tx = lx * (1 - target / cur);
+    const ty = ly * (1 - target / cur);
 
     ps.current.startScale = cur;
-    ps.current.originX = ox;
-    ps.current.originY = oy;
     ps.current.settling = true;
 
-    const relScale = target / cur;
-    content.style.transformOrigin = `${ox}px ${oy}px`;
+    content.style.transformOrigin = '0 0';
     content.style.transition = SPRING;
-    content.style.transform = `scale(${relScale})`;
+    content.style.transform = `translate(${tx}px, ${ty}px) scale(${target})`;
     setIsPinching(true);
 
     const done = () => {
       content.removeEventListener('transitionend', done);
       clearTimeout(fb);
-      // 스크롤 조정: 탭 위치가 같은 화면 좌표에 유지
-      const newScrollLeft = ox * target / cur - (t.clientX - rect.left);
-      const newScrollTop = oy * target / cur - (t.clientY - rect.top);
 
       content.style.transition = 'none';
       content.style.transform = `scale(${target})`;
-      content.style.transformOrigin = '0 0';
-      scroll.scrollLeft = Math.max(0, newScrollLeft);
-      scroll.scrollTop = Math.max(0, newScrollTop);
+      content.style.willChange = '';
+
+      // 탭 위치가 같은 화면 좌표에 유지되도록 스크롤 조정
+      scroll.scrollLeft = Math.max(0, scroll.scrollLeft - tx);
+      scroll.scrollTop = Math.max(0, scroll.scrollTop - ty);
+
       ps.current.settling = false;
       setScale(target);
       setIsPinching(false);
@@ -265,15 +285,11 @@ export function usePinchZoom({
     if (!el) return;
 
     const start = (e: TouchEvent) => {
-      if (e.touches.length === 2) onPinchStart(e);
+      if (e.touches.length === 2) onStart(e);
       else if (e.touches.length === 1) onDoubleTap(e);
     };
-    const move = (e: TouchEvent) => {
-      if (ps.current.active) onPinchMove(e);
-    };
-    const end = () => {
-      if (ps.current.active) onPinchEnd();
-    };
+    const move = (e: TouchEvent) => { if (ps.current.active) onMove(e); };
+    const end = () => { if (ps.current.active) onEnd(); };
 
     el.addEventListener('touchstart', start, { passive: false });
     el.addEventListener('touchmove', move, { passive: false });
@@ -285,7 +301,7 @@ export function usePinchZoom({
       el.removeEventListener('touchend', end);
       el.removeEventListener('touchcancel', end);
     };
-  }, [containerRef, onPinchStart, onPinchMove, onPinchEnd, onDoubleTap]);
+  }, [containerRef, onStart, onMove, onEnd, onDoubleTap]);
 
   return { isPinching };
 }
