@@ -5,7 +5,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import type { PdfViewerProps } from './types';
 import { usePdfDocument, useZoom, useFullscreen } from './hooks';
 import { CanvasViewer, type CanvasViewerHandle } from './CanvasViewer';
-import { ReflowViewer } from './ReflowViewer';
+import { ReflowViewer, type ReflowViewerHandle } from './ReflowViewer';
 import { ControlBar } from './ControlBar';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -14,6 +14,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const canvasViewerRef = useRef<CanvasViewerHandle>(null);
+  const reflowViewerRef = useRef<ReflowViewerHandle>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [isReflowMode, setIsReflowMode] = useState(false);
@@ -51,6 +52,14 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     setCurrentPage(page);
   }, []);
 
+  const handlePageJump = useCallback((page: number) => {
+    if (isReflowMode) {
+      reflowViewerRef.current?.scrollToPage(page);
+    } else {
+      setCurrentPage(page);
+    }
+  }, [isReflowMode]);
+
   return (
     <div
       ref={containerRef}
@@ -61,6 +70,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
       <div ref={measureRef} className="flex-1 min-h-0 relative overflow-hidden bg-gray-100">
         {isReflowMode ? (
           <ReflowViewer
+            ref={reflowViewerRef}
             fileUrl={fileUrl}
             pdfDoc={pdfDoc}
             numPages={numPages}
@@ -98,6 +108,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
         isAnimating={isCanvasAnimating}
         onPrev={() => canvasViewerRef.current?.changePage('prev')}
         onNext={() => canvasViewerRef.current?.changePage('next')}
+        onPageJump={handlePageJump}
         scale={scale}
         isZoomed={isZoomed}
         onZoomIn={zoomIn}

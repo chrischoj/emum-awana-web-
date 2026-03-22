@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -17,6 +18,7 @@ interface ControlBarProps {
   isAnimating: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onPageJump?: (page: number) => void;
   scale: number;
   isZoomed: boolean;
   onZoomIn: () => void;
@@ -28,15 +30,87 @@ interface ControlBarProps {
   reflowTotalPages?: number;
 }
 
+/** 탭하면 인라인 입력으로 전환되는 페이지 인디케이터 */
+function PageIndicator({
+  current,
+  total,
+  onJump,
+  className,
+}: {
+  current: number;
+  total: number;
+  onJump?: (page: number) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  if (total <= 0) {
+    return <span className={className}>-</span>;
+  }
+
+  const submit = () => {
+    const page = parseInt(value, 10);
+    if (!isNaN(page) && page >= 1 && page <= total) {
+      onJump?.(page);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <form
+        onSubmit={(e) => { e.preventDefault(); submit(); }}
+        className="flex items-center gap-0.5"
+      >
+        <input
+          ref={inputRef}
+          type="number"
+          min={1}
+          max={total}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={submit}
+          className="w-10 h-6 text-xs text-center font-medium border border-indigo-300 rounded bg-white outline-none focus:ring-1 focus:ring-indigo-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          inputMode="numeric"
+        />
+        <span className="text-xs text-gray-400">/ {total}</span>
+      </form>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setValue(String(current));
+        setEditing(true);
+      }}
+      className={`${className} active:bg-gray-100 rounded px-1 py-0.5`}
+      title="페이지 이동"
+    >
+      {current} / {total}
+    </button>
+  );
+}
+
 export function ControlBar(props: ControlBarProps) {
   return (
     <div className="bg-white border-t border-gray-200 px-3 py-2 shrink-0">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           {props.isReflowMode ? (
-            <span className="text-xs font-medium text-indigo-600 px-2">
-              리플로우 {props.reflowCurrentPage ?? 1} / {props.reflowTotalPages ?? 1}
-            </span>
+            <PageIndicator
+              current={props.reflowCurrentPage ?? 1}
+              total={props.reflowTotalPages ?? 1}
+              onJump={props.onPageJump}
+              className="text-xs font-medium text-indigo-600 px-1"
+            />
           ) : (
             <>
               <button
@@ -46,9 +120,12 @@ export function ControlBar(props: ControlBarProps) {
               >
                 <ChevronLeft className="w-5 h-5 text-gray-700" />
               </button>
-              <span className="text-xs font-medium text-gray-600 min-w-[52px] text-center">
-                {props.numPages > 0 ? `${props.currentPage} / ${props.numPages}` : '-'}
-              </span>
+              <PageIndicator
+                current={props.currentPage}
+                total={props.numPages}
+                onJump={props.onPageJump}
+                className="text-xs font-medium text-gray-600 min-w-[52px] text-center"
+              />
               <button
                 onClick={props.onNext}
                 disabled={props.currentPage >= props.numPages || props.numPages === 0 || props.isAnimating}

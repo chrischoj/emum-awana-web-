@@ -1,8 +1,12 @@
-import { useRef, useLayoutEffect, useEffect, Fragment } from 'react';
+import { useRef, useLayoutEffect, useEffect, useImperativeHandle, forwardRef, Fragment } from 'react';
 import { Document } from 'react-pdf';
 import { FileImage } from 'lucide-react';
 import { useReflowExtractor } from './hooks';
 import { useReflowPinchZoom } from './hooks/useReflowPinchZoom';
+
+export interface ReflowViewerHandle {
+  scrollToPage: (page: number) => void;
+}
 
 interface ReflowViewerProps {
   fileUrl: string;
@@ -27,13 +31,27 @@ function renderTextWithBreaks(text: string) {
   ));
 }
 
-export function ReflowViewer(props: ReflowViewerProps) {
+export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
+  function ReflowViewer(props, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const prevScaleRef = useRef(props.scale);
   const onReflowPageInfoRef = useRef(props.onReflowPageInfo);
   onReflowPageInfoRef.current = props.onReflowPageInfo;
+
+  // 외부에서 특정 가상 페이지로 스크롤 이동
+  useImperativeHandle(ref, () => ({
+    scrollToPage: (page: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const total = Math.max(1, Math.ceil(el.scrollHeight / el.clientHeight));
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      if (maxScroll <= 0 || total <= 1) return;
+      const ratio = (page - 1) / (total - 1);
+      el.scrollTo({ top: ratio * maxScroll, behavior: 'smooth' });
+    },
+  }));
 
   const { reflowBlocks, isExtracting } = useReflowExtractor(
     props.pdfDoc,
@@ -193,4 +211,4 @@ export function ReflowViewer(props: ReflowViewerProps) {
       </div>
     </div>
   );
-}
+});
