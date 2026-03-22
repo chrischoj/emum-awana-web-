@@ -1,10 +1,140 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 import toast from 'react-hot-toast';
-import { BookOpen, Upload, Trash2, RefreshCw, FileText } from 'lucide-react';
+import { BookOpen, Upload, Trash2, RefreshCw, FileText, Eye, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { useAuth } from '../../contexts/AuthContext';
 import type { ClubHandbook } from '../../types/awana';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+// ---- PDF 미리보기 모달 ----
+function PdfPreviewModal({ handbook, onClose }: { handbook: ClubHandbook | null; onClose: () => void }) {
+  const [numPages, setNumPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  useEffect(() => {
+    if (!handbook) return;
+    setNumPages(0);
+    setCurrentPage(1);
+    setScale(1);
+  }, [handbook]);
+
+  useEffect(() => {
+    const measure = () => {
+      if (containerRef.current) setContainerWidth(containerRef.current.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [handbook]);
+
+  if (!handbook) return null;
+
+  const pageWidth = containerWidth > 0 ? containerWidth * scale : undefined;
+  const isZoomed = scale > 1;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/60">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between px-4 py-3 bg-white border-b shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <BookOpen className="w-5 h-5 text-indigo-500 shrink-0" />
+          <h2 className="text-sm font-semibold text-gray-800 truncate">{handbook.title}</h2>
+        </div>
+        <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* PDF 영역 */}
+      <div ref={containerRef} className="flex-1 min-h-0 relative bg-gray-100">
+        <div
+          className="absolute inset-0 overflow-auto overscroll-contain"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <Document
+            file={handbook.file_url}
+            onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+            onLoadError={() => toast.error('PDF를 불러오지 못했습니다.')}
+            loading={
+              <div className="flex items-center justify-center py-16">
+                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <Page
+              pageNumber={currentPage}
+              width={pageWidth}
+              loading={
+                <div className="flex items-center justify-center py-8" style={{ width: pageWidth }}>
+                  <div className="w-6 h-6 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+              className="shadow-lg"
+            />
+          </Document>
+        </div>
+      </div>
+
+      {/* 컨트롤 바 */}
+      <div className="bg-white border-t px-3 py-2 shrink-0">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200"
+            >
+              <ChevronLeft className="w-5 h-5 text-gray-700" />
+            </button>
+            <span className="text-xs font-medium text-gray-600 min-w-[52px] text-center">
+              {numPages > 0 ? `${currentPage} / ${numPages}` : '-'}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
+              disabled={currentPage >= numPages}
+              className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200"
+            >
+              <ChevronRight className="w-5 h-5 text-gray-700" />
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setScale((s) => Math.max(0.5, parseFloat((s - 0.25).toFixed(2))))}
+              disabled={scale <= 0.5}
+              className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200"
+            >
+              <ZoomOut className="w-4 h-4 text-gray-700" />
+            </button>
+            <button
+              onClick={() => setScale(1)}
+              className={`text-xs font-medium min-w-[42px] text-center px-1 py-1 rounded ${
+                isZoomed ? 'text-indigo-600 bg-indigo-50' : 'text-gray-500'
+              }`}
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              onClick={() => setScale((s) => Math.min(3, parseFloat((s + 0.25).toFixed(2))))}
+              disabled={scale >= 3}
+              className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200"
+            >
+              <ZoomIn className="w-4 h-4 text-gray-700" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -18,8 +148,9 @@ export default function HandbookManagement() {
 
   const [handbooks, setHandbooks] = useState<ClubHandbook[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState<string | null>(null); // club_id being uploaded
-  const [deleting, setDeleting] = useState<string | null>(null); // handbook id being deleted
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [previewHandbook, setPreviewHandbook] = useState<ClubHandbook | null>(null);
 
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -319,6 +450,15 @@ export default function HandbookManagement() {
 
                         {/* 액션 버튼 */}
                         <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* 미리보기 버튼 */}
+                          <button
+                            onClick={() => setPreviewHandbook(handbook)}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            title="미리보기"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+
                           {/* 교체 버튼 */}
                           <label className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                             isReplacingThis
@@ -373,6 +513,12 @@ export default function HandbookManagement() {
           </div>
         )}
       </div>
+
+      {/* PDF 미리보기 모달 */}
+      <PdfPreviewModal
+        handbook={previewHandbook}
+        onClose={() => setPreviewHandbook(null)}
+      />
     </div>
   );
 }
