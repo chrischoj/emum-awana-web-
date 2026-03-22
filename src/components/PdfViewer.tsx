@@ -439,25 +439,45 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
     };
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  // ---- 전체화면 ----
+  // ---- 전체화면 (네이티브 API + CSS 폴백) ----
   const toggleFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await containerRef.current?.requestFullscreen();
-      } else {
-        await document.exitFullscreen();
-      }
-    } catch {
-      // 전체화면 미지원 환경 무시
+    const el = containerRef.current;
+    if (!el) return;
+
+    if (isFullscreen) {
+      // 해제
+      try {
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+          return; // fullscreenchange 이벤트가 상태 업데이트
+        }
+      } catch { /* fallthrough to CSS */ }
+      setIsFullscreen(false);
+    } else {
+      // 진입: 네이티브 시도 → 실패하면 CSS 폴백
+      try {
+        const rfs = el.requestFullscreen
+          ?? (el as HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen;
+        if (rfs) {
+          await rfs.call(el);
+          return; // fullscreenchange 이벤트가 상태 업데이트
+        }
+      } catch { /* fallthrough to CSS */ }
+      // CSS 기반 전체화면 (iOS Safari 등)
+      setIsFullscreen(true);
     }
-  }, []);
+  }, [isFullscreen]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    };
   }, []);
 
   // ---- 줌 (스냅 레벨) ----
@@ -491,7 +511,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const isCurling = curlProgress > 0 && curlDirection !== null;
 
   return (
-    <div ref={containerRef} className={`flex flex-col ${isFullscreen ? 'bg-gray-900' : ''}`} style={{ height: isFullscreen ? '100vh' : height }}>
+    <div ref={containerRef} className={`flex flex-col ${isFullscreen ? 'bg-gray-900' : ''}`} style={isFullscreen ? { position: 'fixed', inset: 0, zIndex: 9999, height: '100dvh' } : { height }}>
       {/* PDF 뷰어 영역 */}
       <div
         ref={measureRef}
