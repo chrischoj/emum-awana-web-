@@ -124,7 +124,7 @@ export function ControlBar(props: ControlBarProps) {
   // 검색 모드일 때 검색 바 표시
   if (props.isSearchOpen) {
     return (
-      <div className="bg-white border-t border-gray-200 px-3 py-2 shrink-0">
+      <div className="bg-white border-t border-gray-200 px-3 pt-2 shrink-0" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
         <div className="flex items-center gap-2">
           <button
             onClick={props.onToggleSearch}
@@ -182,7 +182,7 @@ export function ControlBar(props: ControlBarProps) {
   }
 
   return (
-    <div className="bg-white border-t border-gray-200 px-3 py-2 shrink-0">
+    <div className="bg-white border-t border-gray-200 px-3 pt-2 shrink-0" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           {props.isReflowMode ? (
