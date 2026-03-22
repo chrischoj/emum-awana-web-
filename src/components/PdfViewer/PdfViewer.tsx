@@ -64,6 +64,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
             pdfDoc={pdfDoc}
             numPages={numPages}
             scale={scale}
+            setScale={setScale}
             onDocumentLoadSuccess={handleDocumentLoadSuccess}
             onDocumentLoadError={handleDocumentLoadError}
           />

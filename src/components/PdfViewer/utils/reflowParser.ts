@@ -1,5 +1,14 @@
 import type { ReflowBlock } from '../types';
 
+/** 라인 배열을 구분자 배열로 합침 (구분자: ' ' 또는 '\n') */
+function joinWithSeps(lines: string[], seps: string[]): string {
+  let result = lines[0] ?? '';
+  for (let i = 1; i < lines.length; i++) {
+    result += (seps[i - 1] ?? ' ') + lines[i];
+  }
+  return result;
+}
+
 /**
  * 단일 PDF 페이지에서 리플로우용 텍스트 블록을 추출한다.
  *
@@ -76,8 +85,10 @@ export async function extractPageReflow(pdfDoc: any, pageNum: number): Promise<R
   const medianSize = sizes[Math.floor(sizes.length / 2)];
 
   // 라인 -> 문단 그룹핑
+  // 줄 간격 기준: >2.0x = 새 문단, 1.3~2.0x = 개행(\n), <1.3x = 공백(같은 줄 이어 붙임)
   const blocks: ReflowBlock[] = [];
   let paraLines: string[] = [];
+  let paraSeps: string[] = []; // 각 라인 사이 구분자 (' ' 또는 '\n')
   let paraFontSize = lineData[0].fontSize;
 
   for (let i = 0; i < lineData.length; i++) {
@@ -90,7 +101,7 @@ export async function extractPageReflow(pdfDoc: any, pageNum: number): Promise<R
         Math.abs(line.fontSize - paraFontSize) > 2); // 폰트 크기 변화
 
     if (isNewPara && paraLines.length > 0) {
-      const text = paraLines.join(' ');
+      const text = joinWithSeps(paraLines, paraSeps);
       const isHeading = paraFontSize > medianSize * 1.2;
       blocks.push({
         type: isHeading ? 'heading' : 'paragraph',
@@ -99,6 +110,13 @@ export async function extractPageReflow(pdfDoc: any, pageNum: number): Promise<R
         pageNum,
       });
       paraLines = [];
+      paraSeps = [];
+    }
+
+    if (paraLines.length > 0 && prev) {
+      // 중간 줄간격(1.3~2.0x) → 개행, 그 이하 → 공백
+      const gap = line.y - prev.y;
+      paraSeps.push(gap > prev.fontSize * 1.3 ? '\n' : ' ');
     }
 
     paraLines.push(line.text);
@@ -106,7 +124,7 @@ export async function extractPageReflow(pdfDoc: any, pageNum: number): Promise<R
   }
 
   if (paraLines.length > 0) {
-    const text = paraLines.join(' ');
+    const text = joinWithSeps(paraLines, paraSeps);
     const isHeading = paraFontSize > medianSize * 1.2;
     blocks.push({
       type: isHeading ? 'heading' : 'paragraph',
