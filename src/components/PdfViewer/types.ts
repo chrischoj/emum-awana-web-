@@ -9,6 +9,12 @@ export interface PdfViewerProps {
   fileUrl: string;
   /** 컨테이너 높이를 직접 지정 (기본: 100%) */
   height?: string;
+  /** 전체화면 상태 변경 콜백 */
+  onFullscreenChange?: (isFullscreen: boolean) => void;
+}
+
+export interface PdfViewerHandle {
+  toggleFullscreen: () => void;
 }
 
 export type CurlDirection = 'next' | 'prev';

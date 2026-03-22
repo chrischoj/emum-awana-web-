@@ -7,6 +7,7 @@ import { useReflowPinchZoom } from './hooks/useReflowPinchZoom';
 export interface ReflowViewerHandle {
   scrollToPage: (page: number) => void;
   scrollByPage: (delta: number) => void;
+  scrollToPdfPage: (pageNum: number) => void;
 }
 
 interface ReflowViewerProps {
@@ -20,18 +21,50 @@ interface ReflowViewerProps {
   onReflowPageInfo?: (info: { current: number; total: number; pdfPage: number }) => void;
   /** 캔버스 모드에서 보던 PDF 페이지 (마운트 시 해당 위치로 스크롤) */
   initialPdfPage?: number;
+  /** 검색 하이라이트용 쿼리 */
+  searchQuery?: string;
 }
 
-/** \n을 <br/>로 변환하여 개행 렌더링 */
-function renderTextWithBreaks(text: string) {
-  const parts = text.split('\n');
-  if (parts.length === 1) return text;
-  return parts.map((part, i) => (
-    <Fragment key={i}>
-      {i > 0 && <br />}
-      {part}
-    </Fragment>
-  ));
+/** 검색어 하이라이트 + 개행 렌더링 */
+function renderText(text: string, query?: string) {
+  if (!query?.trim()) {
+    // 하이라이트 없음 → 기존 개행 처리만
+    const parts = text.split('\n');
+    if (parts.length === 1) return text;
+    return parts.map((part, i) => (
+      <Fragment key={i}>
+        {i > 0 && <br />}
+        {part}
+      </Fragment>
+    ));
+  }
+
+  // 검색어 하이라이트
+  const q = query.toLowerCase();
+  const result: React.ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    const idx = remaining.toLowerCase().indexOf(q);
+    if (idx === -1) {
+      result.push(<Fragment key={key}>{remaining}</Fragment>);
+      break;
+    }
+    if (idx > 0) {
+      result.push(<Fragment key={key}>{remaining.slice(0, idx)}</Fragment>);
+      key++;
+    }
+    result.push(
+      <mark key={key} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">
+        {remaining.slice(idx, idx + q.length)}
+      </mark>,
+    );
+    key++;
+    remaining = remaining.slice(idx + q.length);
+  }
+
+  return result;
 }
 
 export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
@@ -58,8 +91,19 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
       const el = scrollRef.current;
       if (!el) return;
       const viewportH = el.clientHeight;
-      // 90% 뷰포트 높이로 이동 (약간의 겹침으로 맥락 유지)
       el.scrollBy({ top: delta * viewportH * 0.9, behavior: 'smooth' });
+    },
+    scrollToPdfPage: (pageNum: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      if (pageNum <= 1) {
+        el.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      const divider = el.querySelector(`[data-pdf-page="${pageNum}"]`);
+      if (divider) {
+        (divider as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     },
   }));
 
@@ -235,17 +279,17 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
               if (block.type === 'heading') {
                 return block.level === 1 ? (
                   <h2 key={i} className="font-bold mt-5 mb-2" style={{ fontSize: '1.4em' }}>
-                    {renderTextWithBreaks(block.text)}
+                    {renderText(block.text, props.searchQuery)}
                   </h2>
                 ) : (
                   <h3 key={i} className="font-semibold mt-4 mb-1.5" style={{ fontSize: '1.15em' }}>
-                    {renderTextWithBreaks(block.text)}
+                    {renderText(block.text, props.searchQuery)}
                   </h3>
                 );
               }
               return (
                 <p key={i} className="mb-3 text-gray-800 break-keep whitespace-pre-line">
-                  {block.text}
+                  {renderText(block.text, props.searchQuery)}
                 </p>
               );
             })}

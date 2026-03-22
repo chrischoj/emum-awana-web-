@@ -1,2 +1,2 @@
 export { PdfViewer } from './PdfViewer';
-export type { PdfViewerProps } from './types';
+export type { PdfViewerProps, PdfViewerHandle } from './types';

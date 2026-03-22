@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { BookOpen } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { PdfViewer } from '../../components/PdfViewer';
+import type { PdfViewerHandle } from '../../components/PdfViewer';
 import toast from 'react-hot-toast';
 import type { ClubHandbook } from '../../types/awana';
 
@@ -11,6 +12,8 @@ export default function HandbookPage() {
   const [handbooks, setHandbooks] = useState<ClubHandbook[]>([]);
   const [selectedHandbookId, setSelectedHandbookId] = useState<string | null>(null);
   const [loadingHandbooks, setLoadingHandbooks] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const pdfViewerRef = useRef<PdfViewerHandle>(null);
 
   useEffect(() => {
     const fetchHandbooks = async () => {
@@ -66,27 +69,44 @@ export default function HandbookPage() {
     <div className="flex flex-col -mx-4 -mt-4" style={{ height: 'calc(100dvh - 56px - 64px)' }}>
       {/* 헤더 */}
       <header className="bg-white border-b border-gray-200 px-4 py-2 shrink-0">
-        {handbooks.length > 1 ? (
-          <select
-            value={selectedHandbookId ?? ''}
-            onChange={(e) => setSelectedHandbookId(e.target.value)}
-            className="w-full text-sm font-medium text-gray-800 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        <div className="flex items-center gap-2">
+          {handbooks.length > 1 ? (
+            <select
+              value={selectedHandbookId ?? ''}
+              onChange={(e) => setSelectedHandbookId(e.target.value)}
+              className="flex-1 min-w-0 text-sm font-medium text-gray-800 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {handbooks.map((h) => (
+                <option key={h.id} value={h.id}>{h.title}</option>
+              ))}
+            </select>
+          ) : (
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <BookOpen className="w-5 h-5 text-indigo-500 shrink-0" />
+              <h1 className="text-sm font-semibold text-gray-800 truncate">{selectedHandbook?.title}</h1>
+            </div>
+          )}
+          <button
+            onClick={() => pdfViewerRef.current?.toggleFullscreen()}
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-gray-100 active:bg-gray-200 transition-colors shrink-0"
+            title={isFullscreen ? '전체화면 해제' : '전체화면'}
           >
-            {handbooks.map((h) => (
-              <option key={h.id} value={h.id}>{h.title}</option>
-            ))}
-          </select>
-        ) : (
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-500 shrink-0" />
-            <h1 className="text-sm font-semibold text-gray-800 truncate">{selectedHandbook?.title}</h1>
-          </div>
-        )}
+            {isFullscreen
+              ? <Minimize2 className="w-4 h-4 text-gray-600" />
+              : <Maximize2 className="w-4 h-4 text-gray-600" />
+            }
+          </button>
+        </div>
       </header>
 
       {/* 공통 PDF 뷰어 */}
       {selectedHandbook && (
-        <PdfViewer fileUrl={selectedHandbook.file_url} height="100%" />
+        <PdfViewer
+          ref={pdfViewerRef}
+          fileUrl={selectedHandbook.file_url}
+          height="100%"
+          onFullscreenChange={setIsFullscreen}
+        />
       )}
     </div>
   );

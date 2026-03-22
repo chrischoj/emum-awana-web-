@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   ZoomIn,
   ZoomOut,
-  Maximize2,
-  Minimize2,
   FileImage,
   Type,
+  Search,
+  X,
 } from 'lucide-react';
 import { MIN_SCALE, MAX_SCALE } from './constants';
 
@@ -25,12 +27,19 @@ interface ControlBarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
   reflowCurrentPage?: number;
   reflowTotalPages?: number;
   reflowPdfPage?: number;
   maxScale?: number;
+  // 검색
+  isSearchOpen: boolean;
+  onToggleSearch: () => void;
+  searchQuery: string;
+  onSearchQueryChange: (q: string) => void;
+  searchTotalCount: number;
+  searchCurrentIndex: number;
+  onSearchPrev: () => void;
+  onSearchNext: () => void;
 }
 
 /** 탭하면 인라인 입력으로 전환되는 페이지 인디케이터 */
@@ -103,6 +112,75 @@ function PageIndicator({
 }
 
 export function ControlBar(props: ControlBarProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (props.isSearchOpen) {
+      // 약간의 딜레이 후 포커스 (애니메이션 대응)
+      requestAnimationFrame(() => searchInputRef.current?.focus());
+    }
+  }, [props.isSearchOpen]);
+
+  // 검색 모드일 때 검색 바 표시
+  if (props.isSearchOpen) {
+    return (
+      <div className="bg-white border-t border-gray-200 px-3 py-2 shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={props.onToggleSearch}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 active:bg-gray-100 transition-colors shrink-0"
+            title="검색 닫기"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex-1 relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={props.searchQuery}
+              onChange={(e) => props.onSearchQueryChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.shiftKey ? props.onSearchPrev() : props.onSearchNext();
+                } else if (e.key === 'Escape') {
+                  props.onToggleSearch();
+                }
+              }}
+              placeholder="검색..."
+              className="w-full h-8 pl-8 pr-2 text-sm border border-gray-200 rounded-lg bg-gray-50 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 transition-colors"
+            />
+          </div>
+          <span className="text-xs text-gray-400 min-w-[40px] text-center shrink-0">
+            {props.searchQuery.trim()
+              ? props.searchTotalCount > 0
+                ? `${props.searchCurrentIndex + 1}/${props.searchTotalCount}`
+                : '0'
+              : ''}
+          </span>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={props.onSearchPrev}
+              disabled={props.searchTotalCount === 0}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
+              title="이전 결과"
+            >
+              <ChevronUp className="w-4 h-4 text-gray-700" />
+            </button>
+            <button
+              onClick={props.onSearchNext}
+              disabled={props.searchTotalCount === 0}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 disabled:opacity-30 active:bg-gray-200 transition-colors"
+              title="다음 결과"
+            >
+              <ChevronDown className="w-4 h-4 text-gray-700" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white border-t border-gray-200 px-3 py-2 shrink-0">
       <div className="flex items-center justify-between">
@@ -185,6 +263,13 @@ export function ControlBar(props: ControlBarProps) {
           </button>
           <div className="w-px h-6 bg-gray-200 mx-0.5" />
           <button
+            onClick={props.onToggleSearch}
+            className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 transition-colors"
+            title="검색"
+          >
+            <Search className="w-4 h-4 text-gray-700" />
+          </button>
+          <button
             onClick={props.onToggleReflow}
             className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
               props.isReflowMode
@@ -198,16 +283,6 @@ export function ControlBar(props: ControlBarProps) {
             ) : (
               <Type className="w-4 h-4" />
             )}
-          </button>
-          <button
-            onClick={props.onToggleFullscreen}
-            className="flex items-center justify-center w-10 h-10 rounded-lg bg-gray-100 active:bg-gray-200 transition-colors"
-            title={props.isFullscreen ? '전체화면 해제' : '전체화면'}
-          >
-            {props.isFullscreen
-              ? <Minimize2 className="w-4 h-4 text-gray-700" />
-              : <Maximize2 className="w-4 h-4 text-gray-700" />
-            }
           </button>
         </div>
       </div>

@@ -5,3 +5,4 @@ export { usePinchZoom } from './usePinchZoom';
 export { useCurlEffect } from './useCurlEffect';
 export { useReflowExtractor } from './useReflowExtractor';
 export { useReflowPinchZoom } from './useReflowPinchZoom';
+export { useTextSearch } from './useTextSearch';
