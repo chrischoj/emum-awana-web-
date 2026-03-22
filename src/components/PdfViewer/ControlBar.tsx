@@ -6,7 +6,8 @@ import {
   ZoomOut,
   Maximize2,
   Minimize2,
-  AlignLeft,
+  FileImage,
+  Type,
 } from 'lucide-react';
 import { MIN_SCALE, MAX_SCALE } from './constants';
 
@@ -163,12 +164,24 @@ export function ControlBar(props: ControlBarProps) {
           <div className="w-px h-6 bg-gray-200 mx-0.5" />
           <button
             onClick={props.onToggleReflow}
-            className={`flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
-              props.isReflowMode ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-700 active:bg-gray-200'
+            className={`flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-medium transition-colors ${
+              props.isReflowMode
+                ? 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                : 'bg-indigo-50 text-indigo-600 active:bg-indigo-100'
             }`}
-            title={props.isReflowMode ? '원본 보기' : '리플로우 보기'}
+            title={props.isReflowMode ? 'PDF 원본 보기' : '텍스트 보기'}
           >
-            <AlignLeft className="w-4 h-4" />
+            {props.isReflowMode ? (
+              <>
+                <FileImage className="w-3.5 h-3.5" />
+                <span>원본</span>
+              </>
+            ) : (
+              <>
+                <Type className="w-3.5 h-3.5" />
+                <span>텍스트</span>
+              </>
+            )}
           </button>
           <button
             onClick={props.onToggleFullscreen}

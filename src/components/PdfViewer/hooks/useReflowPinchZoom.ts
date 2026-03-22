@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, type RefObject } from 'react';
 import { getTouchDistanceNative } from '../utils/touchUtils';
-import { MIN_SCALE, REFLOW_REFLOW_MAX_SCALE } from '../constants';
+import { MIN_SCALE, REFLOW_MAX_SCALE } from '../constants';
 
 const DOUBLE_TAP_DELAY = 300;
 const DOUBLE_TAP_DISTANCE = 30;

@@ -18,7 +18,7 @@ export function PdfViewer({ fileUrl, height = '100%' }: PdfViewerProps) {
   const reflowViewerRef = useRef<ReflowViewerHandle>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [isReflowMode, setIsReflowMode] = useState(false);
+  const [isReflowMode, setIsReflowMode] = useState(true);
   const [baseWidth, setBaseWidth] = useState(0);
   const [isCanvasAnimating, setIsCanvasAnimating] = useState(false);
   const [reflowPageInfo, setReflowPageInfo] = useState({ current: 1, total: 1, pdfPage: 1 });
