@@ -148,16 +148,16 @@ export function ControlBar(props: ControlBarProps) {
                 }
               }}
               placeholder="검색..."
-              className="w-full h-7 pl-6 pr-1 text-sm border border-gray-200 rounded-md bg-gray-50 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 transition-colors"
+              className="w-full h-7 pl-6 pr-9 text-sm border border-gray-200 rounded-md bg-gray-50 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-200 transition-colors"
             />
+            {props.searchQuery.trim() && (
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 pointer-events-none">
+                {props.searchTotalCount > 0
+                  ? `${props.searchCurrentIndex + 1}/${props.searchTotalCount}`
+                  : '0'}
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-gray-400 min-w-[32px] text-center shrink-0">
-            {props.searchQuery.trim()
-              ? props.searchTotalCount > 0
-                ? `${props.searchCurrentIndex + 1}/${props.searchTotalCount}`
-                : '0'
-              : ''}
-          </span>
           <div className="flex items-center shrink-0">
             <button
               onClick={props.onSearchPrev}
