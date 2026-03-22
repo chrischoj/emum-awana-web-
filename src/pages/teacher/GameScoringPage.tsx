@@ -422,7 +422,7 @@ export default function GameScoringPage() {
           <p className="text-sm text-gray-400 text-center py-4">기록이 없습니다</p>
         ) : (
           <div className="space-y-0">
-            {recentEntries.slice(0, 10).map((entry) => {
+            {recentEntries.map((entry) => {
               const team = teams.find((t) => t.id === entry.team_id);
               const time = new Date(entry.created_at).toLocaleTimeString('ko-KR', {
                 hour: '2-digit',
