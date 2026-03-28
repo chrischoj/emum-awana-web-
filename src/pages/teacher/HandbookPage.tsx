@@ -106,6 +106,7 @@ export default function HandbookPage() {
           fileUrl={selectedHandbook.file_url}
           height="100%"
           onFullscreenChange={setIsFullscreen}
+          defaultViewMode={selectedHandbook.default_view_mode}
         />
       )}
     </div>

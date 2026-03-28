@@ -11,6 +11,8 @@ export interface PdfViewerProps {
   height?: string;
   /** 전체화면 상태 변경 콜백 */
   onFullscreenChange?: (isFullscreen: boolean) => void;
+  /** 기본 보기 모드 (관리자 설정). 'reflow' = 텍스트 모드, 'original' = 원본보기 */
+  defaultViewMode?: 'reflow' | 'original';
 }
 
 export interface PdfViewerHandle {

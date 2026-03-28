@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { BookOpen, Upload, Trash2, RefreshCw, FileText, Eye, X } from 'lucide-react';
+import { BookOpen, Upload, Trash2, RefreshCw, FileText, Eye, X, Type, Image } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useClub } from '../../contexts/ClubContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { PdfViewer } from '../../components/PdfViewer';
-import type { ClubHandbook } from '../../types/awana';
+import type { ClubHandbook, HandbookViewMode } from '../../types/awana';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -146,6 +146,26 @@ export default function HandbookManagement() {
   };
 
   // ============================================
+  // View Mode Toggle
+  // ============================================
+  const handleToggleViewMode = async (handbook: ClubHandbook) => {
+    const newMode: HandbookViewMode = handbook.default_view_mode === 'original' ? 'reflow' : 'original';
+    try {
+      const { error } = await supabase
+        .from('club_handbooks')
+        .update({ default_view_mode: newMode })
+        .eq('id', handbook.id);
+      if (error) throw error;
+      setHandbooks((prev) =>
+        prev.map((h) => h.id === handbook.id ? { ...h, default_view_mode: newMode } : h),
+      );
+      toast.success(newMode === 'original' ? '원본보기로 설정됨' : '텍스트 모드로 설정됨');
+    } catch {
+      toast.error('설정 변경에 실패했습니다');
+    }
+  };
+
+  // ============================================
   // Render
   // ============================================
   return (
@@ -234,6 +254,20 @@ export default function HandbookManagement() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
+                          <button
+                            onClick={() => handleToggleViewMode(handbook)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              handbook.default_view_mode === 'original'
+                                ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            }`}
+                            title={handbook.default_view_mode === 'original' ? '현재: 원본보기 (클릭하여 텍스트 모드로 변경)' : '현재: 텍스트 모드 (클릭하여 원본보기로 변경)'}
+                          >
+                            {handbook.default_view_mode === 'original'
+                              ? <><Image className="w-3.5 h-3.5" />원본</>
+                              : <><Type className="w-3.5 h-3.5" />텍스트</>
+                            }
+                          </button>
                           <button onClick={() => setPreviewHandbook(handbook)}
                             className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="미리보기">
                             <Eye className="w-4 h-4" />
@@ -279,7 +313,7 @@ export default function HandbookManagement() {
               <X className="w-5 h-5" />
             </button>
           </div>
-          <PdfViewer fileUrl={previewHandbook.file_url} height="100%" />
+          <PdfViewer fileUrl={previewHandbook.file_url} height="100%" defaultViewMode={previewHandbook.default_view_mode} />
         </div>
       )}
     </div>

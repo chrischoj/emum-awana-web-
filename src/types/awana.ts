@@ -39,6 +39,8 @@ export interface Teacher {
   updated_at: string;
 }
 
+export type HandbookViewMode = 'reflow' | 'original';
+
 export interface ClubHandbook {
   id: string;
   club_id: string;
@@ -47,6 +49,7 @@ export interface ClubHandbook {
   file_name: string;
   file_size: number | null;
   uploaded_by: string | null;
+  default_view_mode: HandbookViewMode;
   created_at: string;
   updated_at: string;
 }

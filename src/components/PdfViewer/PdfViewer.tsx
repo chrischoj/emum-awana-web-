@@ -13,14 +13,14 @@ import { REFLOW_MAX_SCALE, MAX_SCALE, ZOOM_LEVELS } from './constants';
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
-  function PdfViewer({ fileUrl, height = '100%', onFullscreenChange }, ref) {
+  function PdfViewer({ fileUrl, height = '100%', onFullscreenChange, defaultViewMode }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const canvasViewerRef = useRef<CanvasViewerHandle>(null);
   const reflowViewerRef = useRef<ReflowViewerHandle>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [isReflowMode, setIsReflowMode] = useState(true);
+  const [isReflowMode, setIsReflowMode] = useState(defaultViewMode !== 'original');
   const [baseWidth, setBaseWidth] = useState(0);
   const [isCanvasAnimating, setIsCanvasAnimating] = useState(false);
   const [reflowPageInfo, setReflowPageInfo] = useState({ current: 1, total: 1, pdfPage: 1 });
@@ -59,8 +59,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
   useEffect(() => {
     setCurrentPage(1);
     setScale(1);
+    setIsReflowMode(defaultViewMode !== 'original');
     resetDocument();
-  }, [fileUrl, setScale, resetDocument]);
+  }, [fileUrl, setScale, resetDocument, defaultViewMode]);
 
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
