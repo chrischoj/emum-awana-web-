@@ -162,6 +162,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
             onDocumentLoadError={handleDocumentLoadError}
             pdfError={pdfError}
             onAnimatingChange={setIsCanvasAnimating}
+            searchQuery={search.isSearchOpen ? search.query : undefined}
           />
         )}
       </div>

@@ -21,6 +21,11 @@ interface CanvasViewerProps {
   onDocumentLoadError: (error: Error) => void;
   pdfError: boolean;
   onAnimatingChange?: (animating: boolean) => void;
+  searchQuery?: string;
+}
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export const CanvasViewer = forwardRef<CanvasViewerHandle, CanvasViewerProps>(
@@ -28,6 +33,14 @@ export const CanvasViewer = forwardRef<CanvasViewerHandle, CanvasViewerProps>(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const [naturalHeight, setNaturalHeight] = useState(0);
+
+    const customTextRenderer = props.searchQuery
+      ? ({ str }: { str: string; itemIndex: number }) => {
+          const escaped = escapeRegExp(props.searchQuery!);
+          const regex = new RegExp(`(${escaped})`, 'gi');
+          return str.replace(regex, '<mark>$1</mark>');
+        }
+      : undefined;
 
     // PDF 렌더 너비: 항상 baseWidth (줌과 무관하게 고정 → 캔버스 재렌더 없음)
     const renderWidth = props.baseWidth > 0 ? props.baseWidth : undefined;
@@ -149,6 +162,7 @@ export const CanvasViewer = forwardRef<CanvasViewerHandle, CanvasViewerProps>(
 
               {/* ===== Layer 2: 현재 페이지 (컬 중에는 clip-path 적용) ===== */}
               <div
+                className={props.searchQuery ? 'canvas-viewer-search-active' : undefined}
                 style={{
                   position: 'relative',
                   zIndex: 2,
@@ -177,6 +191,7 @@ export const CanvasViewer = forwardRef<CanvasViewerHandle, CanvasViewerProps>(
                       </div>
                     }
                     className="shadow-xl"
+                    customTextRenderer={customTextRenderer}
                   />
                 </Document>
               </div>

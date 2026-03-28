@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../contexts/AuthContext';
+import { useClub } from '../../contexts/ClubContext';
 import { PdfViewer } from '../../components/PdfViewer';
 import type { PdfViewerHandle } from '../../components/PdfViewer';
 import toast from 'react-hot-toast';
 import type { ClubHandbook } from '../../types/awana';
 
 export default function HandbookPage() {
-  const { teacher } = useAuth();
+  const { currentClub } = useClub();
   const [handbooks, setHandbooks] = useState<ClubHandbook[]>([]);
   const [selectedHandbookId, setSelectedHandbookId] = useState<string | null>(null);
   const [loadingHandbooks, setLoadingHandbooks] = useState(true);
@@ -17,13 +17,13 @@ export default function HandbookPage() {
 
   useEffect(() => {
     const fetchHandbooks = async () => {
-      if (!teacher?.club_id) { setLoadingHandbooks(false); return; }
+      if (!currentClub?.id) { setLoadingHandbooks(false); return; }
       setLoadingHandbooks(true);
       try {
         const { data, error } = await supabase
           .from('club_handbooks')
           .select('*')
-          .eq('club_id', teacher.club_id)
+          .eq('club_id', currentClub.id)
           .order('created_at', { ascending: false });
         if (error) throw error;
         setHandbooks(data ?? []);
@@ -36,12 +36,12 @@ export default function HandbookPage() {
       }
     };
     fetchHandbooks();
-  }, [teacher?.club_id]);
+  }, [currentClub?.id]);
 
   const selectedHandbook = handbooks.find((h) => h.id === selectedHandbookId) ?? null;
 
   // 빈 상태
-  if (!teacher?.club_id) {
+  if (!currentClub) {
     return (
       <div className="flex flex-col items-center justify-center py-20 px-4">
         <BookOpen className="w-12 h-12 text-gray-300 mb-3" />
@@ -102,6 +102,7 @@ export default function HandbookPage() {
       {/* 공통 PDF 뷰어 */}
       {selectedHandbook && (
         <PdfViewer
+          key={selectedHandbook.id}
           ref={pdfViewerRef}
           fileUrl={selectedHandbook.file_url}
           height="100%"

@@ -17,11 +17,13 @@ export function useReflowExtractor(
 ) {
   const [reflowBlocks, setReflowBlocks] = useState<ReflowBlock[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionDone, setExtractionDone] = useState(false);
 
   useEffect(() => {
     if (!enabled || !pdfDoc || numPages === 0) return;
     let cancelled = false;
     setIsExtracting(true);
+    setExtractionDone(false);
     setReflowBlocks([]);
 
     (async () => {
@@ -42,7 +44,10 @@ export function useReflowExtractor(
           // 개별 페이지 실패는 건너뜀
         }
       }
-      if (!cancelled) setIsExtracting(false);
+      if (!cancelled) {
+        setIsExtracting(false);
+        setExtractionDone(true);
+      }
     })();
 
     return () => {
@@ -53,5 +58,6 @@ export function useReflowExtractor(
   return {
     reflowBlocks,
     isExtracting,
+    extractionDone,
   };
 }
