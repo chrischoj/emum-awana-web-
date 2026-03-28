@@ -23,6 +23,8 @@ interface ReflowViewerProps {
   initialPdfPage?: number;
   /** 검색 하이라이트용 쿼리 */
   searchQuery?: string;
+  /** 추출 텍스트가 없을 때 (이미지 전용 PDF) 호출 */
+  onEmptyText?: () => void;
 }
 
 /** 검색어 하이라이트 + 개행 렌더링 */
@@ -112,6 +114,15 @@ export const ReflowViewer = forwardRef<ReflowViewerHandle, ReflowViewerProps>(
     props.numPages,
     true,
   );
+
+  // 추출 완료 후 텍스트가 없으면 → 원본보기로 자동 전환
+  const onEmptyTextRef = useRef(props.onEmptyText);
+  onEmptyTextRef.current = props.onEmptyText;
+  useEffect(() => {
+    if (!isExtracting && reflowBlocks.length === 0 && props.numPages > 0) {
+      onEmptyTextRef.current?.();
+    }
+  }, [isExtracting, reflowBlocks.length, props.numPages]);
 
   // 마운트 시 캔버스에서 보던 PDF 페이지 위치로 스크롤
   const didInitialScrollRef = useRef(false);

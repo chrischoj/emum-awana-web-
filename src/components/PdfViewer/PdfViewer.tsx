@@ -144,6 +144,7 @@ export const PdfViewer = forwardRef<PdfViewerHandle, PdfViewerProps>(
             onDocumentLoadError={handleDocumentLoadError}
             onReflowPageInfo={setReflowPageInfo}
             searchQuery={search.isSearchOpen ? search.query : undefined}
+            onEmptyText={() => setIsReflowMode(false)}
           />
         ) : (
           <CanvasViewer
