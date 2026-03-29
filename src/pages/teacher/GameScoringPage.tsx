@@ -19,7 +19,8 @@ import { useOptimisticGameQueue } from '../../hooks/useOptimisticGameQueue';
 import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
-const POINT_PRESETS = [50, 100, 200, 400];
+const POINT_PRESETS = [100, 200, 400];
+const POINT_MINOR = 50;
 const STAGES = ['릴레이 게임', '개별 게임', '응원 점수', '보너스'] as const;
 type Stage = (typeof STAGES)[number];
 
@@ -371,38 +372,71 @@ export default function GameScoringPage() {
               </div>
 
               {/* Point preset step buttons: 0→1x→2x→0 */}
-              <div className="grid grid-cols-4 gap-1.5 p-2.5 bg-white">
-                {POINT_PRESETS.map((pts) => {
-                  const mult = teamSelected.get(pts) || 0;
-                  const isSelected = mult > 0;
+              <div className="p-2.5 bg-white space-y-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {POINT_PRESETS.map((pts) => {
+                    const mult = teamSelected.get(pts) || 0;
+                    const isSelected = mult > 0;
+                    return (
+                      <button
+                        key={pts}
+                        data-testid={`game-quick-${team.id}-${pts}`}
+                        onClick={() => handleTogglePreset(team.id, pts)}
+                        disabled={isLocked}
+                        className={cn(
+                          'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation relative',
+                          'active:scale-95 disabled:opacity-40 disabled:active:scale-100',
+                          isSelected
+                            ? 'border-2 shadow-sm'
+                            : 'border border-gray-200'
+                        )}
+                        style={
+                          isSelected
+                            ? { backgroundColor: team.color, color: '#fff', borderColor: team.color }
+                            : { backgroundColor: `${team.color}0A`, color: team.color }
+                        }
+                      >
+                        +{pts}
+                        {mult === 2 && (
+                          <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                            2
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* 50점 소형 버튼 */}
+                {(() => {
+                  const minorMult = teamSelected.get(POINT_MINOR) || 0;
+                  const minorSelected = minorMult > 0;
                   return (
                     <button
-                      key={pts}
-                      data-testid={`game-quick-${team.id}-${pts}`}
-                      onClick={() => handleTogglePreset(team.id, pts)}
+                      data-testid={`game-quick-${team.id}-${POINT_MINOR}`}
+                      onClick={() => handleTogglePreset(team.id, POINT_MINOR)}
                       disabled={isLocked}
                       className={cn(
-                        'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation relative',
+                        'w-full py-1.5 rounded-md text-xs font-semibold transition-all touch-manipulation relative',
                         'active:scale-95 disabled:opacity-40 disabled:active:scale-100',
-                        isSelected
+                        minorSelected
                           ? 'border-2 shadow-sm'
-                          : 'border border-gray-200'
+                          : 'border border-dashed border-gray-300'
                       )}
                       style={
-                        isSelected
+                        minorSelected
                           ? { backgroundColor: team.color, color: '#fff', borderColor: team.color }
-                          : { backgroundColor: `${team.color}0A`, color: team.color }
+                          : { color: team.color, backgroundColor: `${team.color}08` }
                       }
                     >
-                      +{pts}
-                      {mult === 2 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      +{POINT_MINOR}
+                      {minorMult === 2 && (
+                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
                           2
                         </span>
                       )}
                     </button>
                   );
-                })}
+                })()}
               </div>
             </div>
           );
