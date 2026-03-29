@@ -476,6 +476,7 @@ export default function CeremonyPlay() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [confettiTeam, setConfettiTeam] = useState<string | null>(null);
   const [bgmPlaying, setBgmPlaying] = useState(true);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [bgmVol, setBgmVol] = useState(0.20);
   const flowOrder = DEFAULT_FLOW_ORDER;
   const [teamMembers, setTeamMembers] = useState<Record<string, Array<{name: string; avatar_url: string | null}>>>({});
@@ -658,6 +659,42 @@ export default function CeremonyPlay() {
         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: r.smallFs }}>
           버튼 또는 <kbd style={{ background: 'rgba(255,255,255,0.15)', padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(255,255,255,0.3)', fontFamily: 'monospace' }}>Enter</kbd> 키를 눌러 시작하세요
         </div>
+        {(() => {
+          const publicUrl = `${window.location.origin}/ceremony`;
+          return (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+              marginTop: 8,
+            }}>
+              <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: r.smallFs }}>공개 시상식 URL</div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(publicUrl).then(() => {
+                    setUrlCopied(true);
+                    setTimeout(() => setUrlCopied(false), 2000);
+                  });
+                }}
+                style={{
+                  background: urlCopied ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${urlCopied ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.15)'}`,
+                  borderRadius: 10, padding: '10px 20px',
+                  color: urlCopied ? '#4ade80' : 'rgba(255,255,255,0.7)',
+                  cursor: 'pointer', fontSize: r.smallFs,
+                  maxWidth: 480, width: '100%',
+                  wordBreak: 'break-all', textAlign: 'center',
+                  transition: 'all 0.3s ease',
+                  fontFamily: 'monospace',
+                }}
+                title="클릭하여 복사"
+              >
+                {urlCopied ? '✓ 복사 완료!' : publicUrl}
+              </button>
+              <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: `calc(${r.smallFs} * 0.85)` }}>
+                클릭하면 클립보드에 복사됩니다
+              </div>
+            </div>
+          );
+        })()}
         <button onClick={() => navigate('/admin/ceremony')} style={{
           padding: '8px 24px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
           borderRadius: 8, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: r.smallFs,
@@ -935,22 +972,22 @@ export default function CeremonyPlay() {
                       );
                     })}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 6 : 12, marginTop: 16, animation: 'slideUp 0.8s ease 0.6s both' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
                     {(() => {
                       let otherIdx = 0;
                       return ranked.map((t, i) => {
                         const isCo = tiedTeams.includes(t);
                         const tc = TEAM_COLORS[t];
-                        const coHeight = width < 768 ? 80 : 110;
-                        const otherHeights = [45, 30, 20, 15];
+                        const coHeight = width < 768 ? 100 : 140;
+                        const otherHeights = [55, 38, 25, 18];
                         const h = isCo ? coHeight : otherHeights[otherIdx++] || 15;
                         return (
                           <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
-                            {isCo && <div style={{ fontSize: width < 768 ? '1.2rem' : '1.5rem', marginBottom: 4 }}>🥇</div>}
-                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isCo ? (width < 768 ? '1rem' : '1.2rem') : (width < 768 ? '0.8rem' : '0.95rem'), color: tc.bg, fontWeight: 900, textShadow: isCo ? `0 0 12px ${tc.glow}` : 'none' }}>{t}</div>
-                            <div style={{ fontSize: width < 768 ? '0.65rem' : '0.8rem', color: '#64748b', fontWeight: 700, marginBottom: 4 }}>{(totals.total[t] || 0).toLocaleString()}</div>
+                            {isCo && <div style={{ fontSize: width < 768 ? '1.8rem' : '2.4rem', marginBottom: 6 }}>🥇</div>}
+                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isCo ? (width < 768 ? '1.3rem' : '1.8rem') : (width < 768 ? '1rem' : '1.3rem'), color: tc.bg, fontWeight: 900, textShadow: isCo ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
+                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.85rem' : '1.1rem', color: isCo ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
                             <div style={{
-                              width: width < 768 ? 56 : 90, height: h,
+                              width: width < 768 ? 68 : 120, height: h,
                               background: isCo ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
                               borderRadius: '12px 12px 0 0',
                               boxShadow: isCo ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
@@ -1064,17 +1101,17 @@ export default function CeremonyPlay() {
                     {(totals.total[grandWinner as string] || 0).toLocaleString()}점
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 6 : 12, marginTop: 16, animation: 'slideUp 0.8s ease 0.6s both' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
                   {podiumOrder.map((t, i) => {
                     const isChamp = i === 1;
                     const tc = TEAM_COLORS[t];
                     return (
                       <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
-                        {isChamp && <div style={{ fontSize: width < 768 ? '1.5rem' : '2rem', marginBottom: 4 }}>🥇</div>}
-                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.1rem' : '1.4rem') : (width < 768 ? '0.85rem' : '1rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 12px ${tc.glow}` : 'none' }}>{t}</div>
-                        <div style={{ fontSize: width < 768 ? '0.7rem' : '0.85rem', color: '#64748b', fontWeight: 700, marginBottom: 4 }}>{(totals.total[t] || 0).toLocaleString()}</div>
+                        {isChamp && <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 6 }}>🥇</div>}
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.4rem' : '2rem') : (width < 768 ? '1.1rem' : '1.4rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.95rem' : '1.2rem', color: isChamp ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
                         <div style={{
-                          width: width < 768 ? 64 : 110, height: podiumHeights[i],
+                          width: width < 768 ? 72 : 130, height: podiumHeights[i],
                           background: isChamp ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
                           borderRadius: '12px 12px 0 0',
                           boxShadow: isChamp ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
