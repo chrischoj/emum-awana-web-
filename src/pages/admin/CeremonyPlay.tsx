@@ -991,6 +991,58 @@ export default function CeremonyPlay() {
                   {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                     <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: ['#EF4444', '#3B82F6', '#22C55E', '#EAB308', '#FFD700', '#A855F7'][i], pointerEvents: 'none' }}>{star}</div>
                   ))}
+
+                  <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>🤝</div>
+                  <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.4rem' : r.h2Fs, background: 'linear-gradient(90deg, #EF4444, #3B82F6, #22C55E, #EAB308, #EF4444)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>
+                    {grandAllZero ? '모두 함께!' : '공동 우승!'}
+                  </h2>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: width < 768 ? 12 : 24, animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
+                    {tiedTeams.map((t, i) => {
+                      const tc = TEAM_COLORS[t as Team];
+                      return (
+                        <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `popIn 0.6s ease ${0.4 + i * 0.15}s both` }}>
+                          <Trophy color={tc.bg} size={width < 768 ? 48 : 64} />
+                          <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.3rem' : '1.6rem', color: tc.bg, textShadow: `0 0 20px ${tc.glow}`, margin: '4px 0', letterSpacing: 4 }}>{t}</div>
+                          <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.85rem' : '1rem', color: '#FFF', background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, padding: '4px 16px', borderRadius: 50, boxShadow: `0 0 20px ${tc.glow}`, border: '2px solid rgba(255,255,255,0.3)' }}>{(totals.total[t] || 0).toLocaleString()}점</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
+                    {(() => {
+                      let otherIdx = 0;
+                      return ranked.map((t, i) => {
+                        const isCo = tiedTeams.includes(t);
+                        const tc = TEAM_COLORS[t];
+                        const coHeight = width < 768 ? 100 : 140;
+                        const otherHeights = [55, 38, 25, 18];
+                        const h = isCo ? coHeight : otherHeights[otherIdx++] || 15;
+                        return (
+                          <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
+                            {isCo && <div style={{ fontSize: width < 768 ? '1.8rem' : '2.4rem', marginBottom: 6 }}>🥇</div>}
+                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isCo ? (width < 768 ? '1.3rem' : '1.8rem') : (width < 768 ? '1rem' : '1.3rem'), color: tc.bg, fontWeight: 900, textShadow: isCo ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
+                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.85rem' : '1.1rem', color: isCo ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
+                            <div style={{
+                              width: width < 768 ? 68 : 120, height: h,
+                              background: isCo ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
+                              borderRadius: '12px 12px 0 0',
+                              boxShadow: isCo ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              animation: `podiumRise 0.8s ease ${1 + i * 0.2}s both`, transformOrigin: 'bottom', position: 'relative', overflow: 'hidden',
+                            }}>
+                              {isCo && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 40%)', animation: 'shimmer 2s infinite' }} />}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                  <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
+                    <div style={{ fontSize: width < 768 ? '1.4rem' : '1.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🤝🎉</div>
+                    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.smallFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
+                      {grandAllZero ? '모두 함께 달려봐요! 하나님의 은혜 안에서 함께 성장해요!' : '대단해요! 함께 우승! 하나님의 은혜 안에서 모두 수고하셨습니다!'}
+                    </div>
+                  </div>
                   {/* Floating team member photos (tied) — framer-motion */}
                   {(() => {
                     const losers = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
@@ -1118,57 +1170,6 @@ export default function CeremonyPlay() {
                       </>
                     );
                   })()}
-                  <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>🤝</div>
-                  <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.4rem' : r.h2Fs, background: 'linear-gradient(90deg, #EF4444, #3B82F6, #22C55E, #EAB308, #EF4444)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>
-                    {grandAllZero ? '모두 함께!' : '공동 우승!'}
-                  </h2>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: width < 768 ? 12 : 24, animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
-                    {tiedTeams.map((t, i) => {
-                      const tc = TEAM_COLORS[t as Team];
-                      return (
-                        <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `popIn 0.6s ease ${0.4 + i * 0.15}s both` }}>
-                          <Trophy color={tc.bg} size={width < 768 ? 48 : 64} />
-                          <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.3rem' : '1.6rem', color: tc.bg, textShadow: `0 0 20px ${tc.glow}`, margin: '4px 0', letterSpacing: 4 }}>{t}</div>
-                          <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.85rem' : '1rem', color: '#FFF', background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, padding: '4px 16px', borderRadius: 50, boxShadow: `0 0 20px ${tc.glow}`, border: '2px solid rgba(255,255,255,0.3)' }}>{(totals.total[t] || 0).toLocaleString()}점</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
-                    {(() => {
-                      let otherIdx = 0;
-                      return ranked.map((t, i) => {
-                        const isCo = tiedTeams.includes(t);
-                        const tc = TEAM_COLORS[t];
-                        const coHeight = width < 768 ? 100 : 140;
-                        const otherHeights = [55, 38, 25, 18];
-                        const h = isCo ? coHeight : otherHeights[otherIdx++] || 15;
-                        return (
-                          <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
-                            {isCo && <div style={{ fontSize: width < 768 ? '1.8rem' : '2.4rem', marginBottom: 6 }}>🥇</div>}
-                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isCo ? (width < 768 ? '1.3rem' : '1.8rem') : (width < 768 ? '1rem' : '1.3rem'), color: tc.bg, fontWeight: 900, textShadow: isCo ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
-                            <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.85rem' : '1.1rem', color: isCo ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
-                            <div style={{
-                              width: width < 768 ? 68 : 120, height: h,
-                              background: isCo ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
-                              borderRadius: '12px 12px 0 0',
-                              boxShadow: isCo ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              animation: `podiumRise 0.8s ease ${1 + i * 0.2}s both`, transformOrigin: 'bottom', position: 'relative', overflow: 'hidden',
-                            }}>
-                              {isCo && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 40%)', animation: 'shimmer 2s infinite' }} />}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                  <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
-                    <div style={{ fontSize: width < 768 ? '1.4rem' : '1.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🤝🎉</div>
-                    <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.smallFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
-                      {grandAllZero ? '모두 함께 달려봐요! 하나님의 은혜 안에서 함께 성장해요!' : '대단해요! 함께 우승! 하나님의 은혜 안에서 모두 수고하셨습니다!'}
-                    </div>
-                  </div>
                 </div>
               );
             }
@@ -1183,6 +1184,47 @@ export default function CeremonyPlay() {
                 {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                   <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
                 ))}
+
+                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2.8rem' : '3.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
+                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '2rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
+                <div style={{ animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 130 : 170, height: width < 768 ? 130 : 170, borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 170 : 220, height: width < 768 ? 170 : 220, borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
+                  <Trophy color={gc.bg} size={r.grandTrophy} />
+                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandTeamFs, color: gc.bg, textShadow: `0 0 40px ${gc.glow}, 0 0 80px ${gc.glow}, 0 2px 4px rgba(0,0,0,0.2)`, margin: '4px 0 4px', letterSpacing: 8, animation: 'pulse 2s ease-in-out infinite' }}>{grandWinner as string}</div>
+                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandScoreFs, color: '#FFF', background: `linear-gradient(135deg, ${gc.bg}, ${gc.dark})`, padding: '6px 28px', borderRadius: 50, display: 'inline-block', boxShadow: `0 0 40px ${gc.glow}, 0 8px 24px rgba(0,0,0,0.2)`, border: '3px solid rgba(255,255,255,0.3)', animation: 'glowPulse 2s ease-in-out infinite' }}>
+                    {(totals.total[grandWinner as string] || 0).toLocaleString()}점
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
+                  {podiumOrder.map((t, i) => {
+                    const isChamp = i === 1;
+                    const tc = TEAM_COLORS[t];
+                    return (
+                      <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
+                        {isChamp && <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 6 }}>🥇</div>}
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.4rem' : '2rem') : (width < 768 ? '1.1rem' : '1.4rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.95rem' : '1.2rem', color: isChamp ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
+                        <div style={{
+                          width: width < 768 ? 72 : 130, height: podiumHeights[i],
+                          background: isChamp ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
+                          borderRadius: '12px 12px 0 0',
+                          boxShadow: isChamp ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          animation: `podiumRise 0.8s ease ${1 + i * 0.2}s both`, transformOrigin: 'bottom', position: 'relative', overflow: 'hidden',
+                        }}>
+                          {isChamp && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 40%)', animation: 'shimmer 2s infinite' }} />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
+                  <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
+                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.bodyFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
+                    축하합니다! <span style={{ color: '#94a3b8' }}>하나님의 은혜 안에서 모두 수고하셨습니다!</span>
+                  </div>
+                </div>
                 {/* Floating team member photos — framer-motion */}
                 {(() => {
                   const winnerTeam = grandWinner as string;
@@ -1311,46 +1353,6 @@ export default function CeremonyPlay() {
                     </>
                   );
                 })()}
-                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2.8rem' : '3.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
-                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '2rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
-                <div style={{ animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 130 : 170, height: width < 768 ? 130 : 170, borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 170 : 220, height: width < 768 ? 170 : 220, borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
-                  <Trophy color={gc.bg} size={r.grandTrophy} />
-                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandTeamFs, color: gc.bg, textShadow: `0 0 40px ${gc.glow}, 0 0 80px ${gc.glow}, 0 2px 4px rgba(0,0,0,0.2)`, margin: '4px 0 4px', letterSpacing: 8, animation: 'pulse 2s ease-in-out infinite' }}>{grandWinner as string}</div>
-                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandScoreFs, color: '#FFF', background: `linear-gradient(135deg, ${gc.bg}, ${gc.dark})`, padding: '6px 28px', borderRadius: 50, display: 'inline-block', boxShadow: `0 0 40px ${gc.glow}, 0 8px 24px rgba(0,0,0,0.2)`, border: '3px solid rgba(255,255,255,0.3)', animation: 'glowPulse 2s ease-in-out infinite' }}>
-                    {(totals.total[grandWinner as string] || 0).toLocaleString()}점
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
-                  {podiumOrder.map((t, i) => {
-                    const isChamp = i === 1;
-                    const tc = TEAM_COLORS[t];
-                    return (
-                      <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
-                        {isChamp && <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 6 }}>🥇</div>}
-                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.4rem' : '2rem') : (width < 768 ? '1.1rem' : '1.4rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
-                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.95rem' : '1.2rem', color: isChamp ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
-                        <div style={{
-                          width: width < 768 ? 72 : 130, height: podiumHeights[i],
-                          background: isChamp ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
-                          borderRadius: '12px 12px 0 0',
-                          boxShadow: isChamp ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          animation: `podiumRise 0.8s ease ${1 + i * 0.2}s both`, transformOrigin: 'bottom', position: 'relative', overflow: 'hidden',
-                        }}>
-                          {isChamp && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, transparent 40%)', animation: 'shimmer 2s infinite' }} />}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
-                  <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
-                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.bodyFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
-                    축하합니다! <span style={{ color: '#94a3b8' }}>하나님의 은혜 안에서 모두 수고하셨습니다!</span>
-                  </div>
-                </div>
               </div>
             );
           })()}
