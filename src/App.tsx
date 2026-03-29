@@ -25,6 +25,7 @@ import MemberManagement from './pages/admin/MemberManagement';
 import TeacherManagement from './pages/admin/TeacherManagement';
 import AwardManagement from './pages/admin/AwardManagement';
 import CeremonyPage from './pages/admin/CeremonyPage';
+import CeremonyPlay from './pages/admin/CeremonyPlay';
 import RoomManagement from './pages/admin/RoomManagement';
 import ReportsPage from './pages/admin/ReportsPage';
 import SettingsPage from './pages/admin/SettingsPage';
@@ -130,6 +131,7 @@ function AppRoutes() {
           <Route path="/admin/teachers" element={<TeacherManagement />} />
           <Route path="/admin/awards" element={<AwardManagement />} />
           <Route path="/admin/ceremony" element={<CeremonyPage />} />
+          <Route path="/admin/ceremony-play" element={<CeremonyPlay />} />
           <Route path="/admin/rooms" element={<RoomManagement />} />
           <Route path="/admin/handbook" element={<HandbookManagement />} />
           <Route path="/admin/reports" element={<ReportsPage />} />

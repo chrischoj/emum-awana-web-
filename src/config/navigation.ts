@@ -16,6 +16,7 @@ import {
   UserCog,
   UsersRound,
   BookOpen,
+  Play,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -61,6 +62,7 @@ export const adminNavSections: NavSection[] = [
     items: [
       { label: '시상/뱃지', path: '/admin/awards', icon: Trophy },
       { label: '시상식', path: '/admin/ceremony', icon: Star },
+      { label: '시상식 플레이', path: '/admin/ceremony-play', icon: Play },
     ],
   },
   {
