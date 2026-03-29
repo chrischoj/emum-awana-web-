@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { buildAwardsData } from '../../services/awardsIntegrationService';
-import { saveConfirmedCeremony, loadConfirmedCeremony } from '../../services/ceremonyService';
+import { saveConfirmedCeremony, loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
+import type { ConfirmedCeremony, BonusDetail } from '../../services/ceremonyService';
 import { TEAM_NAMES, TEAM_COLORS } from '../../types/awana';
 import type { AwardsData, TeamName } from '../../types/awana';
 
@@ -291,9 +292,13 @@ export default function CeremonyPage() {
   });
   const [editableData, setEditableData] = useState<AwardsData | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [previousConfirm, setPreviousConfirm] = useState<ReturnType<typeof loadConfirmedCeremony>>(null);
+  const [previousConfirm, setPreviousConfirm] = useState<ConfirmedCeremony | null>(null);
 
-  useEffect(() => { setPreviousConfirm(loadConfirmedCeremony()); }, []);
+  useEffect(() => {
+    // 초기 로드: localStorage 즉시 표시 후 Supabase로 갱신
+    setPreviousConfirm(loadConfirmedCeremonyLocal());
+    loadConfirmedCeremony().then((c) => { if (c) setPreviousConfirm(c); });
+  }, []);
 
   // --- Date preset ---
   const setPreset = (preset: string) => {
@@ -369,11 +374,21 @@ export default function CeremonyPage() {
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!editableData) return;
-    saveConfirmedCeremony(editableData, dateFrom, dateTo);
+    // Build bonus details for DB record
+    const details: BonusDetail[] = [];
+    for (const club of ['sparks', 'tnt'] as ClubTab[]) {
+      for (const team of TEAM_NAMES) {
+        const pts = bonusPoints[club][team] || 0;
+        if (pts !== 0) {
+          details.push({ team, club, points: pts, reason: bonusReasons[team] || '' });
+        }
+      }
+    }
+    const result = await saveConfirmedCeremony(editableData, dateFrom, dateTo, details.length > 0 ? details : undefined);
     setConfirmed(true);
-    setPreviousConfirm(loadConfirmedCeremony());
+    setPreviousConfirm(result);
     toast.success('시상식 데이터가 확정되었습니다!');
   };
 

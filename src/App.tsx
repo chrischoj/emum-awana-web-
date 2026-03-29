@@ -114,6 +114,7 @@ function AppRoutes() {
       <Route path="/login" element={!session ? <Login /> : <RoleRedirect />} />
       <Route path="/signup" element={!session ? <Signup /> : <RoleRedirect />} />
       <Route path="/qr/:roomId" element={<QRLandingPage />} />
+      <Route path="/ceremony" element={<CeremonyPlay />} />
 
       {/* Role-based root redirect */}
       <Route path="/" element={<RoleRedirect />} />

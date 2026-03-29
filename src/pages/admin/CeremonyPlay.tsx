@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadConfirmedCeremony } from '../../services/ceremonyService';
+import { loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
 import type { AwardsData } from '../../types/awana';
 
 // ─── Responsive ───
@@ -461,16 +461,23 @@ export default function CeremonyPlay() {
   const [bgmVol, setBgmVol] = useState(0.20);
   const flowOrder = DEFAULT_FLOW_ORDER;
 
-  // Load confirmed data
+  // Load confirmed data: localStorage first (instant), then Supabase (fresh)
   useEffect(() => {
-    const confirmed = loadConfirmedCeremony();
-    if (confirmed) {
-      setData(confirmed.data);
-      setConfirmedInfo({ confirmedAt: confirmed.confirmedAt, dateFrom: confirmed.dateFrom, dateTo: confirmed.dateTo });
+    const local = loadConfirmedCeremonyLocal();
+    if (local) {
+      setData(local.data);
+      setConfirmedInfo({ confirmedAt: local.confirmedAt, dateFrom: local.dateFrom, dateTo: local.dateTo });
       setMode('ready');
-    } else {
-      setMode('no_data');
     }
+    loadConfirmedCeremony().then((confirmed) => {
+      if (confirmed) {
+        setData(confirmed.data);
+        setConfirmedInfo({ confirmedAt: confirmed.confirmedAt, dateFrom: confirmed.dateFrom, dateTo: confirmed.dateTo });
+        setMode('ready');
+      } else if (!local) {
+        setMode('no_data');
+      }
+    });
   }, []);
 
   const totals = data ? calcTotals(data) : { handbook: {}, game: {}, total: {} };
