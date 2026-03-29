@@ -444,22 +444,101 @@ const CEREMONY_STYLES = `
   @keyframes readyPulse { 0%,100%{box-shadow:0 0 20px rgba(255,215,0,0.3)} 50%{box-shadow:0 0 40px rgba(255,215,0,0.6)} }
   @keyframes faceFloat {
     0% { transform: translateY(0) scale(1) rotate(0deg); }
-    25% { transform: translateY(-8px) scale(1.04) rotate(1deg); }
-    50% { transform: translateY(-4px) scale(1.02) rotate(-1deg); }
-    75% { transform: translateY(-10px) scale(1.06) rotate(1deg); }
+    15% { transform: translateY(-10px) scale(1.05) rotate(1.5deg); }
+    30% { transform: translateY(-4px) scale(0.97) rotate(-1deg); }
+    50% { transform: translateY(-14px) scale(1.07) rotate(2deg); }
+    70% { transform: translateY(-6px) scale(0.98) rotate(-1.5deg); }
+    85% { transform: translateY(-12px) scale(1.04) rotate(1deg); }
+    100% { transform: translateY(0) scale(1) rotate(0deg); }
+  }
+  @keyframes faceFloatLoser {
+    0% { transform: translateY(0) scale(1) rotate(0deg); }
+    33% { transform: translateY(-5px) scale(1.02) rotate(0.8deg); }
+    66% { transform: translateY(-3px) scale(0.99) rotate(-0.5deg); }
     100% { transform: translateY(0) scale(1) rotate(0deg); }
   }
   @keyframes faceFadeIn {
-    0% { opacity: 0; transform: scale(0.3) rotate(-15deg); }
-    60% { opacity: 0.7; transform: scale(1.08) rotate(3deg); }
-    100% { opacity: 0.65; transform: scale(1) rotate(0deg); }
+    0% { opacity: 0; transform: scale(0) rotate(-20deg); }
+    40% { opacity: 0.45; transform: scale(1.15) rotate(3deg); }
+    70% { opacity: 0.35; transform: scale(0.95) rotate(-1deg); }
+    100% { opacity: 0.4; transform: scale(1) rotate(0deg); }
   }
   @keyframes faceFadeInWinner {
-    0% { opacity: 0; transform: scale(0.3) rotate(-15deg); }
-    60% { opacity: 0.95; transform: scale(1.12) rotate(3deg); }
-    100% { opacity: 0.9; transform: scale(1) rotate(0deg); }
+    0% { opacity: 0; transform: scale(0) rotate(-25deg); }
+    25% { opacity: 0.5; transform: scale(1.3) rotate(5deg); }
+    45% { opacity: 0.8; transform: scale(0.9) rotate(-3deg); }
+    65% { opacity: 0.95; transform: scale(1.1) rotate(1.5deg); }
+    85% { opacity: 1; transform: scale(0.97) rotate(-0.5deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  @keyframes faceGlow {
+    0%, 100% { box-shadow: 0 0 8px rgba(255,215,0,0.3); }
+    50% { box-shadow: 0 0 28px rgba(255,215,0,0.7), 0 0 56px rgba(255,215,0,0.25); }
+  }
+  @keyframes faceBreathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+  }
+  @keyframes faceRipple {
+    0% { box-shadow: 0 0 0 0 rgba(255,215,0,0.4); }
+    70% { box-shadow: 0 0 0 12px rgba(255,215,0,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,215,0,0); }
+  }
+  @keyframes faceShimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes facePeekaboo {
+    0%, 100% { opacity: 0.35; }
+    30% { opacity: 0.55; }
+    60% { opacity: 0.2; }
+    80% { opacity: 0.5; }
   }
 `;
+
+// ─── 우승팀: 바깥 좌우 균등 배치 ───
+function generateWinnerPositions(count: number): Array<{ top: string; left: string; rot: number }> {
+  const positions: Array<{ top: string; left: string; rot: number }> = [];
+  if (count === 0) return positions;
+  const leftN = Math.ceil(count / 2);
+  const rightN = count - leftN;
+  for (let i = 0; i < leftN; i++) {
+    const topPct = leftN > 1 ? 4 + (i / (leftN - 1)) * 92 : 50;
+    const leftPct = 2 + ((i * 7) % 10);
+    positions.push({ top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%`, rot: ((i * 11 + 3) % 21) - 10 });
+  }
+  for (let i = 0; i < rightN; i++) {
+    const topPct = rightN > 1 ? 4 + (i / (rightN - 1)) * 92 : 50;
+    const leftPct = 88 + ((i * 7) % 10);
+    positions.push({ top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%`, rot: ((i * 13 + 7) % 21) - 10 });
+  }
+  return positions;
+}
+// ─── 진팀: 원형으로 중앙 주변 배치 ───
+function generateLoserPositions(count: number): Array<{ top: string; left: string; rot: number }> {
+  const positions: Array<{ top: string; left: string; rot: number }> = [];
+  if (count === 0) return positions;
+  // 2개 링으로 분산
+  const ring1N = Math.ceil(count * 0.6);
+  const ring2N = count - ring1N;
+  const rings = [
+    { n: ring1N, r: 36, offset: 0 },
+    { n: ring2N, r: 26, offset: Math.PI / 10 },
+  ];
+  for (const ring of rings) {
+    for (let i = 0; i < ring.n; i++) {
+      const angle = ring.offset + (i / ring.n) * 2 * Math.PI - Math.PI / 2;
+      const x = 50 + ring.r * 1.1 * Math.cos(angle);
+      const y = 50 + ring.r * 0.9 * Math.sin(angle);
+      positions.push({
+        top: `${Math.max(3, Math.min(97, y)).toFixed(1)}%`,
+        left: `${Math.max(3, Math.min(97, x)).toFixed(1)}%`,
+        rot: ((i * 11 + 5) % 21) - 10,
+      });
+    }
+  }
+  return positions;
+}
 
 // ═══════════════════════════════════════════
 // ─── Main CeremonyPlay Component ───
@@ -481,7 +560,7 @@ export default function CeremonyPlay() {
   const flowOrder = DEFAULT_FLOW_ORDER;
   const [teamMembers, setTeamMembers] = useState<Record<string, Array<{name: string; avatar_url: string | null}>>>({});
 
-  // Fetch team members with avatars
+  // Fetch team members with avatars (sparks + tnt 모두 포함)
   useEffect(() => {
     if (!data) return;
     (async () => {
@@ -492,26 +571,32 @@ export default function CeremonyPlay() {
           .select('id, name, club_id');
         if (!teams) return;
 
-        const teamNameToId = new Map<string, string>();
+        // 같은 색상의 스팍스/T&T 팀 ID를 모두 수집
+        const teamColorToIds = new Map<string, string[]>();
         for (const t of teams) {
           const upperName = t.name?.toUpperCase();
           if (['RED', 'BLUE', 'GREEN', 'YELLOW'].includes(upperName)) {
-            teamNameToId.set(upperName, t.id);
+            const ids = teamColorToIds.get(upperName) || [];
+            ids.push(t.id);
+            teamColorToIds.set(upperName, ids);
           }
         }
 
-        // Get members with avatars grouped by team
+        // Get members with avatars grouped by team color (sparks + tnt 합산)
         const result: Record<string, Array<{name: string; avatar_url: string | null}>> = {};
-        for (const [teamName, teamId] of teamNameToId) {
+        for (const [teamName, teamIds] of teamColorToIds) {
           const { data: members } = await supabase
             .from('members')
             .select('name, avatar_url')
-            .eq('team_id', teamId)
+            .in('team_id', teamIds)
             .eq('active', true);
-          result[teamName] = (members || []).filter(m => m.avatar_url);
+          result[teamName] = members || [];
         }
+        const totalCount = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
+        // console.log('[CeremonyPlay] 팀별 멤버 수:', Object.fromEntries(Object.entries(result).map(([k, v]) => [k, v.length])), '| 총:', totalCount);
+        // console.log('[CeremonyPlay] teamColorToIds:', Object.fromEntries([...teamColorToIds.entries()].map(([k, v]) => [k, `${v.length}팀 (${v.join(', ')})`])));
         setTeamMembers(result);
-      } catch { /* ignore */ }
+      } catch (err) { console.error('[CeremonyPlay] 멤버 로드 실패:', err); }
     })();
   }, [data]);
 
@@ -547,6 +632,7 @@ export default function CeremonyPlay() {
     { id: 'grand_winner', label: '최종 시상' },
   ];
   const currentStep = steps[step];
+  // console.warn('[CeremonyPlay] 현재 mode:', mode, '| step:', step, '/', steps.length, '| stepId:', currentStep?.id, '| grandTied:', grandTied, '| grandAllZero:', grandAllZero, '| grandWinner:', grandWinner);
 
   const nextStep = useCallback(() => {
     if (step < steps.length - 1) {
@@ -890,68 +976,76 @@ export default function CeremonyPlay() {
                   ))}
                   {/* Floating team member photos (tied) */}
                   {(() => {
-                    const winnerPhotos = tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: true })));
-                    const otherPhotos = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: false })));
-                    const allPhotos = [...winnerPhotos, ...otherPhotos];
-                    if (allPhotos.length === 0) return null;
-                    const baseSize = width < 768 ? 48 : 70;
-                    const winnerSize = width < 768 ? 64 : 90;
-                    const positions = [
-                      { top: '2%', left: '2%', rot: -12 }, { top: '4%', right: '3%', rot: 8 },
-                      { top: '20%', right: '1%', rot: -10 }, { top: '22%', left: '1%', rot: 15 },
-                      { top: '40%', left: '0%', rot: -8 }, { top: '44%', right: '2%', rot: 14 },
-                      { top: '60%', left: '1%', rot: 10 }, { top: '58%', right: '0%', rot: -6 },
-                      { top: '78%', left: '2%', rot: -15 }, { top: '76%', right: '3%', rot: 12 },
-                      { top: '10%', left: '12%', rot: 7 }, { top: '12%', right: '12%', rot: -11 },
-                      { top: '65%', left: '10%', rot: -7 }, { top: '68%', right: '10%', rot: 9 },
-                      { top: '48%', left: '11%', rot: 13 }, { top: '50%', right: '11%', rot: -5 },
-                    ];
-                    return positions.slice(0, allPhotos.length).map((pos, i) => {
-                      const { rot, ...cssPos } = pos;
-                      const photo = allPhotos[i % allPhotos.length];
-                      const tc = TEAM_COLORS[photo.team as Team];
-                      const isW = photo.isWinner;
-                      const size = isW ? winnerSize : baseSize;
-                      const delay = (i * 0.2).toFixed(2);
-                      const floatDur = (3.5 + (i % 4) * 0.5).toFixed(1);
+                    const losers = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
+                    const loserPos = generateLoserPositions(losers.length);
+                    const sz = width < 768 ? 44 : 60;
+                    return loserPos.map((pos, i) => {
+                      const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
+                      const d = (i * 0.1).toFixed(2);
+                      const peekDur = (5 + (i % 4) * 1.5).toFixed(1);
                       return (
-                        <div key={`face-${i}`} style={{
-                          position: 'absolute', ...cssPos, zIndex: isW ? 3 : 1,
-                          width: size, height: size, borderRadius: '50%',
-                          opacity: 0,
-                          animation: `faceFloat ${floatDur}s ease-in-out ${delay}s infinite, ${isW ? 'faceFadeInWinner' : 'faceFadeIn'} 1s cubic-bezier(0.34,1.56,0.64,1) ${delay}s forwards`,
+                        <div key={`lo-${i}`} style={{
+                          position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                          zIndex: 1, width: sz, height: sz, borderRadius: '50%', opacity: 0,
+                          animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeIn 1s ease-out ${d}s forwards, facePeekaboo ${peekDur}s ease-in-out ${(i * 0.3).toFixed(1)}s infinite`,
                           pointerEvents: 'none',
                         }}>
                           <div style={{
                             width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                            transform: `rotate(${rot}deg)`,
-                            border: isW ? `3px solid ${tc.bg}` : `2px solid ${tc.bg}88`,
-                            boxShadow: isW
-                              ? `0 0 20px ${tc.glow}, 0 0 40px ${tc.glow}66, 0 6px 16px rgba(0,0,0,0.3)`
-                              : `0 0 8px ${tc.glow}44, 0 3px 8px rgba(0,0,0,0.2)`,
-                            background: `linear-gradient(135deg, ${tc.bg}33, transparent)`,
-                            filter: isW ? 'none' : 'brightness(0.9) saturate(0.85)',
+                            transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
+                            boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
                           }}>
-                            <img src={photo.avatar_url!} alt={photo.name} style={{
-                              width: '100%', height: '100%', objectFit: 'cover',
-                              filter: isW ? 'brightness(1.1) contrast(1.05)' : 'none',
-                            }} />
+                            {p.avatar_url
+                              ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                            }
+                          </div>
+                          <div style={{
+                            position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
+                            background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
+                            fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
+                          }}>{p.name}</div>
+                        </div>
+                      );
+                    });
+                  })()}
+                  {(() => {
+                    const winners = tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
+                    const winPos = generateWinnerPositions(winners.length);
+                    const sz = width < 768 ? 90 : 140;
+                    return winPos.map((pos, i) => {
+                      const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
+                      const d = (i * 0.12).toFixed(2);
+                      return (
+                        <div key={`wi-${i}`} style={{
+                          position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                          zIndex: 3, width: sz, height: sz, borderRadius: '50%', opacity: 0,
+                          animation: `faceFloat ${(3 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeInWinner 1.2s cubic-bezier(0.34,1.56,0.64,1) ${d}s forwards, faceBreathe ${(2.5 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite`,
+                          pointerEvents: 'none',
+                        }}>
+                          <div style={{
+                            width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                            transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
+                            boxShadow: `0 0 24px ${tc.glow}, 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`,
+                          }}>
+                            {p.avatar_url
+                              ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
+                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                            }
                             <div style={{
                               position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                              background: isW
-                                ? 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 45%, rgba(0,0,0,0.1) 100%)'
-                                : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)',
-                              pointerEvents: 'none',
+                              background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
+                              backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
+                              willChange: 'background-position', pointerEvents: 'none',
                             }} />
                           </div>
-                          {isW && <div style={{
-                            position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
-                            background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`,
-                            color: '#fff', fontSize: width < 768 ? '0.45rem' : '0.55rem',
-                            fontWeight: 800, padding: '1px 6px', borderRadius: 8,
-                            boxShadow: `0 2px 6px ${tc.glow}88`,
-                            whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
-                          }}>{photo.name}</div>}
+                          <div style={{
+                            position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+                            background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
+                            fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
+                            padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
+                            whiteSpace: 'nowrap', zIndex: 2,
+                          }}>{p.name}</div>
                         </div>
                       );
                     });
@@ -1024,68 +1118,77 @@ export default function CeremonyPlay() {
                 {/* Floating team member photos */}
                 {(() => {
                   const winnerTeam = grandWinner as string;
-                  const winnerPhotos = (teamMembers[winnerTeam] || []).map(m => ({ ...m, team: winnerTeam, isWinner: true }));
-                  const otherPhotos = TEAMS.filter(t => t !== winnerTeam).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: false })));
-                  const allPhotos = [...winnerPhotos, ...otherPhotos];
-                  if (allPhotos.length === 0) return null;
-                  const baseSize = width < 768 ? 48 : 70;
-                  const winnerSize = width < 768 ? 64 : 90;
-                  const positions = [
-                    { top: '2%', left: '2%', rot: -12 }, { top: '4%', right: '3%', rot: 8 },
-                    { top: '20%', right: '1%', rot: -10 }, { top: '22%', left: '1%', rot: 15 },
-                    { top: '40%', left: '0%', rot: -8 }, { top: '44%', right: '2%', rot: 14 },
-                    { top: '60%', left: '1%', rot: 10 }, { top: '58%', right: '0%', rot: -6 },
-                    { top: '78%', left: '2%', rot: -15 }, { top: '76%', right: '3%', rot: 12 },
-                    { top: '10%', left: '12%', rot: 7 }, { top: '12%', right: '12%', rot: -11 },
-                    { top: '65%', left: '10%', rot: -7 }, { top: '68%', right: '10%', rot: 9 },
-                    { top: '48%', left: '11%', rot: 13 }, { top: '50%', right: '11%', rot: -5 },
-                  ];
-                  return positions.slice(0, allPhotos.length).map((pos, i) => {
-                    const { rot, ...cssPos } = pos;
-                    const photo = allPhotos[i % allPhotos.length];
-                    const tc = TEAM_COLORS[photo.team as Team];
-                    const isW = photo.isWinner;
-                    const size = isW ? winnerSize : baseSize;
-                    const delay = (i * 0.2).toFixed(2);
-                    const floatDur = (3.5 + (i % 4) * 0.5).toFixed(1);
+                  const losers = TEAMS.filter(t => t !== winnerTeam).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
+                  const loserPos = generateLoserPositions(losers.length);
+                  const sz = width < 768 ? 44 : 60;
+                  return loserPos.map((pos, i) => {
+                    const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
+                    const d = (i * 0.1).toFixed(2);
+                    const peekDur = (5 + (i % 4) * 1.5).toFixed(1);
                     return (
-                      <div key={`face-${i}`} style={{
-                        position: 'absolute', ...cssPos, zIndex: isW ? 3 : 1,
-                        width: size, height: size, borderRadius: '50%',
-                        opacity: 0,
-                        animation: `faceFloat ${floatDur}s ease-in-out ${delay}s infinite, ${isW ? 'faceFadeInWinner' : 'faceFadeIn'} 1s cubic-bezier(0.34,1.56,0.64,1) ${delay}s forwards`,
+                      <div key={`lo-${i}`} style={{
+                        position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                        zIndex: 1, width: sz, height: sz, borderRadius: '50%', opacity: 0,
+                        animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeIn 1s ease-out ${d}s forwards, facePeekaboo ${peekDur}s ease-in-out ${(i * 0.3).toFixed(1)}s infinite`,
                         pointerEvents: 'none',
                       }}>
                         <div style={{
                           width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                          transform: `rotate(${rot}deg)`,
-                          border: isW ? `3px solid ${tc.bg}` : `2px solid ${tc.bg}88`,
-                          boxShadow: isW
-                            ? `0 0 20px ${tc.glow}, 0 0 40px ${tc.glow}66, 0 6px 16px rgba(0,0,0,0.3)`
-                            : `0 0 8px ${tc.glow}44, 0 3px 8px rgba(0,0,0,0.2)`,
-                          background: `linear-gradient(135deg, ${tc.bg}33, transparent)`,
-                          filter: isW ? 'none' : 'brightness(0.9) saturate(0.85)',
+                          transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
+                          boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
                         }}>
-                          <img src={photo.avatar_url!} alt={photo.name} style={{
-                            width: '100%', height: '100%', objectFit: 'cover',
-                            filter: isW ? 'brightness(1.1) contrast(1.05)' : 'none',
-                          }} />
+                          {p.avatar_url
+                            ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                          }
+                        </div>
+                        <div style={{
+                          position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
+                          background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
+                          fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
+                        }}>{p.name}</div>
+                      </div>
+                    );
+                  });
+                })()}
+                {(() => {
+                  const winnerTeam = grandWinner as string;
+                  const winners = (teamMembers[winnerTeam] || []).map(m => ({ ...m, team: winnerTeam }));
+                  const winPos = generateWinnerPositions(winners.length);
+                  const sz = width < 768 ? 90 : 140;
+                  return winPos.map((pos, i) => {
+                    const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
+                    const d = (i * 0.12).toFixed(2);
+                    return (
+                      <div key={`wi-${i}`} style={{
+                        position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                        zIndex: 3, width: sz, height: sz, borderRadius: '50%', opacity: 0,
+                        animation: `faceFloat ${(3 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeInWinner 1.2s cubic-bezier(0.34,1.56,0.64,1) ${d}s forwards, faceBreathe ${(2.5 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite`,
+                        pointerEvents: 'none',
+                      }}>
+                        <div style={{
+                          width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                          transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
+                          boxShadow: `0 0 24px ${tc.glow}, 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`,
+                        }}>
+                          {p.avatar_url
+                            ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
+                            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                          }
                           <div style={{
                             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                            background: isW
-                              ? 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 45%, rgba(0,0,0,0.1) 100%)'
-                              : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)',
-                            pointerEvents: 'none',
+                            background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
+                            backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
+                            willChange: 'background-position', pointerEvents: 'none',
                           }} />
                         </div>
-                        {isW && <div style={{
-                          position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
-                          background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`,
-                          color: '#fff', fontSize: width < 768 ? '0.45rem' : '0.55rem',
-                          fontWeight: 800, padding: '1px 6px', borderRadius: 8,
-                          boxShadow: `0 2px 6px ${tc.glow}88`,
-                          whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
-                        }}>{photo.name}</div>}
+                        <div style={{
+                          position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+                          background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
+                          fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
+                          padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
+                          whiteSpace: 'nowrap', zIndex: 2,
+                        }}>{p.name}</div>
                       </div>
                     );
                   });
