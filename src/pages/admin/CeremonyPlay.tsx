@@ -500,17 +500,33 @@ const CEREMONY_STYLES = `
 function generateWinnerPositions(count: number): Array<{ top: string; left: string; rot: number }> {
   const positions: Array<{ top: string; left: string; rot: number }> = [];
   if (count === 0) return positions;
-  const leftN = Math.ceil(count / 2);
-  const rightN = count - leftN;
-  for (let i = 0; i < leftN; i++) {
-    const topPct = leftN > 1 ? 4 + (i / (leftN - 1)) * 92 : 50;
-    const leftPct = 2 + ((i * 7) % 10);
-    positions.push({ top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%`, rot: ((i * 11 + 3) % 21) - 10 });
+  const half = Math.ceil(count / 2);
+  // 왼쪽 배치를 먼저 결정, 오른쪽은 좌우 대칭 (거울 반전)
+  const leftCols = [8, 17];
+  // 왼쪽 포지션 생성
+  const leftPositions: Array<{ top: number; left: number; rot: number }> = [];
+  for (let i = 0; i < half; i++) {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const totalRows = Math.ceil(half / 2);
+    const topBase = totalRows > 1 ? 15 + (row / (totalRows - 1)) * 42 : 40;
+    const topJitter = col === 1 ? 5 : ((row % 2) * -3);
+    const leftJitter = (row % 2) * 2;
+    leftPositions.push({ top: topBase + topJitter, left: leftCols[col] + leftJitter, rot: ((i * 11 + 3) % 15) - 7 });
   }
+  // 왼쪽 추가
+  for (const p of leftPositions) {
+    positions.push({ top: `${p.top.toFixed(1)}%`, left: `${p.left.toFixed(1)}%`, rot: p.rot });
+  }
+  // 오른쪽: 왼쪽을 거울 반전 (left → 100 - left, rot 반전)
+  const rightN = count - half;
   for (let i = 0; i < rightN; i++) {
-    const topPct = rightN > 1 ? 4 + (i / (rightN - 1)) * 92 : 50;
-    const leftPct = 88 + ((i * 7) % 10);
-    positions.push({ top: `${topPct.toFixed(1)}%`, left: `${leftPct.toFixed(1)}%`, rot: ((i * 13 + 7) % 21) - 10 });
+    const mirror = leftPositions[i % leftPositions.length];
+    positions.push({
+      top: `${mirror.top.toFixed(1)}%`,
+      left: `${(100 - mirror.left).toFixed(1)}%`,
+      rot: -mirror.rot,
+    });
   }
   return positions;
 }
