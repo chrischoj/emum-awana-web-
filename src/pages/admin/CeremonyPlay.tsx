@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
 import { supabase } from '../../lib/supabase';
 import type { AwardsData } from '../../types/awana';
+import CeremonyPhotos from './CeremonyPhotos';
 
 // ─── Responsive ───
 function useWindowSize() {
@@ -497,66 +497,6 @@ const CEREMONY_STYLES = `
   }
 `;
 
-// ─── 우승팀: 바깥 좌우 균등 배치 ───
-function generateWinnerPositions(count: number): Array<{ top: string; left: string; rot: number }> {
-  const positions: Array<{ top: string; left: string; rot: number }> = [];
-  if (count === 0) return positions;
-  const half = Math.ceil(count / 2);
-  // 왼쪽 배치를 먼저 결정, 오른쪽은 좌우 대칭 (거울 반전)
-  const leftCols = [8, 17];
-  // 왼쪽 포지션 생성
-  const leftPositions: Array<{ top: number; left: number; rot: number }> = [];
-  for (let i = 0; i < half; i++) {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const totalRows = Math.ceil(half / 2);
-    const topBase = totalRows > 1 ? 15 + (row / (totalRows - 1)) * 42 : 40;
-    const topJitter = col === 1 ? 5 : ((row % 2) * -3);
-    const leftJitter = (row % 2) * 2;
-    leftPositions.push({ top: topBase + topJitter, left: leftCols[col] + leftJitter, rot: ((i * 11 + 3) % 15) - 7 });
-  }
-  // 왼쪽 추가
-  for (const p of leftPositions) {
-    positions.push({ top: `${p.top.toFixed(1)}%`, left: `${p.left.toFixed(1)}%`, rot: p.rot });
-  }
-  // 오른쪽: 왼쪽을 거울 반전 (left → 100 - left, rot 반전)
-  const rightN = count - half;
-  for (let i = 0; i < rightN; i++) {
-    const mirror = leftPositions[i % leftPositions.length];
-    positions.push({
-      top: `${mirror.top.toFixed(1)}%`,
-      left: `${(100 - mirror.left).toFixed(1)}%`,
-      rot: -mirror.rot,
-    });
-  }
-  return positions;
-}
-// ─── 진팀: 원형으로 중앙 주변 배치 ───
-function generateLoserPositions(count: number): Array<{ top: string; left: string; rot: number }> {
-  const positions: Array<{ top: string; left: string; rot: number }> = [];
-  if (count === 0) return positions;
-  // 2개 링으로 분산
-  const ring1N = Math.ceil(count * 0.6);
-  const ring2N = count - ring1N;
-  const rings = [
-    { n: ring1N, r: 36, offset: 0 },
-    { n: ring2N, r: 26, offset: Math.PI / 10 },
-  ];
-  for (const ring of rings) {
-    for (let i = 0; i < ring.n; i++) {
-      const angle = ring.offset + (i / ring.n) * 2 * Math.PI - Math.PI / 2;
-      const x = 50 + ring.r * 1.1 * Math.cos(angle);
-      const y = 50 + ring.r * 0.9 * Math.sin(angle);
-      positions.push({
-        top: `${Math.max(3, Math.min(97, y)).toFixed(1)}%`,
-        left: `${Math.max(3, Math.min(97, x)).toFixed(1)}%`,
-        rot: ((i * 11 + 5) % 21) - 10,
-      });
-    }
-  }
-  return positions;
-}
-
 // ═══════════════════════════════════════════
 // ─── Main CeremonyPlay Component ───
 // ═══════════════════════════════════════════
@@ -1043,133 +983,14 @@ export default function CeremonyPlay() {
                       {grandAllZero ? '모두 함께 달려봐요! 하나님의 은혜 안에서 함께 성장해요!' : '대단해요! 함께 우승! 하나님의 은혜 안에서 모두 수고하셨습니다!'}
                     </div>
                   </div>
-                  {/* Floating team member photos (tied) — framer-motion */}
-                  {(() => {
-                    const losers = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
-                    const winners = tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
-                    const loserPos = generateLoserPositions(losers.length);
-                    const winPos = generateWinnerPositions(winners.length);
-                    const loserSz = width < 768 ? 44 : 60;
-                    const winSz = width < 768 ? 90 : 140;
-                    const half = Math.ceil(winners.length / 2);
-                    return (
-                      <>
-                        {/* Camera zoom */}
-                        <motion.div
-                          initial={{ scale: 0.88, opacity: 0.7 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ duration: 3, ease: 'easeOut' }}
-                          style={{ position: 'absolute', inset: 0 }}
-                        >
-                          {/* 3D perspective container */}
-                          <div style={{ perspective: 1200, position: 'absolute', inset: 0 }}>
-                            {/* Losers */}
-                            {loserPos.map((pos, i) => {
-                              const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
-                              return (
-                                <motion.div
-                                  key={`lo-${i}`}
-                                  initial={{ opacity: 0, scale: 0, rotateZ: -20 }}
-                                  animate={{ opacity: [0.2, 0.5, 0.25, 0.45, 0.3], scale: 1, rotateZ: 0 }}
-                                  transition={{
-                                    opacity: { duration: 6, repeat: Infinity, delay: i * 0.08 },
-                                    scale: { type: 'spring', stiffness: 200, damping: 15, delay: i * 0.06 },
-                                    rotateZ: { type: 'spring', stiffness: 100, damping: 12, delay: i * 0.06 },
-                                  }}
-                                  style={{
-                                    position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                                    zIndex: 1, width: loserSz, height: loserSz, borderRadius: '50%',
-                                    animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${(i * 0.1).toFixed(2)}s infinite`,
-                                    pointerEvents: 'none',
-                                  }}
-                                >
-                                  <div style={{
-                                    width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                                    transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
-                                    boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
-                                  }}>
-                                    {p.avatar_url
-                                      ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: loserSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                                    }
-                                  </div>
-                                  <div style={{
-                                    position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
-                                    background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
-                                    fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
-                                  }}>{p.name}</div>
-                                </motion.div>
-                              );
-                            })}
-                            {/* Winners */}
-                            {winPos.map((pos, i) => {
-                              const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
-                              const isLeft = i < half;
-                              return (
-                                <motion.div
-                                  key={`wi-${i}`}
-                                  initial={{ opacity: 0, scale: 2.5, x: isLeft ? -300 : 300, y: -100, rotateY: isLeft ? 45 : -45 }}
-                                  animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotateY: isLeft ? 12 : -12 }}
-                                  transition={{ type: 'spring', stiffness: 80, damping: 14, delay: 1.5 + i * 0.15 }}
-                                  style={{
-                                    position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                                    zIndex: 3, width: winSz, height: winSz, borderRadius: '50%',
-                                    pointerEvents: 'none',
-                                  }}
-                                >
-                                  {/* Breathing wrapper */}
-                                  <motion.div
-                                    animate={{ scale: [1, 1.06, 1] }}
-                                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 2.5 + i * 0.1 }}
-                                    style={{ width: '100%', height: '100%' }}
-                                  >
-                                    {/* Synchronized glow pulse */}
-                                    <motion.div
-                                      animate={{ boxShadow: [`0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 35px rgba(255,215,0,0.7), 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`] }}
-                                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                                      style={{
-                                        width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                                        transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
-                                      }}
-                                    >
-                                      {p.avatar_url
-                                        ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
-                                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: winSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                                      }
-                                      {/* Shimmer overlay */}
-                                      <div style={{
-                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                                        background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
-                                        backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
-                                        willChange: 'background-position', pointerEvents: 'none',
-                                      }} />
-                                    </motion.div>
-                                  </motion.div>
-                                  <div style={{
-                                    position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
-                                    background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
-                                    fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
-                                    padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
-                                    whiteSpace: 'nowrap', zIndex: 2,
-                                  }}>{p.name}</div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                        {/* Spotlight effect */}
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 0.4 }}
-                          transition={{ delay: 2, duration: 1.5 }}
-                          style={{
-                            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-                            background: 'radial-gradient(ellipse at 12% 50%, rgba(255,215,0,0.15) 0%, transparent 50%), radial-gradient(ellipse at 88% 50%, rgba(255,215,0,0.15) 0%, transparent 50%)',
-                          }}
-                        />
-                      </>
-                    );
-                  })()}
+                  <CeremonyPhotos
+                    winners={tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })))}
+                    losers={TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })))}
+                    teamColors={TEAM_COLORS}
+                    width={width}
+                    isActive={currentStep?.id === 'grand_winner'}
+                    onBurst={() => { SFX._play('/sfx/cannon.mp3', 0.4); setTimeout(() => SFX._play('/sfx/cannon2.mp3', 0.35), 300); }}
+                  />
                 </div>
               );
             }
@@ -1225,134 +1046,13 @@ export default function CeremonyPlay() {
                     축하합니다! <span style={{ color: '#94a3b8' }}>하나님의 은혜 안에서 모두 수고하셨습니다!</span>
                   </div>
                 </div>
-                {/* Floating team member photos — framer-motion */}
-                {(() => {
-                  const winnerTeam = grandWinner as string;
-                  const losers = TEAMS.filter(t => t !== winnerTeam).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
-                  const winners = (teamMembers[winnerTeam] || []).map(m => ({ ...m, team: winnerTeam }));
-                  const loserPos = generateLoserPositions(losers.length);
-                  const winPos = generateWinnerPositions(winners.length);
-                  const loserSz = width < 768 ? 44 : 60;
-                  const winSz = width < 768 ? 90 : 140;
-                  const half = Math.ceil(winners.length / 2);
-                  return (
-                    <>
-                      {/* Camera zoom */}
-                      <motion.div
-                        initial={{ scale: 0.88, opacity: 0.7 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 3, ease: 'easeOut' }}
-                        style={{ position: 'absolute', inset: 0 }}
-                      >
-                        {/* 3D perspective container */}
-                        <div style={{ perspective: 1200, position: 'absolute', inset: 0 }}>
-                          {/* Losers */}
-                          {loserPos.map((pos, i) => {
-                            const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
-                            return (
-                              <motion.div
-                                key={`lo-${i}`}
-                                initial={{ opacity: 0, scale: 0, rotateZ: -20 }}
-                                animate={{ opacity: [0.2, 0.5, 0.25, 0.45, 0.3], scale: 1, rotateZ: 0 }}
-                                transition={{
-                                  opacity: { duration: 6, repeat: Infinity, delay: i * 0.08 },
-                                  scale: { type: 'spring', stiffness: 200, damping: 15, delay: i * 0.06 },
-                                  rotateZ: { type: 'spring', stiffness: 100, damping: 12, delay: i * 0.06 },
-                                }}
-                                style={{
-                                  position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                                  zIndex: 1, width: loserSz, height: loserSz, borderRadius: '50%',
-                                  animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${(i * 0.1).toFixed(2)}s infinite`,
-                                  pointerEvents: 'none',
-                                }}
-                              >
-                                <div style={{
-                                  width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                                  transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
-                                  boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
-                                }}>
-                                  {p.avatar_url
-                                    ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: loserSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                                  }
-                                </div>
-                                <div style={{
-                                  position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
-                                  background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
-                                  fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
-                                }}>{p.name}</div>
-                              </motion.div>
-                            );
-                          })}
-                          {/* Winners */}
-                          {winPos.map((pos, i) => {
-                            const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
-                            const isLeft = i < half;
-                            return (
-                              <motion.div
-                                key={`wi-${i}`}
-                                initial={{ opacity: 0, scale: 2.5, x: isLeft ? -300 : 300, y: -100, rotateY: isLeft ? 45 : -45 }}
-                                animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotateY: isLeft ? 12 : -12 }}
-                                transition={{ type: 'spring', stiffness: 80, damping: 14, delay: 1.5 + i * 0.15 }}
-                                style={{
-                                  position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                                  zIndex: 3, width: winSz, height: winSz, borderRadius: '50%',
-                                  pointerEvents: 'none',
-                                }}
-                              >
-                                {/* Breathing wrapper */}
-                                <motion.div
-                                  animate={{ scale: [1, 1.06, 1] }}
-                                  transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 2.5 + i * 0.1 }}
-                                  style={{ width: '100%', height: '100%' }}
-                                >
-                                  {/* Synchronized glow pulse */}
-                                  <motion.div
-                                    animate={{ boxShadow: [`0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 35px rgba(255,215,0,0.7), 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`] }}
-                                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                                    style={{
-                                      width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                                      transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
-                                    }}
-                                  >
-                                    {p.avatar_url
-                                      ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
-                                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: winSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                                    }
-                                    {/* Shimmer overlay */}
-                                    <div style={{
-                                      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                                      background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
-                                      backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
-                                      willChange: 'background-position', pointerEvents: 'none',
-                                    }} />
-                                  </motion.div>
-                                </motion.div>
-                                <div style={{
-                                  position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
-                                  background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
-                                  fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
-                                  padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
-                                  whiteSpace: 'nowrap', zIndex: 2,
-                                }}>{p.name}</div>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                      {/* Spotlight effect */}
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 0.4 }}
-                        transition={{ delay: 2, duration: 1.5 }}
-                        style={{
-                          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-                          background: 'radial-gradient(ellipse at 12% 50%, rgba(255,215,0,0.15) 0%, transparent 50%), radial-gradient(ellipse at 88% 50%, rgba(255,215,0,0.15) 0%, transparent 50%)',
-                        }}
-                      />
-                    </>
-                  );
-                })()}
+                <CeremonyPhotos
+                  winners={(teamMembers[grandWinner as string] || []).map(m => ({ ...m, team: grandWinner as string }))}
+                  losers={TEAMS.filter(t => t !== grandWinner).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })))}
+                  teamColors={TEAM_COLORS}
+                  width={width}
+                  isActive={currentStep?.id === 'grand_winner'}
+                />
               </div>
             );
           })()}
