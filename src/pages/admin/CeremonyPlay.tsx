@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
 import { supabase } from '../../lib/supabase';
 import type { AwardsData } from '../../types/awana';
@@ -990,81 +991,132 @@ export default function CeremonyPlay() {
                   {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                     <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: ['#EF4444', '#3B82F6', '#22C55E', '#EAB308', '#FFD700', '#A855F7'][i], pointerEvents: 'none' }}>{star}</div>
                   ))}
-                  {/* Floating team member photos (tied) */}
+                  {/* Floating team member photos (tied) — framer-motion */}
                   {(() => {
                     const losers = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
-                    const loserPos = generateLoserPositions(losers.length);
-                    const sz = width < 768 ? 44 : 60;
-                    return loserPos.map((pos, i) => {
-                      const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
-                      const d = (i * 0.1).toFixed(2);
-                      const peekDur = (5 + (i % 4) * 1.5).toFixed(1);
-                      return (
-                        <div key={`lo-${i}`} style={{
-                          position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                          zIndex: 1, width: sz, height: sz, borderRadius: '50%', opacity: 0,
-                          animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeIn 1s ease-out ${d}s forwards, facePeekaboo ${peekDur}s ease-in-out ${(i * 0.3).toFixed(1)}s infinite`,
-                          pointerEvents: 'none',
-                        }}>
-                          <div style={{
-                            width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                            transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
-                            boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
-                          }}>
-                            {p.avatar_url
-                              ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                            }
-                          </div>
-                          <div style={{
-                            position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
-                            background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
-                            fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
-                          }}>{p.name}</div>
-                        </div>
-                      );
-                    });
-                  })()}
-                  {(() => {
                     const winners = tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
+                    const loserPos = generateLoserPositions(losers.length);
                     const winPos = generateWinnerPositions(winners.length);
-                    const sz = width < 768 ? 90 : 140;
-                    return winPos.map((pos, i) => {
-                      const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
-                      const d = (i * 0.12).toFixed(2);
-                      return (
-                        <div key={`wi-${i}`} style={{
-                          position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                          zIndex: 3, width: sz, height: sz, borderRadius: '50%', opacity: 0,
-                          animation: `faceFloat ${(3 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeInWinner 1.2s cubic-bezier(0.34,1.56,0.64,1) ${d}s forwards, faceBreathe ${(2.5 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite`,
-                          pointerEvents: 'none',
-                        }}>
-                          <div style={{
-                            width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                            transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
-                            boxShadow: `0 0 24px ${tc.glow}, 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`,
-                          }}>
-                            {p.avatar_url
-                              ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
-                              : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                            }
-                            <div style={{
-                              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                              background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
-                              backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
-                              willChange: 'background-position', pointerEvents: 'none',
-                            }} />
+                    const loserSz = width < 768 ? 44 : 60;
+                    const winSz = width < 768 ? 90 : 140;
+                    const half = Math.ceil(winners.length / 2);
+                    return (
+                      <>
+                        {/* Camera zoom */}
+                        <motion.div
+                          initial={{ scale: 0.88, opacity: 0.7 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 3, ease: 'easeOut' }}
+                          style={{ position: 'absolute', inset: 0 }}
+                        >
+                          {/* 3D perspective container */}
+                          <div style={{ perspective: 1200, position: 'absolute', inset: 0 }}>
+                            {/* Losers */}
+                            {loserPos.map((pos, i) => {
+                              const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
+                              return (
+                                <motion.div
+                                  key={`lo-${i}`}
+                                  initial={{ opacity: 0, scale: 0, rotateZ: -20 }}
+                                  animate={{ opacity: [0.2, 0.5, 0.25, 0.45, 0.3], scale: 1, rotateZ: 0 }}
+                                  transition={{
+                                    opacity: { duration: 6, repeat: Infinity, delay: i * 0.08 },
+                                    scale: { type: 'spring', stiffness: 200, damping: 15, delay: i * 0.06 },
+                                    rotateZ: { type: 'spring', stiffness: 100, damping: 12, delay: i * 0.06 },
+                                  }}
+                                  style={{
+                                    position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                                    zIndex: 1, width: loserSz, height: loserSz, borderRadius: '50%',
+                                    animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${(i * 0.1).toFixed(2)}s infinite`,
+                                    pointerEvents: 'none',
+                                  }}
+                                >
+                                  <div style={{
+                                    width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                                    transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
+                                    boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
+                                  }}>
+                                    {p.avatar_url
+                                      ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: loserSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                                    }
+                                  </div>
+                                  <div style={{
+                                    position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
+                                    background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
+                                    fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
+                                  }}>{p.name}</div>
+                                </motion.div>
+                              );
+                            })}
+                            {/* Winners */}
+                            {winPos.map((pos, i) => {
+                              const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
+                              const isLeft = i < half;
+                              return (
+                                <motion.div
+                                  key={`wi-${i}`}
+                                  initial={{ opacity: 0, scale: 2.5, x: isLeft ? -300 : 300, y: -100, rotateY: isLeft ? 45 : -45 }}
+                                  animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotateY: isLeft ? 12 : -12 }}
+                                  transition={{ type: 'spring', stiffness: 80, damping: 14, delay: 1.5 + i * 0.15 }}
+                                  style={{
+                                    position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                                    zIndex: 3, width: winSz, height: winSz, borderRadius: '50%',
+                                    pointerEvents: 'none',
+                                  }}
+                                >
+                                  {/* Breathing wrapper */}
+                                  <motion.div
+                                    animate={{ scale: [1, 1.06, 1] }}
+                                    transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 2.5 + i * 0.1 }}
+                                    style={{ width: '100%', height: '100%' }}
+                                  >
+                                    {/* Synchronized glow pulse */}
+                                    <motion.div
+                                      animate={{ boxShadow: [`0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 35px rgba(255,215,0,0.7), 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`] }}
+                                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                                      style={{
+                                        width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                                        transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
+                                      }}
+                                    >
+                                      {p.avatar_url
+                                        ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
+                                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: winSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                                      }
+                                      {/* Shimmer overlay */}
+                                      <div style={{
+                                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
+                                        background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
+                                        backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
+                                        willChange: 'background-position', pointerEvents: 'none',
+                                      }} />
+                                    </motion.div>
+                                  </motion.div>
+                                  <div style={{
+                                    position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+                                    background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
+                                    fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
+                                    padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
+                                    whiteSpace: 'nowrap', zIndex: 2,
+                                  }}>{p.name}</div>
+                                </motion.div>
+                              );
+                            })}
                           </div>
-                          <div style={{
-                            position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
-                            background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
-                            fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
-                            padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
-                            whiteSpace: 'nowrap', zIndex: 2,
-                          }}>{p.name}</div>
-                        </div>
-                      );
-                    });
+                        </motion.div>
+                        {/* Spotlight effect */}
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 0.4 }}
+                          transition={{ delay: 2, duration: 1.5 }}
+                          style={{
+                            position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
+                            background: 'radial-gradient(ellipse at 12% 50%, rgba(255,215,0,0.15) 0%, transparent 50%), radial-gradient(ellipse at 88% 50%, rgba(255,215,0,0.15) 0%, transparent 50%)',
+                          }}
+                        />
+                      </>
+                    );
                   })()}
                   <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>🤝</div>
                   <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.4rem' : r.h2Fs, background: 'linear-gradient(90deg, #EF4444, #3B82F6, #22C55E, #EAB308, #EF4444)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>
@@ -1131,83 +1183,133 @@ export default function CeremonyPlay() {
                 {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                   <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
                 ))}
-                {/* Floating team member photos */}
+                {/* Floating team member photos — framer-motion */}
                 {(() => {
                   const winnerTeam = grandWinner as string;
                   const losers = TEAMS.filter(t => t !== winnerTeam).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })));
-                  const loserPos = generateLoserPositions(losers.length);
-                  const sz = width < 768 ? 44 : 60;
-                  return loserPos.map((pos, i) => {
-                    const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
-                    const d = (i * 0.1).toFixed(2);
-                    const peekDur = (5 + (i % 4) * 1.5).toFixed(1);
-                    return (
-                      <div key={`lo-${i}`} style={{
-                        position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                        zIndex: 1, width: sz, height: sz, borderRadius: '50%', opacity: 0,
-                        animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeIn 1s ease-out ${d}s forwards, facePeekaboo ${peekDur}s ease-in-out ${(i * 0.3).toFixed(1)}s infinite`,
-                        pointerEvents: 'none',
-                      }}>
-                        <div style={{
-                          width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                          transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
-                          boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
-                        }}>
-                          {p.avatar_url
-                            ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                          }
-                        </div>
-                        <div style={{
-                          position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
-                          background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
-                          fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
-                        }}>{p.name}</div>
-                      </div>
-                    );
-                  });
-                })()}
-                {(() => {
-                  const winnerTeam = grandWinner as string;
                   const winners = (teamMembers[winnerTeam] || []).map(m => ({ ...m, team: winnerTeam }));
+                  const loserPos = generateLoserPositions(losers.length);
                   const winPos = generateWinnerPositions(winners.length);
-                  const sz = width < 768 ? 90 : 140;
-                  return winPos.map((pos, i) => {
-                    const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
-                    const d = (i * 0.12).toFixed(2);
-                    return (
-                      <div key={`wi-${i}`} style={{
-                        position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
-                        zIndex: 3, width: sz, height: sz, borderRadius: '50%', opacity: 0,
-                        animation: `faceFloat ${(3 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite, faceFadeInWinner 1.2s cubic-bezier(0.34,1.56,0.64,1) ${d}s forwards, faceBreathe ${(2.5 + (i % 3) * 0.4).toFixed(1)}s ease-in-out ${d}s infinite`,
-                        pointerEvents: 'none',
-                      }}>
-                        <div style={{
-                          width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                          transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
-                          boxShadow: `0 0 24px ${tc.glow}, 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`,
-                        }}>
-                          {p.avatar_url
-                            ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
-                            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: sz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
-                          }
-                          <div style={{
-                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
-                            background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
-                            backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
-                            willChange: 'background-position', pointerEvents: 'none',
-                          }} />
+                  const loserSz = width < 768 ? 44 : 60;
+                  const winSz = width < 768 ? 90 : 140;
+                  const half = Math.ceil(winners.length / 2);
+                  return (
+                    <>
+                      {/* Camera zoom */}
+                      <motion.div
+                        initial={{ scale: 0.88, opacity: 0.7 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ duration: 3, ease: 'easeOut' }}
+                        style={{ position: 'absolute', inset: 0 }}
+                      >
+                        {/* 3D perspective container */}
+                        <div style={{ perspective: 1200, position: 'absolute', inset: 0 }}>
+                          {/* Losers */}
+                          {loserPos.map((pos, i) => {
+                            const p = losers[i]; const tc = TEAM_COLORS[p.team as Team];
+                            return (
+                              <motion.div
+                                key={`lo-${i}`}
+                                initial={{ opacity: 0, scale: 0, rotateZ: -20 }}
+                                animate={{ opacity: [0.2, 0.5, 0.25, 0.45, 0.3], scale: 1, rotateZ: 0 }}
+                                transition={{
+                                  opacity: { duration: 6, repeat: Infinity, delay: i * 0.08 },
+                                  scale: { type: 'spring', stiffness: 200, damping: 15, delay: i * 0.06 },
+                                  rotateZ: { type: 'spring', stiffness: 100, damping: 12, delay: i * 0.06 },
+                                }}
+                                style={{
+                                  position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                                  zIndex: 1, width: loserSz, height: loserSz, borderRadius: '50%',
+                                  animation: `faceFloatLoser ${(4.5 + (i % 3) * 0.5).toFixed(1)}s ease-in-out ${(i * 0.1).toFixed(2)}s infinite`,
+                                  pointerEvents: 'none',
+                                }}
+                              >
+                                <div style={{
+                                  width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                                  transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
+                                  boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
+                                }}>
+                                  {p.avatar_url
+                                    ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: loserSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                                  }
+                                </div>
+                                <div style={{
+                                  position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)',
+                                  background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
+                                  fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
+                                }}>{p.name}</div>
+                              </motion.div>
+                            );
+                          })}
+                          {/* Winners */}
+                          {winPos.map((pos, i) => {
+                            const p = winners[i]; const tc = TEAM_COLORS[p.team as Team];
+                            const isLeft = i < half;
+                            return (
+                              <motion.div
+                                key={`wi-${i}`}
+                                initial={{ opacity: 0, scale: 2.5, x: isLeft ? -300 : 300, y: -100, rotateY: isLeft ? 45 : -45 }}
+                                animate={{ opacity: 1, scale: 1, x: 0, y: 0, rotateY: isLeft ? 12 : -12 }}
+                                transition={{ type: 'spring', stiffness: 80, damping: 14, delay: 1.5 + i * 0.15 }}
+                                style={{
+                                  position: 'absolute', top: pos.top, left: pos.left, transform: 'translate(-50%,-50%)',
+                                  zIndex: 3, width: winSz, height: winSz, borderRadius: '50%',
+                                  pointerEvents: 'none',
+                                }}
+                              >
+                                {/* Breathing wrapper */}
+                                <motion.div
+                                  animate={{ scale: [1, 1.06, 1] }}
+                                  transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 2.5 + i * 0.1 }}
+                                  style={{ width: '100%', height: '100%' }}
+                                >
+                                  {/* Synchronized glow pulse */}
+                                  <motion.div
+                                    animate={{ boxShadow: [`0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 35px rgba(255,215,0,0.7), 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`, `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`] }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                                    style={{
+                                      width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                                      transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
+                                    }}
+                                  >
+                                    {p.avatar_url
+                                      ? <img src={p.avatar_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(1.1) contrast(1.05)' }} />
+                                      : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, ${tc.mid}, ${tc.bg})`, color: '#fff', fontWeight: 900, fontSize: winSz * 0.4, fontFamily: "'Black Han Sans', sans-serif" }}>{p.name[0]}</div>
+                                    }
+                                    {/* Shimmer overlay */}
+                                    <div style={{
+                                      position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
+                                      background: 'linear-gradient(115deg, transparent 25%, rgba(255,255,255,0.35) 50%, transparent 75%)',
+                                      backgroundSize: '200% 100%', animation: 'faceShimmer 3s linear infinite',
+                                      willChange: 'background-position', pointerEvents: 'none',
+                                    }} />
+                                  </motion.div>
+                                </motion.div>
+                                <div style={{
+                                  position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
+                                  background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
+                                  fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
+                                  padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
+                                  whiteSpace: 'nowrap', zIndex: 2,
+                                }}>{p.name}</div>
+                              </motion.div>
+                            );
+                          })}
                         </div>
-                        <div style={{
-                          position: 'absolute', bottom: -6, left: '50%', transform: 'translateX(-50%)',
-                          background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
-                          fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
-                          padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
-                          whiteSpace: 'nowrap', zIndex: 2,
-                        }}>{p.name}</div>
-                      </div>
-                    );
-                  });
+                      </motion.div>
+                      {/* Spotlight effect */}
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 0.4 }}
+                        transition={{ delay: 2, duration: 1.5 }}
+                        style={{
+                          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
+                          background: 'radial-gradient(ellipse at 12% 50%, rgba(255,215,0,0.15) 0%, transparent 50%), radial-gradient(ellipse at 88% 50%, rgba(255,215,0,0.15) 0%, transparent 50%)',
+                        }}
+                      />
+                    </>
+                  );
                 })()}
                 <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2.8rem' : '3.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
                 <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '2rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
