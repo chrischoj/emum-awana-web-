@@ -19,7 +19,7 @@ import { useOptimisticGameQueue } from '../../hooks/useOptimisticGameQueue';
 import { useAppResume } from '../../hooks/useAppResume';
 import type { GameScoreEntry } from '../../types/awana';
 
-const POINT_PRESETS = [100, 200, 400];
+const POINT_PRESETS = [50, 100, 200, 400];
 const STAGES = ['릴레이 게임', '개별 게임', '응원 점수', '보너스'] as const;
 type Stage = (typeof STAGES)[number];
 
