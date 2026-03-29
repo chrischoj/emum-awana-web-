@@ -38,8 +38,8 @@ export default function GameScoringPage() {
   const [flashTeamId, setFlashTeamId] = useState<string | null>(null);
   const [gameLock, setGameLock] = useState<GameScoreLock | null>(null);
 
-  // Selected preset buttons per team (toggle on/off)
-  const [selectedPresets, setSelectedPresets] = useState<Record<string, Set<number>>>({});
+  // Selected preset buttons per team: key=preset, value=multiplier (0→1x→2x→0)
+  const [selectedPresets, setSelectedPresets] = useState<Record<string, Map<number, number>>>({});
 
   // BottomSheet edit state
   const [editingEntry, setEditingEntry] = useState<GameScoreEntry | null>(null);
@@ -145,7 +145,10 @@ export default function GameScoringPage() {
   const pendingTotals = useMemo(() => {
     const map: Record<string, number> = {};
     for (const [teamId, presets] of Object.entries(selectedPresets)) {
-      const sum = Array.from(presets).reduce((a, b) => a + b, 0);
+      let sum = 0;
+      presets.forEach((multiplier, pts) => {
+        sum += pts * multiplier;
+      });
       if (sum > 0) map[teamId] = sum;
     }
     return map;
@@ -162,11 +165,14 @@ export default function GameScoringPage() {
     if (isLocked) return;
     navigator.vibrate?.(15);
     setSelectedPresets((prev) => {
-      const current = new Set(prev[teamId] || []);
-      if (current.has(points)) {
+      const current = new Map(prev[teamId] || []);
+      const mult = current.get(points) || 0;
+      // 사이클: 0 → 1x → 2x → 0
+      const next = mult >= 2 ? 0 : mult + 1;
+      if (next === 0) {
         current.delete(points);
       } else {
-        current.add(points);
+        current.set(points, next);
       }
       return { ...prev, [teamId]: current };
     });
@@ -328,7 +334,7 @@ export default function GameScoringPage() {
         {sortedTeams.map((team) => {
           const total = teamTotals[team.id] || 0;
           const stageSub = stageSubtotals[team.id] || 0;
-          const teamSelected = selectedPresets[team.id] || new Set<number>();
+          const teamSelected = selectedPresets[team.id] || new Map<number, number>();
           const pending = pendingTotals[team.id] || 0;
           const isFlashing = flashTeamId === team.id;
 
@@ -364,10 +370,11 @@ export default function GameScoringPage() {
                 </div>
               </div>
 
-              {/* Point preset toggle buttons */}
-              <div className="grid grid-cols-3 gap-1.5 p-2.5 bg-white">
+              {/* Point preset step buttons: 0→1x→2x→0 */}
+              <div className="grid grid-cols-4 gap-1.5 p-2.5 bg-white">
                 {POINT_PRESETS.map((pts) => {
-                  const isSelected = teamSelected.has(pts);
+                  const mult = teamSelected.get(pts) || 0;
+                  const isSelected = mult > 0;
                   return (
                     <button
                       key={pts}
@@ -375,7 +382,7 @@ export default function GameScoringPage() {
                       onClick={() => handleTogglePreset(team.id, pts)}
                       disabled={isLocked}
                       className={cn(
-                        'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation',
+                        'py-2.5 rounded-lg text-sm font-bold transition-all touch-manipulation relative',
                         'active:scale-95 disabled:opacity-40 disabled:active:scale-100',
                         isSelected
                           ? 'border-2 shadow-sm'
@@ -388,6 +395,11 @@ export default function GameScoringPage() {
                       }
                     >
                       +{pts}
+                      {mult === 2 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                          2
+                        </span>
+                      )}
                     </button>
                   );
                 })}
