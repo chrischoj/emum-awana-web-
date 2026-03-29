@@ -4,6 +4,7 @@ import type { AwardsData, TeamName } from '../types/awana';
 export interface BonusDetail {
   team: TeamName;
   club: 'sparks' | 'tnt';
+  category: 'handbook' | 'game';
   points: number;
   reason: string;
 }

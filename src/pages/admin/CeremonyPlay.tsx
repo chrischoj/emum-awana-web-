@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
+import { supabase } from '../../lib/supabase';
 import type { AwardsData } from '../../types/awana';
 
 // ─── Responsive ───
@@ -30,9 +31,9 @@ function getResponsive(width: number) {
     barMaxW: isXL ? 220 : isLarge ? 180 : isMobile ? 72 : 120,
     barLabelFs: isXL ? '2.4rem' : isLarge ? '2rem' : isMobile ? '1rem' : '1.4rem',
     barNumFs: isXL ? '2.4rem' : isLarge ? '2rem' : isMobile ? '0.95rem' : '1.1rem',
-    grandTrophy: isXL ? 160 : isLarge ? 130 : isMobile ? 80 : 100,
-    grandTeamFs: isXL ? '6rem' : isLarge ? '5rem' : isMobile ? '2.5rem' : '3.8rem',
-    grandScoreFs: isXL ? '3.2rem' : isLarge ? '2.8rem' : isMobile ? '1.5rem' : '2.2rem',
+    grandTrophy: isXL ? 200 : isLarge ? 170 : isMobile ? 100 : 130,
+    grandTeamFs: isXL ? '7rem' : isLarge ? '6rem' : isMobile ? '3rem' : '4.5rem',
+    grandScoreFs: isXL ? '4rem' : isLarge ? '3.5rem' : isMobile ? '1.8rem' : '2.8rem',
     eeumH: isXL ? 90 : isLarge ? 76 : isMobile ? 40 : 52,
     awanaBottomH: isXL ? 160 : isLarge ? 140 : isMobile ? 72 : 112,
     iconH: isXL ? 90 : isLarge ? 76 : isMobile ? 44 : 58,
@@ -441,6 +442,23 @@ const CEREMONY_STYLES = `
   @keyframes slideUp { 0% { transform: translateY(60px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
   @keyframes podiumRise { 0% { transform: scaleY(0); } 60% { transform: scaleY(1.1); } 100% { transform: scaleY(1); } }
   @keyframes readyPulse { 0%,100%{box-shadow:0 0 20px rgba(255,215,0,0.3)} 50%{box-shadow:0 0 40px rgba(255,215,0,0.6)} }
+  @keyframes faceFloat {
+    0% { transform: translateY(0) scale(1) rotate(0deg); }
+    25% { transform: translateY(-8px) scale(1.04) rotate(1deg); }
+    50% { transform: translateY(-4px) scale(1.02) rotate(-1deg); }
+    75% { transform: translateY(-10px) scale(1.06) rotate(1deg); }
+    100% { transform: translateY(0) scale(1) rotate(0deg); }
+  }
+  @keyframes faceFadeIn {
+    0% { opacity: 0; transform: scale(0.3) rotate(-15deg); }
+    60% { opacity: 0.7; transform: scale(1.08) rotate(3deg); }
+    100% { opacity: 0.65; transform: scale(1) rotate(0deg); }
+  }
+  @keyframes faceFadeInWinner {
+    0% { opacity: 0; transform: scale(0.3) rotate(-15deg); }
+    60% { opacity: 0.95; transform: scale(1.12) rotate(3deg); }
+    100% { opacity: 0.9; transform: scale(1) rotate(0deg); }
+  }
 `;
 
 // ═══════════════════════════════════════════
@@ -460,6 +478,41 @@ export default function CeremonyPlay() {
   const [bgmPlaying, setBgmPlaying] = useState(true);
   const [bgmVol, setBgmVol] = useState(0.20);
   const flowOrder = DEFAULT_FLOW_ORDER;
+  const [teamMembers, setTeamMembers] = useState<Record<string, Array<{name: string; avatar_url: string | null}>>>({});
+
+  // Fetch team members with avatars
+  useEffect(() => {
+    if (!data) return;
+    (async () => {
+      try {
+        // Get all teams
+        const { data: teams } = await supabase
+          .from('teams')
+          .select('id, name, club_id');
+        if (!teams) return;
+
+        const teamNameToId = new Map<string, string>();
+        for (const t of teams) {
+          const upperName = t.name?.toUpperCase();
+          if (['RED', 'BLUE', 'GREEN', 'YELLOW'].includes(upperName)) {
+            teamNameToId.set(upperName, t.id);
+          }
+        }
+
+        // Get members with avatars grouped by team
+        const result: Record<string, Array<{name: string; avatar_url: string | null}>> = {};
+        for (const [teamName, teamId] of teamNameToId) {
+          const { data: members } = await supabase
+            .from('members')
+            .select('name, avatar_url')
+            .eq('team_id', teamId)
+            .eq('active', true);
+          result[teamName] = (members || []).filter(m => m.avatar_url);
+        }
+        setTeamMembers(result);
+      } catch { /* ignore */ }
+    })();
+  }, [data]);
 
   // Load confirmed data: localStorage first (instant), then Supabase (fresh)
   useEffect(() => {
@@ -798,6 +851,74 @@ export default function CeremonyPlay() {
                   {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                     <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: ['#EF4444', '#3B82F6', '#22C55E', '#EAB308', '#FFD700', '#A855F7'][i], pointerEvents: 'none' }}>{star}</div>
                   ))}
+                  {/* Floating team member photos (tied) */}
+                  {(() => {
+                    const winnerPhotos = tiedTeams.flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: true })));
+                    const otherPhotos = TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: false })));
+                    const allPhotos = [...winnerPhotos, ...otherPhotos];
+                    if (allPhotos.length === 0) return null;
+                    const baseSize = width < 768 ? 48 : 70;
+                    const winnerSize = width < 768 ? 64 : 90;
+                    const positions = [
+                      { top: '2%', left: '2%', rot: -12 }, { top: '4%', right: '3%', rot: 8 },
+                      { top: '20%', right: '1%', rot: -10 }, { top: '22%', left: '1%', rot: 15 },
+                      { top: '40%', left: '0%', rot: -8 }, { top: '44%', right: '2%', rot: 14 },
+                      { top: '60%', left: '1%', rot: 10 }, { top: '58%', right: '0%', rot: -6 },
+                      { top: '78%', left: '2%', rot: -15 }, { top: '76%', right: '3%', rot: 12 },
+                      { top: '10%', left: '12%', rot: 7 }, { top: '12%', right: '12%', rot: -11 },
+                      { top: '65%', left: '10%', rot: -7 }, { top: '68%', right: '10%', rot: 9 },
+                      { top: '48%', left: '11%', rot: 13 }, { top: '50%', right: '11%', rot: -5 },
+                    ];
+                    return positions.slice(0, allPhotos.length).map((pos, i) => {
+                      const { rot, ...cssPos } = pos;
+                      const photo = allPhotos[i % allPhotos.length];
+                      const tc = TEAM_COLORS[photo.team as Team];
+                      const isW = photo.isWinner;
+                      const size = isW ? winnerSize : baseSize;
+                      const delay = (i * 0.2).toFixed(2);
+                      const floatDur = (3.5 + (i % 4) * 0.5).toFixed(1);
+                      return (
+                        <div key={`face-${i}`} style={{
+                          position: 'absolute', ...cssPos, zIndex: isW ? 3 : 1,
+                          width: size, height: size, borderRadius: '50%',
+                          opacity: 0,
+                          animation: `faceFloat ${floatDur}s ease-in-out ${delay}s infinite, ${isW ? 'faceFadeInWinner' : 'faceFadeIn'} 1s cubic-bezier(0.34,1.56,0.64,1) ${delay}s forwards`,
+                          pointerEvents: 'none',
+                        }}>
+                          <div style={{
+                            width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                            transform: `rotate(${rot}deg)`,
+                            border: isW ? `3px solid ${tc.bg}` : `2px solid ${tc.bg}88`,
+                            boxShadow: isW
+                              ? `0 0 20px ${tc.glow}, 0 0 40px ${tc.glow}66, 0 6px 16px rgba(0,0,0,0.3)`
+                              : `0 0 8px ${tc.glow}44, 0 3px 8px rgba(0,0,0,0.2)`,
+                            background: `linear-gradient(135deg, ${tc.bg}33, transparent)`,
+                            filter: isW ? 'none' : 'brightness(0.9) saturate(0.85)',
+                          }}>
+                            <img src={photo.avatar_url!} alt={photo.name} style={{
+                              width: '100%', height: '100%', objectFit: 'cover',
+                              filter: isW ? 'brightness(1.1) contrast(1.05)' : 'none',
+                            }} />
+                            <div style={{
+                              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
+                              background: isW
+                                ? 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 45%, rgba(0,0,0,0.1) 100%)'
+                                : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)',
+                              pointerEvents: 'none',
+                            }} />
+                          </div>
+                          {isW && <div style={{
+                            position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
+                            background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`,
+                            color: '#fff', fontSize: width < 768 ? '0.45rem' : '0.55rem',
+                            fontWeight: 800, padding: '1px 6px', borderRadius: 8,
+                            boxShadow: `0 2px 6px ${tc.glow}88`,
+                            whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
+                          }}>{photo.name}</div>}
+                        </div>
+                      );
+                    });
+                  })()}
                   <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>🤝</div>
                   <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.4rem' : r.h2Fs, background: 'linear-gradient(90deg, #EF4444, #3B82F6, #22C55E, #EAB308, #EF4444)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>
                     {grandAllZero ? '모두 함께!' : '공동 우승!'}
@@ -856,15 +977,84 @@ export default function CeremonyPlay() {
             // Solo winner
             const gc = TEAM_COLORS[grandWinner as Team];
             const podiumOrder = [ranked[1], ranked[0], ranked[2], ranked[3]];
-            const podiumHeights = width < 768 ? [60, 90, 45, 30] : [80, 120, 60, 40];
+            const podiumHeights = width < 768 ? [75, 110, 55, 35] : [100, 150, 75, 50];
             return (
               <div style={{ width: '100%', textAlign: 'center', animation: 'grandReveal 1s cubic-bezier(0.34, 1.56, 0.64, 1)', position: 'relative' }}>
                 <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: '140%', height: '140%', background: `radial-gradient(circle, ${gc.glow} 0%, transparent 60%)`, opacity: 0.3, pointerEvents: 'none', animation: 'pulse 3s ease-in-out infinite' }} />
                 {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
                   <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
                 ))}
-                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
-                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '1.6rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
+                {/* Floating team member photos */}
+                {(() => {
+                  const winnerTeam = grandWinner as string;
+                  const winnerPhotos = (teamMembers[winnerTeam] || []).map(m => ({ ...m, team: winnerTeam, isWinner: true }));
+                  const otherPhotos = TEAMS.filter(t => t !== winnerTeam).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t, isWinner: false })));
+                  const allPhotos = [...winnerPhotos, ...otherPhotos];
+                  if (allPhotos.length === 0) return null;
+                  const baseSize = width < 768 ? 48 : 70;
+                  const winnerSize = width < 768 ? 64 : 90;
+                  const positions = [
+                    { top: '2%', left: '2%', rot: -12 }, { top: '4%', right: '3%', rot: 8 },
+                    { top: '20%', right: '1%', rot: -10 }, { top: '22%', left: '1%', rot: 15 },
+                    { top: '40%', left: '0%', rot: -8 }, { top: '44%', right: '2%', rot: 14 },
+                    { top: '60%', left: '1%', rot: 10 }, { top: '58%', right: '0%', rot: -6 },
+                    { top: '78%', left: '2%', rot: -15 }, { top: '76%', right: '3%', rot: 12 },
+                    { top: '10%', left: '12%', rot: 7 }, { top: '12%', right: '12%', rot: -11 },
+                    { top: '65%', left: '10%', rot: -7 }, { top: '68%', right: '10%', rot: 9 },
+                    { top: '48%', left: '11%', rot: 13 }, { top: '50%', right: '11%', rot: -5 },
+                  ];
+                  return positions.slice(0, allPhotos.length).map((pos, i) => {
+                    const { rot, ...cssPos } = pos;
+                    const photo = allPhotos[i % allPhotos.length];
+                    const tc = TEAM_COLORS[photo.team as Team];
+                    const isW = photo.isWinner;
+                    const size = isW ? winnerSize : baseSize;
+                    const delay = (i * 0.2).toFixed(2);
+                    const floatDur = (3.5 + (i % 4) * 0.5).toFixed(1);
+                    return (
+                      <div key={`face-${i}`} style={{
+                        position: 'absolute', ...cssPos, zIndex: isW ? 3 : 1,
+                        width: size, height: size, borderRadius: '50%',
+                        opacity: 0,
+                        animation: `faceFloat ${floatDur}s ease-in-out ${delay}s infinite, ${isW ? 'faceFadeInWinner' : 'faceFadeIn'} 1s cubic-bezier(0.34,1.56,0.64,1) ${delay}s forwards`,
+                        pointerEvents: 'none',
+                      }}>
+                        <div style={{
+                          width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
+                          transform: `rotate(${rot}deg)`,
+                          border: isW ? `3px solid ${tc.bg}` : `2px solid ${tc.bg}88`,
+                          boxShadow: isW
+                            ? `0 0 20px ${tc.glow}, 0 0 40px ${tc.glow}66, 0 6px 16px rgba(0,0,0,0.3)`
+                            : `0 0 8px ${tc.glow}44, 0 3px 8px rgba(0,0,0,0.2)`,
+                          background: `linear-gradient(135deg, ${tc.bg}33, transparent)`,
+                          filter: isW ? 'none' : 'brightness(0.9) saturate(0.85)',
+                        }}>
+                          <img src={photo.avatar_url!} alt={photo.name} style={{
+                            width: '100%', height: '100%', objectFit: 'cover',
+                            filter: isW ? 'brightness(1.1) contrast(1.05)' : 'none',
+                          }} />
+                          <div style={{
+                            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: '50%',
+                            background: isW
+                              ? 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, transparent 45%, rgba(0,0,0,0.1) 100%)'
+                              : 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.15) 100%)',
+                            pointerEvents: 'none',
+                          }} />
+                        </div>
+                        {isW && <div style={{
+                          position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
+                          background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`,
+                          color: '#fff', fontSize: width < 768 ? '0.45rem' : '0.55rem',
+                          fontWeight: 800, padding: '1px 6px', borderRadius: 8,
+                          boxShadow: `0 2px 6px ${tc.glow}88`,
+                          whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
+                        }}>{photo.name}</div>}
+                      </div>
+                    );
+                  });
+                })()}
+                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2.8rem' : '3.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
+                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '2rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
                 <div style={{ animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 130 : 170, height: width < 768 ? 130 : 170, borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 170 : 220, height: width < 768 ? 170 : 220, borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
@@ -884,7 +1074,7 @@ export default function CeremonyPlay() {
                         <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.1rem' : '1.4rem') : (width < 768 ? '0.85rem' : '1rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 12px ${tc.glow}` : 'none' }}>{t}</div>
                         <div style={{ fontSize: width < 768 ? '0.7rem' : '0.85rem', color: '#64748b', fontWeight: 700, marginBottom: 4 }}>{(totals.total[t] || 0).toLocaleString()}</div>
                         <div style={{
-                          width: width < 768 ? 56 : 90, height: podiumHeights[i],
+                          width: width < 768 ? 64 : 110, height: podiumHeights[i],
                           background: isChamp ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
                           borderRadius: '12px 12px 0 0',
                           boxShadow: isChamp ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
@@ -898,8 +1088,8 @@ export default function CeremonyPlay() {
                   })}
                 </div>
                 <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
-                  <div style={{ fontSize: width < 768 ? '1.4rem' : '1.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
-                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.smallFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
+                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.bodyFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
                     축하합니다! <span style={{ color: '#94a3b8' }}>하나님의 은혜 안에서 모두 수고하셨습니다!</span>
                   </div>
                 </div>

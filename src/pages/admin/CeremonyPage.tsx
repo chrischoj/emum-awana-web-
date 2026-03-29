@@ -50,13 +50,19 @@ const SCORE_ROWS: { label: string; shortLabel: string; cat: 'handbook' | 'game';
   { label: '게임 · T&T', shortLabel: '🎮 T', cat: 'game', club: 'tnt', bgClass: 'bg-green-50/40', textClass: 'text-green-600', borderClass: 'border-l-green-300' },
 ];
 
-const BONUS_ROWS: { label: string; shortLabel: string; club: ClubTab }[] = [
-  { label: '가산 · 스팍스', shortLabel: '⚡ S', club: 'sparks' },
-  { label: '가산 · T&T', shortLabel: '⚡ T', club: 'tnt' },
+// Bonus rows: 4 rows matching each score category so bonuses go to the right bar chart
+const BONUS_ROWS: { label: string; shortLabel: string; cat: 'handbook' | 'game'; club: ClubTab; borderClass: string }[] = [
+  { label: '가산 · 핸드북 S', shortLabel: '⚡📖S', cat: 'handbook', club: 'sparks', borderClass: 'border-l-blue-400' },
+  { label: '가산 · 핸드북 T', shortLabel: '⚡📖T', cat: 'handbook', club: 'tnt', borderClass: 'border-l-blue-300' },
+  { label: '가산 · 게임 S', shortLabel: '⚡🎮S', cat: 'game', club: 'sparks', borderClass: 'border-l-green-400' },
+  { label: '가산 · 게임 T', shortLabel: '⚡🎮T', cat: 'game', club: 'tnt', borderClass: 'border-l-green-300' },
 ];
 
 // Team header: colored circle on mobile, circle+name on desktop
 const TEAM_SHORT: Record<TeamName, string> = { RED: 'R', BLUE: 'B', GREEN: 'G', YELLOW: 'Y' };
+
+// BonusData mirrors AwardsData structure: {handbook:{sparks:{...},tnt:{...}}, game:{sparks:{...},tnt:{...}}}
+type BonusData = Record<'handbook' | 'game', Record<ClubTab, Record<TeamName, number>>>;
 
 function ScoreTable({
   data,
@@ -70,9 +76,9 @@ function ScoreTable({
   data: AwardsData;
   editable?: boolean;
   onEdit?: (cat: 'handbook' | 'game', club: ClubTab, team: TeamName, val: number) => void;
-  bonusData?: Record<ClubTab, Record<TeamName, number>>;
-  onBonusChange?: (club: ClubTab, team: TeamName, val: number) => void;
-  onBonusPreset?: (club: ClubTab, team: TeamName, amt: number) => void;
+  bonusData?: BonusData;
+  onBonusChange?: (cat: 'handbook' | 'game', club: ClubTab, team: TeamName, val: number) => void;
+  onBonusPreset?: (cat: 'handbook' | 'game', club: ClubTab, team: TeamName, amt: number) => void;
   showBonus?: boolean;
 }) {
   const getTotal = (team: TeamName) => {
@@ -80,7 +86,8 @@ function ScoreTable({
       (data.handbook.sparks[team] || 0) + (data.handbook.tnt[team] || 0) +
       (data.game.sparks[team] || 0) + (data.game.tnt[team] || 0);
     const bonus = showBonus && bonusData
-      ? (bonusData.sparks[team] || 0) + (bonusData.tnt[team] || 0)
+      ? (bonusData.handbook.sparks[team] || 0) + (bonusData.handbook.tnt[team] || 0) +
+        (bonusData.game.sparks[team] || 0) + (bonusData.game.tnt[team] || 0)
       : 0;
     return { base, bonus, total: base + bonus };
   };
@@ -143,31 +150,30 @@ function ScoreTable({
             </tr>
           ))}
 
-          {/* Bonus rows */}
+          {/* Bonus rows: 4 rows matching each score category */}
           {showBonus && onBonusChange && onBonusPreset && BONUS_ROWS.map((row) => (
-            <tr key={`bonus-${row.club}`} className="bg-indigo-50/20">
-              <td className="border border-gray-200 border-l-[3px] border-l-indigo-400 px-1.5 py-1.5 sm:px-2 sm:py-2 bg-indigo-50/50 text-indigo-700 font-semibold whitespace-nowrap">
+            <tr key={`bonus-${row.cat}-${row.club}`} className="bg-indigo-50/20">
+              <td className={`border border-gray-200 border-l-[3px] ${row.borderClass} px-1.5 py-1.5 sm:px-2 sm:py-2 bg-indigo-50/50 text-indigo-700 font-semibold whitespace-nowrap`}>
                 <span className="sm:hidden text-[11px]">{row.shortLabel}</span>
                 <span className="hidden sm:inline text-xs">{row.label}</span>
               </td>
               {TEAM_NAMES.map((team) => {
-                const bval = bonusData ? bonusData[row.club][team] || 0 : 0;
+                const bval = bonusData ? bonusData[row.cat][row.club][team] || 0 : 0;
                 return (
                   <td key={team} className="border border-gray-200 px-0.5 py-1 sm:px-1 sm:py-1.5 text-center">
                     <input
                       type="number"
                       value={bval || ''}
-                      onChange={(e) => onBonusChange(row.club, team, parseInt(e.target.value) || 0)}
+                      onChange={(e) => onBonusChange(row.cat, row.club, team, parseInt(e.target.value) || 0)}
                       placeholder="0"
                       className="w-full text-center bg-white outline-none font-semibold text-xs sm:text-sm rounded py-0.5 border border-indigo-200 focus:border-indigo-400"
                       style={{ color: TEAM_COLORS[team] }}
                     />
-                    {/* 2x2 grid for bonus presets */}
                     <div className="grid grid-cols-2 gap-0.5 mt-1">
                       {BONUS_PRESETS.map((amt) => (
                         <button
                           key={amt}
-                          onClick={() => onBonusPreset(row.club, team, amt)}
+                          onClick={() => onBonusPreset(row.cat, row.club, team, amt)}
                           className="px-0.5 py-0 text-[8px] sm:text-[9px] rounded border border-gray-200 text-gray-400 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600 transition-colors leading-4"
                         >
                           +{amt}
@@ -213,14 +219,15 @@ function RankingPreview({
   bonusData,
 }: {
   data: AwardsData;
-  bonusData?: Record<ClubTab, Record<TeamName, number>>;
+  bonusData?: BonusData;
 }) {
   const getTotal = (team: TeamName) => {
     const base =
       (data.handbook.sparks[team] || 0) + (data.handbook.tnt[team] || 0) +
       (data.game.sparks[team] || 0) + (data.game.tnt[team] || 0);
     const bonus = bonusData
-      ? (bonusData.sparks[team] || 0) + (bonusData.tnt[team] || 0)
+      ? (bonusData.handbook.sparks[team] || 0) + (bonusData.handbook.tnt[team] || 0) +
+        (bonusData.game.sparks[team] || 0) + (bonusData.game.tnt[team] || 0)
       : 0;
     return { base, bonus, total: base + bonus };
   };
@@ -283,10 +290,11 @@ export default function CeremonyPage() {
   const [dateTo, setDateTo] = useState(today);
   const [data, setData] = useState<AwardsData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [bonusPoints, setBonusPoints] = useState<Record<ClubTab, Record<TeamName, number>>>({
-    sparks: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 },
-    tnt: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 },
+  const zeroBonuses = (): BonusData => ({
+    handbook: { sparks: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 }, tnt: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 } },
+    game: { sparks: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 }, tnt: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 } },
   });
+  const [bonusPoints, setBonusPoints] = useState<BonusData>(zeroBonuses());
   const [bonusReasons, setBonusReasons] = useState<Record<TeamName, string>>({
     RED: '', BLUE: '', GREEN: '', YELLOW: '',
   });
@@ -323,7 +331,7 @@ export default function CeremonyPage() {
       const awardsData = await buildAwardsData(dateFrom, dateTo);
       setData(awardsData);
       setConfirmed(false);
-      setBonusPoints({ sparks: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 }, tnt: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 } });
+      setBonusPoints(zeroBonuses());
     } catch { toast.error('데이터 로드 실패'); }
     finally { setLoading(false); }
   };
@@ -332,23 +340,29 @@ export default function CeremonyPage() {
   useEffect(() => { if (!didAutoLoad.current) { didAutoLoad.current = true; handleLoad(); } }, []);
 
   // --- Bonus helpers ---
-  const updateBonus = (club: ClubTab, team: TeamName, value: number) => {
-    setBonusPoints((prev) => ({ ...prev, [club]: { ...prev[club], [team]: value } }));
+  const updateBonus = (cat: 'handbook' | 'game', club: ClubTab, team: TeamName, value: number) => {
+    setBonusPoints((prev) => ({
+      ...prev,
+      [cat]: { ...prev[cat], [club]: { ...prev[cat][club], [team]: value } },
+    }));
   };
-  const addPresetBonus = (club: ClubTab, team: TeamName, amount: number) => {
-    setBonusPoints((prev) => ({ ...prev, [club]: { ...prev[club], [team]: prev[club][team] + amount } }));
+  const addPresetBonus = (cat: 'handbook' | 'game', club: ClubTab, team: TeamName, amount: number) => {
+    setBonusPoints((prev) => ({
+      ...prev,
+      [cat]: { ...prev[cat], [club]: { ...prev[cat][club], [team]: prev[cat][club][team] + amount } },
+    }));
   };
-  const resetBonuses = () => {
-    setBonusPoints({ sparks: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 }, tnt: { RED: 0, BLUE: 0, GREEN: 0, YELLOW: 0 } });
-  };
+  const resetBonuses = () => { setBonusPoints(zeroBonuses()); };
 
-  // --- Merge bonus into data for step 3 ---
+  // --- Merge bonus into data for step 3: each bonus goes to correct category ---
   const mergeBonus = (): AwardsData | null => {
     if (!data) return null;
     const merged = deepCloneAwardsData(data);
-    for (const club of ['sparks', 'tnt'] as ClubTab[]) {
-      for (const team of TEAM_NAMES) {
-        merged.game[club][team] += bonusPoints[club][team];
+    for (const cat of ['handbook', 'game'] as const) {
+      for (const club of ['sparks', 'tnt'] as ClubTab[]) {
+        for (const team of TEAM_NAMES) {
+          merged[cat][club][team] += bonusPoints[cat][club][team];
+        }
       }
     }
     return merged;
@@ -378,11 +392,13 @@ export default function CeremonyPage() {
     if (!editableData) return;
     // Build bonus details for DB record
     const details: BonusDetail[] = [];
-    for (const club of ['sparks', 'tnt'] as ClubTab[]) {
-      for (const team of TEAM_NAMES) {
-        const pts = bonusPoints[club][team] || 0;
-        if (pts !== 0) {
-          details.push({ team, club, points: pts, reason: bonusReasons[team] || '' });
+    for (const cat of ['handbook', 'game'] as const) {
+      for (const club of ['sparks', 'tnt'] as ClubTab[]) {
+        for (const team of TEAM_NAMES) {
+          const pts = bonusPoints[cat][club][team] || 0;
+          if (pts !== 0) {
+            details.push({ team, club, points: pts, reason: bonusReasons[team] || '', category: cat });
+          }
         }
       }
     }
@@ -520,7 +536,8 @@ export default function CeremonyPage() {
             <div className="mt-5 border-t border-gray-200 pt-4">
               {(() => {
                 const teamsWithBonus = TEAM_NAMES.filter(
-                  (t) => (bonusPoints.sparks[t] || 0) + (bonusPoints.tnt[t] || 0) !== 0
+                  (t) => (bonusPoints.handbook.sparks[t] || 0) + (bonusPoints.handbook.tnt[t] || 0) +
+                         (bonusPoints.game.sparks[t] || 0) + (bonusPoints.game.tnt[t] || 0) !== 0
                 );
                 if (teamsWithBonus.length === 0) return (
                   <p className="text-xs text-gray-400 mb-3">가산점을 입력하면 팀별 사유를 입력할 수 있습니다</p>
@@ -530,7 +547,8 @@ export default function CeremonyPage() {
                     <p className="text-xs text-gray-500 mb-3">팀별 가산점 사유</p>
                     <div className="space-y-2">
                       {teamsWithBonus.map((team) => {
-                        const totalBonus = (bonusPoints.sparks[team] || 0) + (bonusPoints.tnt[team] || 0);
+                        const totalBonus = (bonusPoints.handbook.sparks[team] || 0) + (bonusPoints.handbook.tnt[team] || 0) +
+                          (bonusPoints.game.sparks[team] || 0) + (bonusPoints.game.tnt[team] || 0);
                         return (
                           <div
                             key={team}
