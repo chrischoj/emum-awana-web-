@@ -302,10 +302,45 @@ export default function CeremonyPage() {
   const [confirmed, setConfirmed] = useState(false);
   const [previousConfirm, setPreviousConfirm] = useState<ConfirmedCeremony | null>(null);
 
+  // --- 이전 확정 가산점을 BonusData로 복원 ---
+  const restoreBonusFromDetails = (details?: BonusDetail[]): BonusData => {
+    const bonus = zeroBonuses();
+    if (!details) return bonus;
+    for (const d of details) {
+      const cat = d.category || 'game'; // category 없는 구버전 호환
+      if (bonus[cat]?.[d.club]?.[d.team] !== undefined) {
+        bonus[cat][d.club][d.team] = d.points;
+      }
+    }
+    return bonus;
+  };
+
+  const restoreReasonsFromDetails = (details?: BonusDetail[]): Record<TeamName, string> => {
+    const reasons: Record<TeamName, string> = { RED: '', BLUE: '', GREEN: '', YELLOW: '' };
+    if (!details) return reasons;
+    for (const d of details) {
+      if (d.reason && !reasons[d.team]) {
+        reasons[d.team] = d.reason;
+      }
+    }
+    return reasons;
+  };
+
   useEffect(() => {
     // 초기 로드: localStorage 즉시 표시 후 Supabase로 갱신
-    setPreviousConfirm(loadConfirmedCeremonyLocal());
-    loadConfirmedCeremony().then((c) => { if (c) setPreviousConfirm(c); });
+    const local = loadConfirmedCeremonyLocal();
+    if (local) {
+      setPreviousConfirm(local);
+      setBonusPoints(restoreBonusFromDetails(local.bonusDetails));
+      setBonusReasons(restoreReasonsFromDetails(local.bonusDetails));
+    }
+    loadConfirmedCeremony().then((c) => {
+      if (c) {
+        setPreviousConfirm(c);
+        setBonusPoints(restoreBonusFromDetails(c.bonusDetails));
+        setBonusReasons(restoreReasonsFromDetails(c.bonusDetails));
+      }
+    });
   }, []);
 
   // --- Date preset ---
@@ -331,7 +366,8 @@ export default function CeremonyPage() {
       const awardsData = await buildAwardsData(dateFrom, dateTo);
       setData(awardsData);
       setConfirmed(false);
-      setBonusPoints(zeroBonuses());
+      // 가산점은 유지 (새 집계해도 이전 가산점 보존)
+      // 명시적 초기화는 "가산점 초기화" 버튼으로만
     } catch { toast.error('데이터 로드 실패'); }
     finally { setLoading(false); }
   };
