@@ -69,10 +69,10 @@ function AvatarCircle({
   );
 }
 
-export default function EventDetailPage() {
+export default function EventDetailPage({ isPublic = false }: { isPublic?: boolean }) {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { openMemberProfile } = useMemberProfile();
+  const memberProfile = useMemberProfile();
 
   const [event, setEvent] = useState<AwanaEvent | null>(null);
   const [participants, setParticipants] = useState<EventParticipant[]>([]);
@@ -279,7 +279,7 @@ export default function EventDetailPage() {
                     return (
                       <button
                         key={p.id}
-                        onClick={() => openMemberProfile(member.id)}
+                        onClick={() => !isPublic && memberProfile.openMemberProfile(member.id)}
                         className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
                       >
                         <AvatarCircle name={member.name} avatarUrl={member.avatar_url} />
