@@ -17,6 +17,7 @@ import {
   UsersRound,
   BookOpen,
   Play,
+  Calendar,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -69,6 +70,12 @@ export const adminNavSections: NavSection[] = [
     title: '콘텐츠',
     items: [
       { label: '핸드북 관리', path: '/admin/handbook', icon: BookOpen },
+    ],
+  },
+  {
+    title: '이벤트',
+    items: [
+      { label: '이벤트 관리', path: '/admin/events', icon: Calendar },
     ],
   },
   {

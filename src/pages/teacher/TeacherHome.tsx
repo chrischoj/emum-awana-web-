@@ -9,6 +9,10 @@ import { getToday } from '../../lib/utils';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { SubmissionStatus, Member, Team, Club, Teacher, ActiveTeacherAssignment, Room } from '../../types/awana';
 import { groupTeachersByCategory, groupTeachersByTeam, isLeader } from '../../constants/teacherCategories';
+import { useNavigate } from 'react-router-dom';
+import { getActiveEvents } from '../../services/eventService';
+import { formatDateKorean, getDday } from '../../utils/dateUtils';
+import type { AwanaEvent, EventSchedule } from '../../types/awana';
 
 function getGradientClass(color?: string): string {
   const map: Record<string, string> = {
@@ -103,6 +107,8 @@ export default function TeacherHome() {
     error: assignmentError,
   } = useTeacherAssignment();
 
+  const navigate = useNavigate();
+  const [activeEvents, setActiveEvents] = useState<AwanaEvent[]>([]);
   const [roomSubmissions, setRoomSubmissions] = useState<RoomSubmissionInfo[]>([]);
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
 
@@ -248,6 +254,10 @@ export default function TeacherHome() {
     });
   };
 
+  useEffect(() => {
+    getActiveEvents().then(setActiveEvents).catch(() => {});
+  }, []);
+
   // 오늘 제출 상태 + 점수 존재 여부 로드 (교실 단위)
   const allAssigns = [...primaryAssignments, ...temporaryAssignments];
   useEffect(() => {
@@ -284,6 +294,16 @@ export default function TeacherHome() {
       .catch(() => { if (!stale) setRoomSubmissions([]); });
     return () => { stale = true; };
   }, [currentClub, allAssigns.length, assignedMembers]);
+
+  function getNextSchedule(event: AwanaEvent): EventSchedule | null {
+    const schedules = event.metadata?.schedules;
+    if (!schedules || schedules.length === 0) return null;
+    const today = new Date().toISOString().split('T')[0];
+    const upcoming = schedules
+      .filter((s) => s.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return upcoming[0] || schedules[schedules.length - 1];
+  }
 
   const getStatusLabel = (status: SubmissionStatus | null, hasScores: boolean) => {
     if (!status) {
@@ -418,6 +438,55 @@ export default function TeacherHome() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 이벤트 배너 */}
+      {activeEvents.length > 0 && (
+        <div className="space-y-3 mt-6">
+          {activeEvents.map((event) => {
+            const next = getNextSchedule(event);
+            const dday = next ? getDday(next.date) : null;
+            return (
+              <button
+                key={event.id}
+                onClick={() => navigate(`/teacher/events/${event.id}`)}
+                className="w-full text-left bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-gray-900">{event.name}</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    event.status === 'active'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {event.status === 'active' ? '진행중' : '예정'}
+                  </span>
+                </div>
+                {next && (
+                  <p className="text-sm text-gray-600 mb-1">
+                    다음 연습: {formatDateKorean(next.date)} {next.time} {next.location}
+                    {dday !== null && dday >= 0 && (
+                      <span className="ml-2 text-indigo-600 font-medium">
+                        {dday === 0 ? 'D-Day' : `D-${dday}`}
+                      </span>
+                    )}
+                  </p>
+                )}
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-red-500" />
+                    스팍스
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    티앤티
+                  </span>
+                  <span className="ml-auto text-indigo-600 font-medium">상세보기 →</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 

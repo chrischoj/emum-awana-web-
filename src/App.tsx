@@ -30,6 +30,7 @@ import RoomManagement from './pages/admin/RoomManagement';
 import ReportsPage from './pages/admin/ReportsPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import HandbookManagement from './pages/admin/HandbookManagement';
+import EventManagement from './pages/admin/EventManagement';
 
 // Member pages
 import MemberLandingPage from './pages/MemberLandingPage';
@@ -42,6 +43,7 @@ import AttendancePage from './pages/teacher/AttendancePage';
 import MemberProfilePage from './pages/teacher/MemberProfilePage';
 import ProfilePage from './pages/teacher/ProfilePage';
 import HandbookPage from './pages/teacher/HandbookPage';
+import EventDetailPage from './pages/teacher/EventDetailPage';
 
 // Role-based redirect component
 function RoleRedirect() {
@@ -135,6 +137,7 @@ function AppRoutes() {
           <Route path="/admin/ceremony-play" element={<CeremonyPlay />} />
           <Route path="/admin/rooms" element={<RoomManagement />} />
           <Route path="/admin/handbook" element={<HandbookManagement />} />
+          <Route path="/admin/events" element={<EventManagement />} />
           <Route path="/admin/reports" element={<ReportsPage />} />
           <Route path="/admin/settings" element={<SettingsPage />} />
         </Route>
@@ -148,6 +151,7 @@ function AppRoutes() {
           <Route path="/teacher/game" element={<GameScoringPage />} />
           <Route path="/teacher/attendance" element={<AttendancePage />} />
           <Route path="/teacher/handbook" element={<HandbookPage />} />
+          <Route path="/teacher/events/:eventId" element={<EventDetailPage />} />
           <Route path="/teacher/members/:id" element={<MemberProfilePage />} />
           <Route path="/teacher/profile" element={<ProfilePage />} />
         </Route>

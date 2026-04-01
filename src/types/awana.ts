@@ -12,6 +12,8 @@ export type BadgeType = 'handbook_completion' | 'attendance_perfect' | 'memoriza
 export type BadgeCategory = 'jewel' | 'promotion' | 'citation' | 'special';
 export type BadgeGroup = 'promotion' | 'podium' | 'gem' | 'completion' | 'review' | 'workbook' | 'multi_review' | 'currency' | 'pin' | 'recitation_pin';
 export type EnrollmentStatus = 'pending' | 'active' | 'inactive';
+export type EventStatus = 'upcoming' | 'active' | 'completed';
+export type EventParticipantRole = 'player' | 'coach' | 'assistant_coach' | 'observer';
 
 // ---- Core Entities ----
 
@@ -71,6 +73,7 @@ export interface Member {
   approved_by: string | null;
   approved_at: string | null;
   registered_via_room_id: string | null;
+  gender: 'M' | 'F' | null;
   created_at: string;
   updated_at: string;
 }
@@ -427,5 +430,45 @@ export interface Notification {
   metadata: Record<string, unknown>;
   read: boolean;
   created_at: string;
+}
+
+// ---- Events ----
+
+export interface EventSchedule {
+  order: number;
+  date: string;
+  time: string;
+  location: string;
+}
+
+export interface AwanaEvent {
+  id: string;
+  name: string;
+  description: string | null;
+  start_date: string;
+  end_date: string | null;
+  status: EventStatus;
+  visibility: boolean;
+  metadata: {
+    schedules?: EventSchedule[];
+    requirements?: string[];
+  };
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventParticipant {
+  id: string;
+  event_id: string;
+  member_id: string | null;
+  teacher_id: string | null;
+  club_type: 'sparks' | 'tnt';
+  role: EventParticipantRole;
+  sub_group: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  member?: Member;
+  teacher?: Teacher;
 }
 
