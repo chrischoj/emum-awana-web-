@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMemberProfile } from '../../contexts/MemberProfileContext';
-import { getEventById, getEventParticipants } from '../../services/eventService';
+import { getEventById, getEventParticipants, getPublicEvent } from '../../services/eventService';
 import { getKoreanAge, getSchoolGrade, gradeLabel, formatDateKorean, getDday } from '../../utils/dateUtils';
 import type { AwanaEvent, EventParticipant, EventSchedule } from '../../types/awana';
 import { ArrowLeft } from 'lucide-react';
@@ -86,12 +86,24 @@ export default function EventDetailPage({ isPublic = false }: { isPublic?: boole
     async function load() {
       try {
         setLoading(true);
-        const [ev, parts] = await Promise.all([
-          getEventById(eventId!),
-          getEventParticipants(eventId!),
-        ]);
-        setEvent(ev);
-        setParticipants(parts);
+        if (isPublic) {
+          // 공개 모드: RPC로 제한된 데이터만 조회
+          const result = await getPublicEvent(eventId!);
+          if (result) {
+            setEvent(result.event);
+            setParticipants(result.participants);
+          } else {
+            setError('이벤트를 찾을 수 없거나 비공개 상태입니다.');
+          }
+        } else {
+          // 인증 모드: 전체 데이터 조회
+          const [ev, parts] = await Promise.all([
+            getEventById(eventId!),
+            getEventParticipants(eventId!),
+          ]);
+          setEvent(ev);
+          setParticipants(parts);
+        }
       } catch (err) {
         setError('이벤트를 불러오는 데 실패했습니다.');
         console.error(err);

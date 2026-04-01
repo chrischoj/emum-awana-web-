@@ -141,6 +141,18 @@ export async function removeParticipant(participantId: string): Promise<void> {
   if (error) throw error;
 }
 
+// 공개 이벤트 조회 (RPC - RLS 우회, 제한된 필드만 반환)
+export async function getPublicEvent(eventId: string): Promise<{ event: AwanaEvent; participants: EventParticipant[] } | null> {
+  const { data, error } = await supabase.rpc('get_public_event', { p_event_id: eventId });
+
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    event: data.event as AwanaEvent,
+    participants: (data.participants as unknown as EventParticipant[]) || [],
+  };
+}
+
 // 이벤트 삭제
 export async function deleteEvent(eventId: string): Promise<void> {
   const { error } = await supabase
