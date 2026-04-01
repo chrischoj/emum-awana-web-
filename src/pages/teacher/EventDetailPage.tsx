@@ -138,8 +138,8 @@ export default function EventDetailPage({ isPublic = false }: { isPublic?: boole
   }
 
   const filtered = participants.filter((p) => p.club_type === clubTab);
-  const sparksCount = participants.filter((p) => p.club_type === 'sparks').length;
-  const tntCount = participants.filter((p) => p.club_type === 'tnt').length;
+  const sparksCount = participants.filter((p) => p.club_type === 'sparks' && p.role === 'player').length;
+  const tntCount = participants.filter((p) => p.club_type === 'tnt' && p.role === 'player').length;
 
   const players = filtered.filter((p) => p.role === 'player' && p.member);
   const coaches = filtered.filter((p) => (p.role === 'coach' || p.role === 'assistant_coach') && p.teacher);
