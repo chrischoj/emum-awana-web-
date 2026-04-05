@@ -130,7 +130,24 @@ export default function ScoringPage() {
           };
           scoreMap[member.id] = { ...state, total: calcTotal(state) };
         }
-        setScores(scoreMap);
+        // pending sync가 있는 항목은 로컬 값 유지 (race condition 방지)
+        if (pendingSyncs.current.size > 0) {
+          setScores((prev) => {
+            const merged = { ...scoreMap };
+            for (const key of pendingSyncs.current.keys()) {
+              const dashIdx = key.indexOf('-');
+              const memberId = key.slice(0, dashIdx);
+              const category = key.slice(dashIdx + 1) as ScoringCategory;
+              if (prev[memberId] && merged[memberId]) {
+                merged[memberId] = { ...merged[memberId], [category]: prev[memberId][category], total: 0 };
+                merged[memberId].total = calcTotal(merged[memberId]);
+              }
+            }
+            return merged;
+          });
+        } else {
+          setScores(scoreMap);
+        }
       } catch {
         // 네트워크 실패 시 캐시에서 복원
         const cached = restoreScores();
@@ -488,6 +505,8 @@ export default function ScoringPage() {
       setSubmission({ status: 'submitted' });
       setShowSubmitConfirm(false);
       toast.success('점수가 제출되었습니다');
+      // 서버 최종값으로 화면 동기화
+      await loadScores(false);
     } catch {
       toast.error('제출 실패');
     } finally {
