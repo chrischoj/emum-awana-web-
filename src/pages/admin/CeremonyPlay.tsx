@@ -517,42 +517,39 @@ export default function CeremonyPlay() {
   const flowOrder = DEFAULT_FLOW_ORDER;
   const [teamMembers, setTeamMembers] = useState<Record<string, Array<{name: string; avatar_url: string | null}>>>({});
 
-  // Fetch team members with avatars (sparks + tnt 모두 포함)
+  // Fetch team members with avatars (RPC로 공개 접근 지원)
   useEffect(() => {
     if (!data) return;
     (async () => {
       try {
-        // Get all teams
-        const { data: teams } = await supabase
-          .from('teams')
-          .select('id, name, club_id');
-        if (!teams) return;
-
-        // 같은 색상의 스팍스/T&T 팀 ID를 모두 수집
-        const teamColorToIds = new Map<string, string[]>();
-        for (const t of teams) {
-          const upperName = t.name?.toUpperCase();
-          if (['RED', 'BLUE', 'GREEN', 'YELLOW'].includes(upperName)) {
-            const ids = teamColorToIds.get(upperName) || [];
-            ids.push(t.id);
-            teamColorToIds.set(upperName, ids);
+        const { data: rpcResult, error } = await supabase.rpc('get_ceremony_members');
+        if (error || !rpcResult) {
+          console.error('[CeremonyPlay] RPC 실패, fallback 시도:', error);
+          // fallback: 인증 상태에서는 직접 쿼리
+          const { data: teams } = await supabase.from('teams').select('id, name, club_id');
+          if (!teams) return;
+          const teamColorToIds = new Map<string, string[]>();
+          for (const t of teams) {
+            const upperName = t.name?.toUpperCase();
+            if (['RED', 'BLUE', 'GREEN', 'YELLOW'].includes(upperName)) {
+              const ids = teamColorToIds.get(upperName) || [];
+              ids.push(t.id);
+              teamColorToIds.set(upperName, ids);
+            }
           }
+          const result: Record<string, Array<{name: string; avatar_url: string | null}>> = {};
+          for (const [teamName, teamIds] of teamColorToIds) {
+            const { data: members } = await supabase
+              .from('members')
+              .select('name, avatar_url')
+              .in('team_id', teamIds)
+              .eq('active', true);
+            result[teamName] = members || [];
+          }
+          setTeamMembers(result);
+          return;
         }
-
-        // Get members with avatars grouped by team color (sparks + tnt 합산)
-        const result: Record<string, Array<{name: string; avatar_url: string | null}>> = {};
-        for (const [teamName, teamIds] of teamColorToIds) {
-          const { data: members } = await supabase
-            .from('members')
-            .select('name, avatar_url')
-            .in('team_id', teamIds)
-            .eq('active', true);
-          result[teamName] = members || [];
-        }
-        const totalCount = Object.values(result).reduce((sum, arr) => sum + arr.length, 0);
-        // console.log('[CeremonyPlay] 팀별 멤버 수:', Object.fromEntries(Object.entries(result).map(([k, v]) => [k, v.length])), '| 총:', totalCount);
-        // console.log('[CeremonyPlay] teamColorToIds:', Object.fromEntries([...teamColorToIds.entries()].map(([k, v]) => [k, `${v.length}팀 (${v.join(', ')})`])));
-        setTeamMembers(result);
+        setTeamMembers(rpcResult as Record<string, Array<{name: string; avatar_url: string | null}>>);
       } catch (err) { console.error('[CeremonyPlay] 멤버 로드 실패:', err); }
     })();
   }, [data]);
