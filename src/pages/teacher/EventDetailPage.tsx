@@ -8,7 +8,14 @@ import { ArrowLeft, Flag, Grid3X3, ListChecks, MapPin, Search, Table2, Target, U
 
 type ClubTab = 'sparks' | 'tnt';
 type EventTeamTab = 'sparks-team-1' | 'tnt-team-2' | 'tnt-team-1';
-type LineupPlayer = { order: number; name: string; memberNames?: string[] };
+type LineupSession = 'morning' | 'afternoon';
+type LineupSessionPlayer = { name: string; memberNames?: string[] };
+type LineupPlayer = {
+  order: number;
+  name: string;
+  memberNames?: string[];
+  sessionPlayers?: Partial<Record<LineupSession, LineupSessionPlayer>>;
+};
 type LineupDutyType = 'pin' | 'shooter';
 type LineupDuty = { order: number; label: string; type: LineupDutyType };
 type LineupGame = { label: string; players: number[]; runner?: number; duties?: LineupDuty[]; allPlay?: boolean };
@@ -20,6 +27,7 @@ type EventLineup = {
   teamLabel: string;
   groupLabel: string;
   title: string;
+  morningGameCount: number;
   players: LineupPlayer[];
   games: LineupGame[];
 };
@@ -111,16 +119,33 @@ const EVENT_LINEUPS: EventLineup[] = [
     teamLabel: '스팍스 1팀',
     groupLabel: '스팍스 기준',
     title: '스팍스 1팀 경기 라인업',
+    morningGameCount: 10,
     players: [
       { order: 1, name: '최이안' },
-      { order: 2, name: '김지혁/은호', memberNames: ['김지혁', '강은호'] },
+      {
+        order: 2,
+        name: '김지혁/은호',
+        memberNames: ['김지혁', '강은호'],
+        sessionPlayers: {
+          morning: { name: '김지혁' },
+          afternoon: { name: '강은호' },
+        },
+      },
       { order: 3, name: '박서준' },
       { order: 4, name: '김주호' },
       { order: 5, name: '심예린' },
       { order: 6, name: '김율아' },
       { order: 7, name: '김시아' },
       { order: 8, name: '이서후' },
-      { order: 9, name: '김서은/주아', memberNames: ['김서은', '김주아'] },
+      {
+        order: 9,
+        name: '김서은/주아',
+        memberNames: ['김서은', '김주아'],
+        sessionPlayers: {
+          morning: { name: '김서은' },
+          afternoon: { name: '김주아' },
+        },
+      },
       { order: 10, name: '구교현' },
     ],
     games: SPARKS_TEAM_LINEUP_GAMES,
@@ -132,6 +157,7 @@ const EVENT_LINEUPS: EventLineup[] = [
     teamLabel: '티앤티 1팀',
     groupLabel: '남자부 기준',
     title: '티앤티 1팀 경기 라인업',
+    morningGameCount: 11,
     players: [
       { order: 1, name: '신예봄' },
       { order: 2, name: '한채아' },
@@ -153,6 +179,7 @@ const EVENT_LINEUPS: EventLineup[] = [
     teamLabel: '티앤티 2팀',
     groupLabel: '남자부 기준',
     title: '티앤티 2팀 경기 라인업',
+    morningGameCount: 11,
     players: [
       { order: 1, name: '이채후' },
       { order: 2, name: '최시윤' },
@@ -193,6 +220,17 @@ function getLineupPlayerNames(player: LineupPlayer): string[] {
   return player.memberNames ?? [player.name];
 }
 
+function resolveLineupPlayerForSession(player: LineupPlayer, session: LineupSession): LineupPlayer {
+  const sessionPlayer = player.sessionPlayers?.[session];
+  if (!sessionPlayer) return player;
+
+  return {
+    ...player,
+    name: sessionPlayer.name,
+    memberNames: sessionPlayer.memberNames ?? [sessionPlayer.name],
+  };
+}
+
 function getLineupRosterCount(lineup: EventLineup): number {
   return lineup.players.reduce((count, player) => count + getLineupPlayerNames(player).length, 0);
 }
@@ -227,9 +265,11 @@ function getDutyCellClass(type: LineupDutyType): string {
 }
 
 function getGameLineupPlayers(lineup: EventLineup, game: LineupGame): LineupPlayer[] {
+  const session = getGameSession(lineup, game);
+
   return lineup.players.filter((player) =>
     game.players.includes(player.order) || game.runner === player.order || Boolean(getGameDuty(game, player.order))
-  );
+  ).map((player) => resolveLineupPlayerForSession(player, session));
 }
 
 function getGameRosterCount(lineup: EventLineup, game: LineupGame): number {
@@ -265,6 +305,52 @@ function getLineupPlayerCount(teamTab: EventTeamTab): number {
   return EVENT_LINEUPS
     .filter((lineup) => lineup.teamTab === teamTab)
     .reduce((count, lineup) => count + getLineupRosterCount(lineup), 0);
+}
+
+function getLineupSession(lineup: EventLineup, gameIndex: number): LineupSession {
+  return gameIndex < lineup.morningGameCount ? 'morning' : 'afternoon';
+}
+
+function getGameSession(lineup: EventLineup, game: LineupGame): LineupSession {
+  return getLineupSession(lineup, lineup.games.indexOf(game));
+}
+
+function getSessionLabel(session: LineupSession): string {
+  return session === 'morning' ? '오전 경기' : '오후 경기';
+}
+
+function getSessionBadgeClass(session: LineupSession): string {
+  return session === 'morning'
+    ? 'bg-orange-100 text-orange-800 ring-1 ring-orange-200'
+    : 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200';
+}
+
+function getSessionHeaderClass(session: LineupSession): string {
+  return session === 'morning'
+    ? 'border-orange-200 bg-orange-50/95 text-orange-950'
+    : 'border-indigo-200 bg-indigo-50/95 text-indigo-950';
+}
+
+function getSessionCardClass(session: LineupSession): string {
+  return session === 'morning'
+    ? 'border-orange-200 bg-orange-50/70'
+    : 'border-indigo-200 bg-indigo-50/70';
+}
+
+function getSessionNumberClass(session: LineupSession): string {
+  return session === 'morning' ? 'bg-orange-600 text-white' : 'bg-indigo-600 text-white';
+}
+
+function getLineupSessionGames(lineup: EventLineup, session: LineupSession): LineupGame[] {
+  return session === 'morning'
+    ? lineup.games.slice(0, lineup.morningGameCount)
+    : lineup.games.slice(lineup.morningGameCount);
+}
+
+function getLineupSessionGameRange(lineup: EventLineup, session: LineupSession): string {
+  const games = getLineupSessionGames(lineup, session);
+  if (games.length === 0) return '미정';
+  return `${games[0].label} → ${games[games.length - 1].label}`;
 }
 
 function AvatarCircle({
@@ -388,6 +474,23 @@ function GameLineupSection({
                     </span>
                   </div>
                   <h2 className="mt-2 text-lg font-bold text-slate-950">{lineup.title}</h2>
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {(['morning', 'afternoon'] as LineupSession[]).map((session) => (
+                      <div
+                        key={session}
+                        className={`rounded-xl border px-3 py-2 shadow-sm ${getSessionCardClass(session)}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-black ${getSessionBadgeClass(session)}`}>
+                            {getSessionLabel(session)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs font-black leading-snug text-slate-800">
+                          {getLineupSessionGameRange(lineup, session)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2 text-center">
@@ -469,141 +572,180 @@ function GameLineupSection({
               {viewMode === 'games' && (
                 <div className="space-y-3">
                   {visibleGames.map((game, index) => {
+                    const originalIndex = lineup.games.indexOf(game);
+                    const session = getLineupSession(lineup, originalIndex);
+                    const previousVisibleGame = visibleGames[index - 1];
+                    const previousOriginalIndex = previousVisibleGame ? lineup.games.indexOf(previousVisibleGame) : -1;
+                    const shouldShowSessionHeader =
+                      index === 0 || getLineupSession(lineup, previousOriginalIndex) !== session;
                     const gamePlayers = getGameLineupPlayers(lineup, game);
                     const gameRosterCount = getGameRosterCount(lineup, game);
-                    const runnerPlayer = lineup.players.find((player) => player.order === game.runner);
+                    const runnerPlayer = game.runner
+                      ? gamePlayers.find((player) => player.order === game.runner)
+                      : undefined;
                     const dutyPlayers = gamePlayers.filter((player) => Boolean(getGameDuty(game, player.order)));
+                    const sessionSpecificPlayers = gamePlayers.filter((player) => {
+                      const basePlayer = lineup.players.find((item) => item.order === player.order);
+                      return Boolean(basePlayer?.sessionPlayers?.[session]);
+                    });
                     const firstPlayer = gamePlayers[0];
                     const lastPlayer = gamePlayers[gamePlayers.length - 1];
 
                     return (
-                      <article
-                        key={game.label}
-                        className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-xs font-black text-white">
-                            {index + 1}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-base font-black leading-tight text-slate-950">{game.label}</h3>
-                            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
-                              <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800 ring-1 ring-amber-200">
-                                {game.allPlay ? '전원 참여' : `참여 ${gameRosterCount}명`}
-                              </span>
-                              {game.allPlay && firstPlayer && lastPlayer && (
-                                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-slate-200">
-                                  No.{firstPlayer.order} → No.{lastPlayer.order} 순서
-                                </span>
-                              )}
-                              {runnerPlayer && (
-                                <span className="rounded-full bg-rose-100 px-2 py-1 text-rose-800 ring-1 ring-rose-200">
-                                  주자 No.{runnerPlayer.order} {runnerPlayer.name}
-                                </span>
-                              )}
-                              {dutyPlayers.length > 0 && (
-                                <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800 ring-1 ring-emerald-200">
-                                  특임 {dutyPlayers.length}명
-                                </span>
-                              )}
-                              {gamePlayers.length === 0 && (
-                                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 ring-1 ring-slate-200">
-                                  미정
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {game.allPlay && firstPlayer && lastPlayer ? (
-                          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                            <p className="text-sm font-black text-amber-950">
-                              전체 선수 {gameRosterCount}명이 순번대로 진행합니다.
-                            </p>
-                            <p className="mt-1 text-xs font-bold text-amber-800">
-                              시작 No.{firstPlayer.order} {firstPlayer.name} · 종료 No.{lastPlayer.order} {lastPlayer.name}
-                            </p>
-                            {runnerPlayer && (
-                              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-800 ring-1 ring-rose-200">
-                                <Flag className="h-3.5 w-3.5" />
-                                주자 No.{runnerPlayer.order} {runnerPlayer.name}
-                              </div>
-                            )}
-                            {(runnerPlayer || dutyPlayers.length > 0) && (
-                              <div className="mt-3 flex flex-wrap gap-1.5">
-                                {gamePlayers.map((player) => {
-                                  const role = getLineupPlayerRole(game, player.order);
-
-                                  return (
-                                    <span
-                                      key={`${player.order}-${player.name}`}
-                                      className={`flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-[11px] font-black ${
-                                        role ? getRoleBadgeClass(role) : 'bg-white text-amber-800 ring-1 ring-amber-200'
-                                      }`}
-                                    >
-                                      {player.order}
-                                      {role?.type === 'runner' && <Flag className="ml-1 h-3 w-3" />}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        ) : gamePlayers.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            {gamePlayers.map((player) => {
-                              const playerNames = getLineupPlayerNames(player);
-                              const playerParticipants = playerNames
-                                .map((name) => participantsByName.get(normalizeName(name)))
-                                .filter((participant): participant is EventParticipant => Boolean(participant));
-                              const member = playerParticipants.length === 1 ? playerParticipants[0].member : undefined;
-                              const role = getLineupPlayerRole(game, player.order);
-                              const RoleIcon = role?.type === 'runner' ? Flag : role?.type === 'shooter' ? Target : MapPin;
-
-                              return (
-                                <button
-                                  key={`${player.order}-${player.name}`}
-                                  type="button"
-                                  onClick={() => member && !isPublic && onMemberClick(member.id)}
-                                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition active:scale-[0.99] disabled:cursor-default ${
-                                    role
-                                      ? `${getRoleBadgeClass(role)} border-transparent`
-                                      : 'border-amber-200 bg-amber-50 text-amber-950'
-                                  }`}
-                                  disabled={!member || isPublic}
-                                >
-                                  <div className="relative shrink-0">
-                                    <LineupPlayerAvatarGroup
-                                      player={player}
-                                      participantsByName={participantsByName}
-                                      size="sm"
-                                    />
-                                    <span className="absolute -bottom-1 -right-1 rounded-full bg-slate-950 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                                      {player.order}
-                                    </span>
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                      <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-black text-slate-800">
-                                        No.{player.order}
-                                      </span>
-                                      <span className="truncate text-sm font-black text-slate-950">{player.name}</span>
-                                    </div>
-                                  </div>
-                                  {role ? (
-                                    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[11px] font-black">
-                                      <RoleIcon className="h-3.5 w-3.5" />
-                                      {role.label}
-                                    </span>
-                                  ) : (
-                                    <UserRoundCheck className="h-4 w-4 shrink-0" />
-                                  )}
-                                </button>
-                              );
-                            })}
+                      <div key={game.label} className="space-y-2">
+                        {shouldShowSessionHeader && (
+                          <div className={`sticky top-[57px] z-[1] flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm backdrop-blur ${getSessionHeaderClass(session)}`}>
+                            <span className={`rounded-full px-2.5 py-1 text-xs font-black ${getSessionBadgeClass(session)}`}>
+                              {getSessionLabel(session)}
+                            </span>
+                            <span className="min-w-0 truncate text-xs font-black">
+                              {getLineupSessionGameRange(lineup, session)}
+                            </span>
                           </div>
                         )}
-                      </article>
+
+                        <article
+                          className={`rounded-2xl border p-3 shadow-sm ${getSessionCardClass(session)}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-black ${getSessionNumberClass(session)}`}>
+                              {originalIndex + 1}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <h3 className="text-base font-black leading-tight text-slate-950">{game.label}</h3>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${getSessionBadgeClass(session)}`}>
+                                  {session === 'morning' ? '오전' : '오후'}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-bold">
+                                <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800 ring-1 ring-amber-200">
+                                  {game.allPlay ? '전원 참여' : `참여 ${gameRosterCount}명`}
+                                </span>
+                                {game.allPlay && firstPlayer && lastPlayer && (
+                                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700 ring-1 ring-slate-200">
+                                    No.{firstPlayer.order} → No.{lastPlayer.order} 순서
+                                  </span>
+                                )}
+                                {runnerPlayer && (
+                                  <span className="rounded-full bg-rose-100 px-2 py-1 text-rose-800 ring-1 ring-rose-200">
+                                    주자 No.{runnerPlayer.order} {runnerPlayer.name}
+                                  </span>
+                                )}
+                                {dutyPlayers.length > 0 && (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800 ring-1 ring-emerald-200">
+                                    특임 {dutyPlayers.length}명
+                                  </span>
+                                )}
+                                {sessionSpecificPlayers.length > 0 && (
+                                  <span className="rounded-full bg-white/90 px-2 py-1 text-slate-700 ring-1 ring-slate-200">
+                                    공유 순번 {sessionSpecificPlayers.map((player) => `No.${player.order} ${player.name}`).join(' · ')}
+                                  </span>
+                                )}
+                                {gamePlayers.length === 0 && (
+                                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-500 ring-1 ring-slate-200">
+                                    미정
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {game.allPlay && firstPlayer && lastPlayer ? (
+                            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                              <p className="text-sm font-black text-amber-950">
+                                전체 선수 {gameRosterCount}명이 순번대로 진행합니다.
+                              </p>
+                              <p className="mt-1 text-xs font-bold text-amber-800">
+                                시작 No.{firstPlayer.order} {firstPlayer.name} · 종료 No.{lastPlayer.order} {lastPlayer.name}
+                              </p>
+                              {sessionSpecificPlayers.length > 0 && (
+                                <p className="mt-1 text-xs font-black text-slate-700">
+                                  공유 순번: {sessionSpecificPlayers.map((player) => `No.${player.order} ${player.name}`).join(' · ')}
+                                </p>
+                              )}
+                              {runnerPlayer && (
+                                <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1.5 text-xs font-black text-rose-800 ring-1 ring-rose-200">
+                                  <Flag className="h-3.5 w-3.5" />
+                                  주자 No.{runnerPlayer.order} {runnerPlayer.name}
+                                </div>
+                              )}
+                              {(runnerPlayer || dutyPlayers.length > 0) && (
+                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                  {gamePlayers.map((player) => {
+                                    const role = getLineupPlayerRole(game, player.order);
+
+                                    return (
+                                      <span
+                                        key={`${player.order}-${player.name}`}
+                                        className={`flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-[11px] font-black ${
+                                          role ? getRoleBadgeClass(role) : 'bg-white text-amber-800 ring-1 ring-amber-200'
+                                        }`}
+                                      >
+                                        {player.order}
+                                        {role?.type === 'runner' && <Flag className="ml-1 h-3 w-3" />}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          ) : gamePlayers.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {gamePlayers.map((player) => {
+                                const playerNames = getLineupPlayerNames(player);
+                                const playerParticipants = playerNames
+                                  .map((name) => participantsByName.get(normalizeName(name)))
+                                  .filter((participant): participant is EventParticipant => Boolean(participant));
+                                const member = playerParticipants.length === 1 ? playerParticipants[0].member : undefined;
+                                const role = getLineupPlayerRole(game, player.order);
+                                const RoleIcon = role?.type === 'runner' ? Flag : role?.type === 'shooter' ? Target : MapPin;
+
+                                return (
+                                  <button
+                                    key={`${player.order}-${player.name}`}
+                                    type="button"
+                                    onClick={() => member && !isPublic && onMemberClick(member.id)}
+                                    className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition active:scale-[0.99] disabled:cursor-default ${
+                                      role
+                                        ? `${getRoleBadgeClass(role)} border-transparent`
+                                        : 'border-amber-200 bg-amber-50 text-amber-950'
+                                    }`}
+                                    disabled={!member || isPublic}
+                                  >
+                                    <div className="relative shrink-0">
+                                      <LineupPlayerAvatarGroup
+                                        player={player}
+                                        participantsByName={participantsByName}
+                                        size="sm"
+                                      />
+                                      <span className="absolute -bottom-1 -right-1 rounded-full bg-slate-950 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                                        {player.order}
+                                      </span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-black text-slate-800">
+                                          No.{player.order}
+                                        </span>
+                                        <span className="truncate text-sm font-black text-slate-950">{player.name}</span>
+                                      </div>
+                                    </div>
+                                    {role ? (
+                                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/80 px-2 py-1 text-[11px] font-black">
+                                        <RoleIcon className="h-3.5 w-3.5" />
+                                        {role.label}
+                                      </span>
+                                    ) : (
+                                      <UserRoundCheck className="h-4 w-4 shrink-0" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </article>
+                      </div>
                     );
                   })}
                 </div>
@@ -711,15 +853,24 @@ function GameLineupSection({
                     </thead>
                     <tbody>
                       {visibleGames.map((game) => {
+                        const session = getGameSession(lineup, game);
                         const hasPlayers = game.players.length > 0;
 
                         return (
-                          <tr key={game.label} className="odd:bg-white even:bg-slate-50">
+                          <tr
+                            key={game.label}
+                            className={session === 'morning' ? 'bg-orange-50/40' : 'bg-indigo-50/40'}
+                          >
                             <th className="sticky left-0 z-[1] border-r border-t border-slate-200 bg-inherit px-3 py-2.5 text-xs font-bold text-slate-800">
-                              <div className="flex items-center justify-between gap-2">
-                                <span>{game.label}</span>
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${getSessionBadgeClass(session)}`}>
+                                    {session === 'morning' ? '오전' : '오후'}
+                                  </span>
+                                  <span className="min-w-0 truncate">{game.label}</span>
+                                </div>
                                 {!hasPlayers && (
-                                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                                  <span className="w-fit rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
                                     미정
                                   </span>
                                 )}
