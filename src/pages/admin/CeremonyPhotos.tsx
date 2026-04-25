@@ -22,6 +22,8 @@ interface CeremonyPhotosProps {
   height?: number;
   compact?: boolean;
   effectPreset?: CeremonyEffectPresetId;
+  winnerLabel?: string;
+  winnerScore?: number;
   isActive: boolean;
   onBurst?: () => void; // burst 시 효과음 콜백
 }
@@ -81,6 +83,66 @@ function generateLoserPositions(count: number, compact = false): Array<{ top: st
   return positions;
 }
 
+function generateAroundStarFinalPositions(count: number, compact = false): Array<{ top: string; left: string; rot: number }> {
+  if (count === 0) return [];
+  const centerX = 50;
+  const centerY = compact ? 51 : 52;
+  const radiusX = compact ? 35 : 39;
+  const radiusY = compact ? 19 : 22;
+  const start = Math.PI * 0.92;
+  const end = Math.PI * 2.08;
+  return Array.from({ length: count }, (_, i) => {
+    const ratio = count === 1 ? 0.5 : i / (count - 1);
+    const angle = start + (end - start) * ratio;
+    return {
+      top: `${(centerY + Math.sin(angle) * radiusY).toFixed(1)}%`,
+      left: `${(centerX + Math.cos(angle) * radiusX).toFixed(1)}%`,
+      rot: ((i * 13 + 4) % 18) - 9,
+    };
+  });
+}
+
+function getAroundStarOrbitPoint(angle: number, compact = false, radiusScale = 1) {
+  const centerX = 50;
+  const centerY = compact ? 53 : 54;
+  const radiusX = (compact ? 38 : 43) * radiusScale;
+  const radiusY = (compact ? 17 : 20) * radiusScale;
+  return {
+    top: `${(centerY + Math.sin(angle) * radiusY).toFixed(1)}%`,
+    left: `${(centerX + Math.cos(angle) * radiusX).toFixed(1)}%`,
+  };
+}
+
+function generateAroundStarAmbientPositions(count: number, compact = false): Array<{ top: string; left: string; rot: number }> {
+  if (count === 0) return [];
+  const cols = compact ? 5 : 7;
+  const rows = Math.max(1, Math.ceil(count / cols));
+  const topMin = compact ? 12 : 9;
+  const topMax = compact ? 88 : 90;
+  const leftMin = compact ? 8 : 6;
+  const leftMax = compact ? 92 : 94;
+  return Array.from({ length: count }, (_, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const colRatio = cols === 1 ? 0.5 : col / (cols - 1);
+    const rowRatio = rows === 1 ? 0.5 : row / (rows - 1);
+    let left = leftMin + colRatio * (leftMax - leftMin) + (((row * 13 + col * 7) % 7) - 3);
+    let top = topMin + rowRatio * (topMax - topMin) + (((row * 11 + col * 5) % 9) - 4);
+
+    // 중앙 그래프와 우승 얼굴 궤도 핵심부는 살짝 비워서 겹침을 줄인다.
+    if (left > 33 && left < 67 && top > 34 && top < 70) {
+      top += top < 52 ? -16 : 16;
+      left += col < cols / 2 ? -10 : 10;
+    }
+
+    return {
+      top: `${Math.max(6, Math.min(94, top)).toFixed(1)}%`,
+      left: `${Math.max(4, Math.min(96, left)).toFixed(1)}%`,
+      rot: ((i * 17 + 7) % 22) - 11,
+    };
+  });
+}
+
 // ─── Helpers ───
 function renderAvatar(
   avatarUrl: string | null,
@@ -129,6 +191,8 @@ export default function CeremonyPhotos({
   height = 900,
   compact = false,
   effectPreset = DEFAULT_CEREMONY_EFFECT_PRESET,
+  winnerLabel,
+  winnerScore,
   isActive,
   onBurst,
 }: CeremonyPhotosProps) {
@@ -136,7 +200,9 @@ export default function CeremonyPhotos({
   const [heroIndex, setHeroIndex] = useState(-1);
   const [shuffledOrder, setShuffledOrder] = useState<number[]>([]);
   const [celebrationPhase, setCelebrationPhase] = useState<CelebrationPhase>('settling');
+  const [aroundFocusIndex, setAroundFocusIndex] = useState(-1);
   const isSpotlightEffect = effectPreset === 'golden-spotlight';
+  const isMountainEffect = effectPreset === 'mountain-cinema';
   const effectAccent = isSpotlightEffect ? '#FACC15' : '#FFD700';
   const effectAccentSoft = isSpotlightEffect ? 'rgba(250,204,21,0.45)' : 'rgba(255,215,0,0.35)';
   const effectGlow = isSpotlightEffect ? 'rgba(245,158,11,0.62)' : 'rgba(255,215,0,0.5)';
@@ -147,6 +213,7 @@ export default function CeremonyPhotos({
       setPhotoPhase('orbit');
       setHeroIndex(-1);
       setCelebrationPhase('settling');
+      setAroundFocusIndex(-1);
       return;
     }
 
@@ -162,6 +229,7 @@ export default function CeremonyPhotos({
     setPhotoPhase('orbit');
     setHeroIndex(-1);
     setCelebrationPhase('settling');
+    setAroundFocusIndex(-1);
 
     // orbit -> hero after 2.2s
     const t1 = setTimeout(() => {
@@ -175,6 +243,16 @@ export default function CeremonyPhotos({
       heroTimers.push(setTimeout(() => {
         setHeroIndex(idx);
       }, 2200 + idx * 1200));
+    }
+
+    const aroundFocusTimers: ReturnType<typeof setTimeout>[] = [];
+    if (isMountainEffect) {
+      const orbitDuration = 7.1;
+      for (let idx = 0; idx < winnerCount; idx++) {
+        const delay = 0.35 + idx * 0.54;
+        aroundFocusTimers.push(setTimeout(() => setAroundFocusIndex(idx), (delay + orbitDuration * 0.58) * 1000));
+      }
+      aroundFocusTimers.push(setTimeout(() => setAroundFocusIndex(-1), (0.35 + Math.max(winnerCount - 1, 0) * 0.54 + orbitDuration * 0.9) * 1000));
     }
 
     // hero -> done after all winners revealed + 0.8s
@@ -196,6 +274,7 @@ export default function CeremonyPhotos({
       clearTimeout(t4);
       clearTimeout(t5);
       heroTimers.forEach(clearTimeout);
+      aroundFocusTimers.forEach(clearTimeout);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
@@ -208,6 +287,361 @@ export default function CeremonyPhotos({
   const winPos = generateWinnerPositions(winners.length, isCompact);
   const loserSz = width < 768 ? 34 : isCompact ? 36 : 60;
   const winSz = width < 768 ? 64 : isCompact ? 72 : 140;
+
+  if (isMountainEffect) {
+    const aroundWinners = winners.length > 0 ? winners : allPhotos.filter(photo => photo.isWinner);
+    const aroundLosers = losers.length > 0 ? losers : allPhotos.filter(photo => !photo.isWinner);
+    const finalPos = generateAroundStarFinalPositions(aroundWinners.length, isCompact);
+    const ambientPos = generateAroundStarAmbientPositions(aroundLosers.length, isCompact);
+    const orbitSz = width < 768 ? 66 : isCompact ? 84 : 120;
+    const ambientSz = width < 768 ? 28 : isCompact ? 34 : 48;
+    const orbitCenterY = isCompact ? 52 : 54;
+    const orbitOuterW = isCompact ? 82 : 84;
+    const orbitOuterH = isCompact ? 40 : 43;
+    const orbitInnerW = isCompact ? 68 : 70;
+    const orbitInnerH = isCompact ? 31 : 34;
+    const championTeam = (aroundWinners[0]?.team || 'BLUE') as Team;
+    const championColor = teamColors[championTeam] ?? teamColors.BLUE;
+    const championLabel = winnerLabel || championTeam;
+    const championScore = typeof winnerScore === 'number' ? winnerScore.toLocaleString() : null;
+    const orbitFirstDelay = 0.35;
+    const orbitStagger = 0.54;
+    const orbitDuration = 7.1;
+    const lastOrbitDelay = orbitFirstDelay + Math.max(aroundWinners.length - 1, 0) * orbitStagger;
+    const finalGatherAt = lastOrbitDelay + orbitDuration + 0.35;
+    const finalBurstAt = finalGatherAt + 0.65;
+    const finalSettleAt = finalBurstAt + 0.85;
+    const finalBadgeDelay = finalSettleAt + 0.2;
+
+    return (
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        pointerEvents: 'none',
+        zIndex: 10,
+        overflow: 'hidden',
+        borderRadius: 24,
+        perspective: 1200,
+      }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.82, rotate: -8 }}
+          animate={{ opacity: 0.52, scale: 1, rotate: 352 }}
+          transition={{
+            opacity: { duration: 1.4, ease: 'easeOut' },
+            scale: { duration: 2.4, ease: 'easeOut' },
+            rotate: { duration: 18, repeat: Infinity, ease: 'linear' },
+          }}
+          style={{
+            position: 'absolute',
+            top: `${orbitCenterY - orbitOuterH / 2}%`,
+            left: `${(100 - orbitOuterW) / 2}%`,
+            width: `${orbitOuterW}%`,
+            height: `${orbitOuterH}%`,
+            borderRadius: '50%',
+            border: '3px solid rgba(250,204,21,0.42)',
+            boxShadow: `0 0 34px rgba(250,204,21,0.26), inset 0 0 22px ${championColor.glow}`,
+            background: 'linear-gradient(90deg, transparent 0%, rgba(250,204,21,0.18) 48%, rgba(255,255,255,0.34) 50%, rgba(250,204,21,0.18) 52%, transparent 100%)',
+            zIndex: 1,
+          }}
+        />
+        <motion.div
+          initial={{ opacity: 0, rotate: 12 }}
+          animate={{ opacity: 0.62, rotate: -348 }}
+          transition={{
+            opacity: { duration: 1.6, ease: 'easeOut' },
+            rotate: { duration: 24, repeat: Infinity, ease: 'linear' },
+          }}
+          style={{
+          position: 'absolute',
+          top: `${orbitCenterY - orbitInnerH / 2}%`,
+          left: `${(100 - orbitInnerW) / 2}%`,
+          width: `${orbitInnerW}%`,
+          height: `${orbitInnerH}%`,
+          borderRadius: '50%',
+          border: '1px solid rgba(255,255,255,0.28)',
+          boxShadow: '0 0 22px rgba(255,255,255,0.15)',
+          zIndex: 1,
+        }} />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.6 }}
+          animate={{ opacity: [0, 0.5, 0.24], scale: [0.7, 1.1, 1] }}
+          transition={{ duration: 5.2, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            top: isCompact ? '52%' : '54%',
+            left: '50%',
+            width: isCompact ? 260 : 380,
+            height: isCompact ? 260 : 380,
+            marginLeft: isCompact ? -130 : -190,
+            marginTop: isCompact ? -130 : -190,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, rgba(255,255,255,0.34) 0%, ${championColor.glow} 36%, transparent 70%)`,
+            filter: 'blur(10px)',
+            zIndex: 0,
+          }}
+        />
+
+        {ambientPos.map((pos, i) => {
+          const p = aroundLosers[i];
+          if (!p) return null;
+          const tc = teamColors[p.team as Team];
+          return (
+            <motion.div
+              key={`around-ambient-${i}`}
+              initial={{ top: '52%', left: '50%', scale: 0.35, opacity: 0, rotate: pos.rot - 14 }}
+              animate={{
+                top: pos.top,
+                left: pos.left,
+                scale: [0.86, 1.03, 0.94],
+                opacity: [0, 0.22 + (i % 4) * 0.025, 0.14 + (i % 3) * 0.03],
+                rotate: pos.rot,
+              }}
+              transition={{
+                top: { duration: 1.8, delay: 0.4 + i * 0.045, ease: [0.16, 1, 0.3, 1] },
+                left: { duration: 1.8, delay: 0.4 + i * 0.045, ease: [0.16, 1, 0.3, 1] },
+                scale: { duration: 5.2 + (i % 3) * 0.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.08 },
+                opacity: { duration: 4.8 + (i % 4) * 0.4, repeat: Infinity, ease: 'easeInOut', delay: 0.6 + i * 0.06 },
+                rotate: { duration: 1.8, delay: 0.4 + i * 0.045, ease: 'easeOut' },
+              }}
+              style={{
+                position: 'absolute',
+                width: ambientSz,
+                height: ambientSz,
+                borderRadius: '50%',
+                transform: 'translate(-50%, -50%)',
+                overflow: 'hidden',
+                border: `2px solid ${tc.bg}55`,
+                boxShadow: `0 0 16px ${tc.glow}`,
+                filter: 'grayscale(0.25) saturate(0.7) brightness(0.82)',
+                zIndex: 2,
+              }}
+            >
+              {renderAvatar(p.avatar_url, p.name, ambientSz, tc)}
+            </motion.div>
+          );
+        })}
+
+        {aroundWinners.map((p, i) => {
+          if (!p) return null;
+          const tc = teamColors[p.team as Team];
+          const pos = finalPos[i];
+          const isFocused = aroundFocusIndex === i;
+          const orbitAngle = (i / Math.max(aroundWinners.length, 1)) * Math.PI * 2 - Math.PI * 0.62;
+          const rear = getAroundStarOrbitPoint(orbitAngle + Math.PI * 0.85, isCompact, 1.08);
+          const side = getAroundStarOrbitPoint(orbitAngle + Math.PI * 1.55, isCompact, 1.14);
+          const front = getAroundStarOrbitPoint(orbitAngle + Math.PI * 2.2, isCompact, 1.02);
+          const frontHold = getAroundStarOrbitPoint(orbitAngle + Math.PI * 2.33, isCompact, 1.02);
+          const startLeft = i % 2 === 0 ? `${-12 - (i % 3) * 5}%` : `${112 + (i % 3) * 5}%`;
+          const startTop = `${70 + (i * 13) % 24}%`;
+          const delay = orbitFirstDelay + i * orbitStagger;
+          const duration = finalSettleAt - delay;
+          const finalTopNumber = parseFloat(pos.top);
+          const finalLeftNumber = parseFloat(pos.left);
+          const centerTop = `${orbitCenterY}%`;
+          const centerLeft = '50%';
+          const burstTop = `${(orbitCenterY + (finalTopNumber - orbitCenterY) * 1.24).toFixed(1)}%`;
+          const burstLeft = `${(50 + (finalLeftNumber - 50) * 1.18).toFixed(1)}%`;
+          const toLocalTime = (absoluteSecond: number) => Math.max(0, Math.min(1, (absoluteSecond - delay) / duration));
+          return (
+            <motion.div
+              key={`around-star-${i}`}
+              initial={{
+                top: startTop,
+                left: startLeft,
+                scale: 2.7,
+                opacity: 0,
+                rotate: pos.rot + (i % 2 === 0 ? -28 : 28),
+              }}
+              animate={{
+                top: [startTop, rear.top, side.top, front.top, frontHold.top, pos.top, centerTop, burstTop, pos.top],
+                left: [startLeft, rear.left, side.left, front.left, frontHold.left, pos.left, centerLeft, burstLeft, pos.left],
+                scale: [2.7, 0.46, 1.1, 3.05, 3.16, 1, 0.34, 1.62, 1],
+                opacity: [0, 0.42, 0.84, 1, 1, 1, 1, 1, 1],
+                rotate: [pos.rot - 40, pos.rot - 12, pos.rot + 8, pos.rot + 21, pos.rot + 14, pos.rot, pos.rot - 8, pos.rot + 12, pos.rot],
+              }}
+              transition={{
+                duration,
+                delay,
+                ease: [0.16, 1, 0.3, 1],
+                times: [
+                  0,
+                  toLocalTime(delay + orbitDuration * 0.17),
+                  toLocalTime(delay + orbitDuration * 0.4),
+                  toLocalTime(delay + orbitDuration * 0.63),
+                  toLocalTime(delay + orbitDuration * 0.82),
+                  toLocalTime(delay + orbitDuration),
+                  toLocalTime(finalGatherAt),
+                  toLocalTime(finalBurstAt),
+                  1,
+                ],
+              }}
+              style={{
+                position: 'absolute',
+                width: orbitSz,
+                height: orbitSz,
+                borderRadius: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: isFocused ? 120 : 30 + i,
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              <motion.div
+                animate={{ opacity: [0, 0.18, 0.55, 0.32, 0], scaleX: [0.4, 1.1, 1.9, 1.3, 0.6] }}
+                transition={{ duration, delay, ease: 'easeInOut', times: [0, 0.24, 0.5, 0.76, 1] }}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  right: '54%',
+                  width: orbitSz * 1.85,
+                  height: Math.max(8, orbitSz * 0.16),
+                  transform: 'translateY(-50%) rotate(-13deg)',
+                  borderRadius: 999,
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.55) 45%, rgba(250,204,21,0.58) 72%, transparent 100%)',
+                  filter: 'blur(4px)',
+                  transformOrigin: 'right center',
+                  zIndex: -1,
+                }}
+              />
+              <motion.div
+                animate={{ y: [0, -6, 0], scale: [1, 1.05, 1] }}
+                transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut', delay: i * 0.13 + 6.8 }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: `4px solid ${championColor.mid}`,
+                  boxShadow: `0 0 32px rgba(250,204,21,0.68), 0 14px 30px rgba(0,0,0,0.34), 0 0 18px ${tc.glow}`,
+                  background: '#0f172a',
+                }}
+              >
+                {renderAvatar(p.avatar_url, p.name, orbitSz, tc, true)}
+              </motion.div>
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginTop: 5,
+                padding: '2px 8px',
+                borderRadius: 999,
+                background: `linear-gradient(135deg, ${championColor.bg}, ${championColor.dark})`,
+                color: '#fff7ed',
+                border: '1px solid rgba(250,204,21,0.55)',
+                fontSize: width < 768 ? '0.5rem' : isCompact ? '0.62rem' : '0.78rem',
+                fontWeight: 900,
+                whiteSpace: 'nowrap',
+                boxShadow: '0 6px 16px rgba(0,0,0,0.28)',
+              }}>{p.name}</div>
+            </motion.div>
+          );
+        })}
+
+        <motion.div
+          initial={{ scale: 0.35, opacity: 0 }}
+          animate={{ scale: [0.35, 1.55, 2.55], opacity: [0, 0.58, 0] }}
+          transition={{ duration: 1.15, delay: finalGatherAt, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            top: `${orbitCenterY}%`,
+            left: '50%',
+            width: isCompact ? 150 : 220,
+            height: isCompact ? 150 : 220,
+            marginLeft: isCompact ? -75 : -110,
+            marginTop: isCompact ? -75 : -110,
+            borderRadius: '50%',
+            border: `3px solid ${championColor.mid}`,
+            boxShadow: `0 0 40px rgba(250,204,21,0.4), inset 0 0 24px ${championColor.glow}`,
+            zIndex: 90,
+          }}
+        />
+        <motion.div
+          initial={{ scale: 0.2, opacity: 0 }}
+          animate={{ scale: [0.2, 3.1], opacity: [0.76, 0] }}
+          transition={{ duration: 0.82, delay: finalBurstAt, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            top: `${orbitCenterY}%`,
+            left: '50%',
+            width: isCompact ? 64 : 90,
+            height: isCompact ? 64 : 90,
+            marginLeft: isCompact ? -32 : -45,
+            marginTop: isCompact ? -32 : -45,
+            borderRadius: '50%',
+            background: `radial-gradient(circle, rgba(255,255,255,0.88) 0%, ${championColor.mid} 32%, transparent 70%)`,
+            zIndex: 92,
+          }}
+        />
+
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.84 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8, delay: finalBadgeDelay, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: isCompact ? '6%' : '7%',
+            transform: 'translateX(-50%)',
+            zIndex: 12,
+            minWidth: width < 768 ? 210 : isCompact ? 260 : 360,
+            padding: width < 768 ? '8px 18px' : isCompact ? '9px 24px' : '12px 36px',
+            borderRadius: 28,
+            background: 'linear-gradient(135deg, rgba(15,23,42,0.78), rgba(30,41,59,0.68))',
+            border: `2px solid ${championColor.mid}`,
+            color: '#FEF3C7',
+            textAlign: 'center',
+            boxShadow: `0 0 42px rgba(250,204,21,0.28), 0 0 30px ${championColor.glow}`,
+          }}
+        >
+          <div style={{
+            fontFamily: "'Noto Sans KR', sans-serif",
+            fontSize: width < 768 ? '0.62rem' : isCompact ? '0.72rem' : '0.9rem',
+            fontWeight: 900,
+            color: '#FDE68A',
+            letterSpacing: 4,
+            marginBottom: 2,
+          }}>
+            최종 우승
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: width < 768 ? 8 : 14,
+            flexWrap: 'wrap',
+          }}>
+            <span style={{
+              fontSize: width < 768 ? '1rem' : isCompact ? '1.2rem' : '1.55rem',
+              filter: 'drop-shadow(0 0 12px rgba(250,204,21,0.72))',
+            }}>🏆</span>
+            <span style={{
+              fontFamily: "'Black Han Sans', sans-serif",
+              fontSize: width < 768 ? '1.55rem' : isCompact ? '2rem' : '2.7rem',
+              color: championColor.mid,
+              letterSpacing: width < 768 ? 3 : 6,
+              textShadow: `0 0 30px ${championColor.glow}, 0 2px 8px rgba(0,0,0,0.35)`,
+            }}>
+              {championLabel}
+            </span>
+            {championScore && (
+              <span style={{
+                fontFamily: "'Black Han Sans', sans-serif",
+                fontSize: width < 768 ? '0.9rem' : isCompact ? '1.05rem' : '1.35rem',
+                color: championColor.dark,
+                background: championColor.light,
+                border: `2px solid ${championColor.mid}`,
+                borderRadius: 999,
+                padding: width < 768 ? '3px 9px' : '4px 14px',
+                boxShadow: `0 0 18px ${championColor.glow}`,
+              }}>
+                {championScore}점
+              </span>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   // Celebration offset calculator for winner positions
   function getCelebrationTransform(pos: { top: string; left: string }, _index: number) {

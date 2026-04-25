@@ -10,8 +10,14 @@ export const CEREMONY_EFFECT_PRESETS = [
   {
     id: 'golden-spotlight',
     name: '골든 스포트라이트',
-    badge: '신규',
+    badge: '2번',
     description: '금빛 조명과 별빛 파티클로 우승팀 얼굴과 점수를 더 또렷하게 띄우는 집중형 연출',
+  },
+  {
+    id: 'mountain-cinema',
+    name: '시네마틱 어라운드 스타',
+    badge: '신규',
+    description: '기존 최종 그래프를 무대로 우승 아이들이 토성 고리처럼 돌다가 원근감 있게 모이는 영화형 연출',
   },
 ] as const;
 

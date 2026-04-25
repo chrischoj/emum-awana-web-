@@ -1072,6 +1072,8 @@ export default function CeremonyPlay() {
                     height={height}
                     compact={compactGrandWinner}
                     effectPreset={effectPreset}
+                    winnerLabel={tiedTeams.join(' · ')}
+                    winnerScore={Math.max(...tiedTeams.map(t => totals.total[t] || 0))}
                     isActive={currentStep?.id === 'grand_winner'}
                     onBurst={() => { SFX._play('/sfx/cannon.mp3', 0.4); setTimeout(() => SFX._play('/sfx/cannon2.mp3', 0.35), 300); }}
                   />
@@ -1156,6 +1158,8 @@ export default function CeremonyPlay() {
                   height={height}
                   compact={compactGrandWinner}
                   effectPreset={effectPreset}
+                  winnerLabel={grandWinner as string}
+                  winnerScore={totals.total[grandWinner as string] || 0}
                   isActive={currentStep?.id === 'grand_winner'}
                 />
               </div>
