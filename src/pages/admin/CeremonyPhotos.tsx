@@ -17,23 +17,25 @@ interface CeremonyPhotosProps {
   losers: TeamMember[];
   teamColors: Record<Team, { bg: string; light: string; mid: string; dark: string; glow: string }>;
   width: number;
+  height?: number;
+  compact?: boolean;
   isActive: boolean;
   onBurst?: () => void; // burst 시 효과음 콜백
 }
 
 // ─── Position generators ───
-function generateWinnerPositions(count: number): Array<{ top: string; left: string; rot: number }> {
+function generateWinnerPositions(count: number, compact = false): Array<{ top: string; left: string; rot: number }> {
   const positions: Array<{ top: string; left: string; rot: number }> = [];
   if (count === 0) return positions;
   const half = Math.ceil(count / 2);
-  const leftCols = [8, 17];
+  const leftCols = compact ? [11, 20] : [8, 17];
   const leftPositions: Array<{ top: number; left: number; rot: number }> = [];
   for (let i = 0; i < half; i++) {
     const col = i % 2;
     const row = Math.floor(i / 2);
     const totalRows = Math.ceil(half / 2);
-    const topBase = totalRows > 1 ? 15 + (row / (totalRows - 1)) * 42 : 40;
-    const topJitter = col === 1 ? 5 : ((row % 2) * -3);
+    const topBase = totalRows > 1 ? (compact ? 22 : 15) + (row / (totalRows - 1)) * 42 : 40;
+    const topJitter = compact ? (col === 1 ? 3 : ((row % 2) * -2)) : (col === 1 ? 5 : ((row % 2) * -3));
     const leftJitter = (row % 2) * 2;
     leftPositions.push({ top: topBase + topJitter, left: leftCols[col] + leftJitter, rot: ((i * 11 + 3) % 15) - 7 });
   }
@@ -52,14 +54,14 @@ function generateWinnerPositions(count: number): Array<{ top: string; left: stri
   return positions;
 }
 
-function generateLoserPositions(count: number): Array<{ top: string; left: string; rot: number }> {
+function generateLoserPositions(count: number, compact = false): Array<{ top: string; left: string; rot: number }> {
   const positions: Array<{ top: string; left: string; rot: number }> = [];
   if (count === 0) return positions;
   const ring1N = Math.ceil(count * 0.6);
   const ring2N = count - ring1N;
   const rings = [
-    { n: ring1N, r: 36, offset: 0 },
-    { n: ring2N, r: 26, offset: Math.PI / 10 },
+    { n: ring1N, r: compact ? 30 : 36, offset: 0 },
+    { n: ring2N, r: compact ? 21 : 26, offset: Math.PI / 10 },
   ];
   for (const ring of rings) {
     for (let i = 0; i < ring.n; i++) {
@@ -116,7 +118,7 @@ function renderAvatar(
 // ═══════════════════════════════════════════
 // ─── CeremonyPhotos Component ───
 // ═══════════════════════════════════════════
-export default function CeremonyPhotos({ winners, losers, teamColors, width, isActive, onBurst }: CeremonyPhotosProps) {
+export default function CeremonyPhotos({ winners, losers, teamColors, width, height = 900, compact = false, isActive, onBurst }: CeremonyPhotosProps) {
   const [photoPhase, setPhotoPhase] = useState<PhotoPhase>('orbit');
   const [heroIndex, setHeroIndex] = useState(-1);
   const [shuffledOrder, setShuffledOrder] = useState<number[]>([]);
@@ -183,11 +185,12 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
 
   if (!isActive) return null;
 
+  const isCompact = compact || height < 720 || width < 1000;
   const allPhotos = [...losers.map(m => ({ ...m, isWinner: false })), ...winners.map(m => ({ ...m, isWinner: true }))];
-  const loserPos = generateLoserPositions(losers.length);
-  const winPos = generateWinnerPositions(winners.length);
-  const loserSz = width < 768 ? 44 : 60;
-  const winSz = width < 768 ? 90 : 140;
+  const loserPos = generateLoserPositions(losers.length, isCompact);
+  const winPos = generateWinnerPositions(winners.length, isCompact);
+  const loserSz = width < 768 ? 34 : isCompact ? 36 : 60;
+  const winSz = width < 768 ? 64 : isCompact ? 72 : 140;
 
   // Celebration offset calculator for winner positions
   function getCelebrationTransform(pos: { top: string; left: string }, _index: number) {
@@ -214,7 +217,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
       {photoPhase === 'orbit' && allPhotos.map((photo, i) => {
         const tc = teamColors[photo.team as Team];
         const isW = photo.isWinner;
-        const sz = isW ? (width < 768 ? 65 : 90) : (width < 768 ? 40 : 55);
+        const sz = isW ? (width < 768 ? 58 : isCompact ? 66 : 90) : (width < 768 ? 34 : isCompact ? 38 : 55);
         const directions = [
           { x: -500, y: (i * 73 % 200) - 100 },
           { x: 500, y: (i * 73 % 200) - 100 },
@@ -222,8 +225,8 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
           { x: (i * 97 % 300) - 150, y: 400 },
         ];
         const dir = directions[i % 4];
-        const floatX = Math.cos(i * 2.39) * (width < 768 ? 60 : 120);
-        const floatY = Math.sin(i * 2.39) * (width < 768 ? 40 : 80);
+        const floatX = Math.cos(i * 2.39) * (width < 768 ? 48 : isCompact ? 76 : 120);
+        const floatY = Math.sin(i * 2.39) * (width < 768 ? 32 : isCompact ? 48 : 80);
         return (
           <motion.div key={`orbit-${i}`}
             initial={{ x: dir.x, y: dir.y, scale: 0.1, opacity: 0, rotate: (i * 47 % 360) - 180 }}
@@ -246,7 +249,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
               <div style={{
                 position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
                 background: `${tc.bg}CC`, color: '#fff',
-                fontSize: width < 768 ? '0.45rem' : '0.6rem', fontWeight: 700,
+                fontSize: width < 768 ? '0.42rem' : isCompact ? '0.5rem' : '0.6rem', fontWeight: 700,
                 padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap',
               }}>{photo.name}</div>
             )}
@@ -299,7 +302,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
                 </div>
                 <div style={{
                   position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
-                  background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.4rem' : '0.5rem',
+                  background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.36rem' : isCompact ? '0.42rem' : '0.5rem',
                   fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
                 }}>{p.name}</div>
               </motion.div>
@@ -419,7 +422,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, isA
                 <div style={{
                   position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
                   background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
-                  fontSize: width < 768 ? '0.65rem' : '0.85rem', fontWeight: 800,
+                  fontSize: width < 768 ? '0.55rem' : isCompact ? '0.68rem' : '0.85rem', fontWeight: 800,
                   padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
                   whiteSpace: 'nowrap', zIndex: 2,
                 }}>{p.name}</div>

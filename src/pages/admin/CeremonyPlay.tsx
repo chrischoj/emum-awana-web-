@@ -16,22 +16,24 @@ function useWindowSize() {
   return size;
 }
 
-function getResponsive(width: number) {
+function getResponsive(width: number, height: number) {
   const isMobile = width < 768;
+  const isTablet = width >= 768 && width < 1000;
   const isLarge = width >= 1200;
   const isXL = width >= 1600;
+  const isShort = height < 720;
   return {
-    contentMax: isXL ? 1400 : isLarge ? 1200 : isMobile ? '100%' : 720,
-    pad: isMobile ? 16 : isLarge ? 48 : 24,
+    contentMax: isXL ? 1540 : isLarge ? '100%' : isTablet ? '100%' : isMobile ? '100%' : 1040,
+    pad: isMobile ? 12 : isLarge ? 24 : 18,
     padY: isMobile ? 12 : isLarge ? 32 : 20,
     titleFs: isXL ? '5rem' : isLarge ? '4.2rem' : isMobile ? '1.6rem' : '2.8rem',
-    h2Fs: isXL ? '4.2rem' : isLarge ? '3.6rem' : isMobile ? '1.7rem' : '2.6rem',
-    bodyFs: isXL ? '1.6rem' : isLarge ? '1.4rem' : isMobile ? '0.8rem' : '0.95rem',
+    h2Fs: isXL ? '4.5rem' : isLarge ? '3.9rem' : isMobile ? '2rem' : '2.9rem',
+    bodyFs: isXL ? '1.8rem' : isLarge ? '1.55rem' : isMobile ? '0.95rem' : '1.1rem',
     smallFs: isXL ? '1.2rem' : isLarge ? '1.1rem' : isMobile ? '0.7rem' : '0.85rem',
-    barHeight: isXL ? 400 : isLarge ? 340 : isMobile ? 160 : 220,
-    barMaxW: isXL ? 220 : isLarge ? 180 : isMobile ? 72 : 120,
-    barLabelFs: isXL ? '2.4rem' : isLarge ? '2rem' : isMobile ? '1rem' : '1.4rem',
-    barNumFs: isXL ? '2.4rem' : isLarge ? '2rem' : isMobile ? '0.95rem' : '1.1rem',
+    barHeight: isXL ? (isShort ? 520 : 600) : isLarge ? (isShort ? 480 : 560) : isTablet ? (isShort ? 290 : 360) : isMobile ? (isShort ? 290 : 330) : (isShort ? 330 : 420),
+    barMaxW: isXL ? 330 : isLarge ? 300 : isTablet ? 160 : isMobile ? 124 : 200,
+    barLabelFs: isXL ? '3.55rem' : isLarge ? '3.15rem' : isTablet ? '2rem' : isMobile ? '1.9rem' : '2.35rem',
+    barNumFs: isXL ? '3.55rem' : isLarge ? '3.15rem' : isTablet ? '2rem' : isMobile ? '1.9rem' : '2.35rem',
     grandTrophy: isXL ? 200 : isLarge ? 170 : isMobile ? 100 : 130,
     grandTeamFs: isXL ? '7rem' : isLarge ? '6rem' : isMobile ? '3rem' : '4.5rem',
     grandScoreFs: isXL ? '4rem' : isLarge ? '3.5rem' : isMobile ? '1.8rem' : '2.8rem',
@@ -292,24 +294,27 @@ function AnimatedNumber({ value, duration = 1500, delay = 0 }: { value: number; 
 }
 
 // ─── BarChart ───
-function BarChart({ scores, revealed, chartHeight = 220, barMaxWidth = 120, numberFontSize = '1.1rem' }: {
-  scores: Record<string, number>; revealed: boolean; chartHeight?: number; barMaxWidth?: number; numberFontSize?: string;
+function BarChart({ scores, revealed, chartHeight = 220, barMaxWidth = 120, numberFontSize = '1.1rem', labelFontSize = '1.2rem' }: {
+  scores: Record<string, number>;
+  revealed: boolean;
+  chartHeight?: number;
+  barMaxWidth?: number;
+  numberFontSize?: string;
+  labelFontSize?: string;
 }) {
   const maxScore = Math.max(...Object.values(scores), 1);
   const winner = getWinner(scores);
-  const barInnerHeight = typeof chartHeight === 'number' ? chartHeight - 40 : 180;
 
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', justifyContent: 'center', height: chartHeight, padding: '0 16px' }}>
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end', justifyContent: 'center', height: chartHeight, padding: '0 6px' }}>
         {TEAMS.map((team, i) => {
           const score = scores[team] || 0;
-          const height = (score / maxScore) * barInnerHeight;
           const isWinner = isTie(winner) ? winner.includes(team) : team === winner;
           const c = TEAM_COLORS[team];
           return (
             <div key={team} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, maxWidth: barMaxWidth,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, maxWidth: barMaxWidth, height: '100%', minHeight: 0,
               opacity: revealed ? 1 : 0,
               transform: revealed ? 'translateY(0)' : 'translateY(40px)',
               transition: `all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.15}s`,
@@ -322,7 +327,14 @@ function BarChart({ scores, revealed, chartHeight = 220, barMaxWidth = 120, numb
                 {revealed ? <AnimatedNumber value={score} delay={i * 150 + 300} /> : 0}
               </div>
               <div style={{
-                width: '100%', height: revealed ? height : 0,
+                width: '100%',
+                flex: '1 1 auto',
+                minHeight: 0,
+                display: 'flex',
+                alignItems: 'flex-end',
+              }}>
+              <div style={{
+                width: '100%', height: revealed ? `${(score / maxScore) * 100}%` : 0,
                 background: isWinner
                   ? `linear-gradient(180deg, ${c.mid}, ${c.bg}, ${c.dark})`
                   : `linear-gradient(180deg, ${c.mid}88, ${c.bg}88)`,
@@ -337,9 +349,10 @@ function BarChart({ scores, revealed, chartHeight = 220, barMaxWidth = 120, numb
                   animation: 'shimmer 2s infinite',
                 }} />}
               </div>
+              </div>
               <div style={{
                 fontFamily: "'Black Han Sans', sans-serif",
-                fontSize: isWinner ? '1.2rem' : '1rem', fontWeight: 700,
+                fontSize: labelFontSize, fontWeight: 700,
                 color: isWinner ? c.bg : c.bg + 'CC', marginTop: 10,
                 padding: '4px 16px', borderRadius: 20,
                 background: isWinner ? c.light : 'transparent',
@@ -375,26 +388,66 @@ function Trophy({ color, size = 80 }: { color: string; size?: number }) {
 }
 
 // ─── LeaderBadge ───
-function LeaderBadge({ scores, r }: { scores: Record<string, number>; r: ReturnType<typeof getResponsive> }) {
+function LeaderBadge({
+  scores,
+  r,
+  item,
+  compact,
+}: {
+  scores: Record<string, number>;
+  r: ReturnType<typeof getResponsive>;
+  item?: { title: string; icon: string };
+  compact?: boolean;
+}) {
   const winner = getWinner(scores);
   const allZero = isAllZero(scores);
   const tied = isTie(winner);
+  const contextPill = item ? (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: compact ? 6 : 8,
+      minWidth: 0,
+      maxWidth: compact ? '100%' : '34%',
+      padding: compact ? '6px 10px' : '8px 14px',
+      borderRadius: 999,
+      background: 'rgba(15,23,42,0.08)',
+      border: '1px solid rgba(15,23,42,0.12)',
+      flex: '0 1 auto',
+    }}>
+      <img src={item.icon} alt="" style={{ height: compact ? 18 : 24, objectFit: 'contain', flex: '0 0 auto' }} />
+      <span style={{
+        minWidth: 0,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: '#1e293b',
+        fontFamily: "'Black Han Sans', sans-serif",
+        fontSize: compact ? '0.95rem' : '1.25rem',
+        letterSpacing: 1,
+      }}>
+        {item.title}
+      </span>
+    </div>
+  ) : null;
 
   if (tied || allZero) {
     const teams = allZero ? [...TEAMS] : winner;
     return (
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 8,
+        display: 'flex', flexDirection: compact ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: compact ? 8 : 14, marginTop: 8,
+        width: '100%', boxSizing: 'border-box',
         padding: '14px 24px', borderRadius: 20,
         background: 'linear-gradient(135deg, #FFF7ED, white, #FEF3C7)',
         border: '3px solid #F59E0B',
         boxShadow: '0 0 24px rgba(245,158,11,0.3), 0 4px 16px rgba(0,0,0,0.1)',
         animation: 'winnerPop 0.6s ease 0.5s both',
       }}>
-        <span style={{ fontSize: '1.2rem', fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 700, color: '#92400E' }}>
-          {allZero ? '🤝 모두 함께 시작해요!' : '🤝 공동 1위!'}
-        </span>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {contextPill}
+        <div style={{ display: 'flex', alignItems: 'center', gap: compact ? 8 : 12, flexWrap: 'wrap', justifyContent: 'center', flex: '1 1 auto', minWidth: 0 }}>
+          <span style={{ fontSize: compact ? '1rem' : '1.2rem', fontFamily: "'Noto Sans KR', sans-serif", fontWeight: 700, color: '#92400E' }}>
+            {allZero ? '🤝 모두 함께 시작해요!' : '🤝 공동 1위!'}
+          </span>
           {teams.map(t => {
             const c = TEAM_COLORS[t as Team];
             return (
@@ -413,16 +466,21 @@ function LeaderBadge({ scores, r }: { scores: Record<string, number>; r: ReturnT
   const c = TEAM_COLORS[w as Team];
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: compact ? 8 : 14, marginTop: 8,
+      flexWrap: compact ? 'wrap' : 'nowrap',
+      width: '100%', boxSizing: 'border-box',
       padding: '14px 32px', borderRadius: 20,
       background: `linear-gradient(135deg, ${c.light}, white, ${c.light})`,
       border: `3px solid ${c.bg}`,
       boxShadow: `0 0 24px ${c.glow}, 0 4px 16px rgba(0,0,0,0.1)`,
       animation: 'winnerPop 0.6s ease 0.5s both',
     }}>
-      <span style={{ fontSize: '1.6rem', animation: 'starSpin 3s linear infinite' }}>⭐</span>
-      <span style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.h2Fs, color: c.bg, letterSpacing: 2, textShadow: `0 0 16px ${c.glow}` }}>{w}</span>
-      <span style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.bodyFs, color: c.dark, fontWeight: 700, background: c.light, padding: '4px 12px', borderRadius: 8 }}>{(scores[w] || 0).toLocaleString()}점</span>
+      {contextPill}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: compact ? 8 : 12, flex: '1 1 auto', minWidth: 0 }}>
+        <span style={{ fontSize: compact ? '1.35rem' : '1.6rem', animation: 'starSpin 3s linear infinite' }}>⭐</span>
+        <span style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.h2Fs, color: c.bg, letterSpacing: 2, textShadow: `0 0 16px ${c.glow}` }}>{w}</span>
+        <span style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.bodyFs, color: c.dark, fontWeight: 700, background: c.light, padding: '4px 12px', borderRadius: 8 }}>{(scores[w] || 0).toLocaleString()}점</span>
+      </div>
     </div>
   );
 }
@@ -502,8 +560,8 @@ const CEREMONY_STYLES = `
 // ═══════════════════════════════════════════
 export default function CeremonyPlay() {
   const navigate = useNavigate();
-  const { width } = useWindowSize();
-  const r = getResponsive(width);
+  const { width, height } = useWindowSize();
+  const r = getResponsive(width, height);
 
   const [mode, setMode] = useState<'loading' | 'no_data' | 'ready' | 'ceremony'>('loading');
   const [data, setData] = useState<AwardsData | null>(null);
@@ -586,6 +644,8 @@ export default function CeremonyPlay() {
     { id: 'grand_winner', label: '최종 시상' },
   ];
   const currentStep = steps[step];
+  const isGrandWinnerStep = currentStep?.id === 'grand_winner';
+  const compactGrandWinner = isGrandWinnerStep && (height < 720 || width < 1000);
   // console.warn('[CeremonyPlay] 현재 mode:', mode, '| step:', step, '/', steps.length, '| stepId:', currentStep?.id, '| grandTied:', grandTied, '| grandAllZero:', grandAllZero, '| grandWinner:', grandWinner);
 
   const nextStep = useCallback(() => {
@@ -748,7 +808,7 @@ export default function CeremonyPlay() {
   // ─── Ceremony Render ───
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: compactGrandWinner ? 'calc(100vh - 72px)' : '100vh',
       background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%)',
       display: 'flex', flexDirection: 'column',
       fontFamily: "'Noto Sans KR', sans-serif",
@@ -767,14 +827,17 @@ export default function CeremonyPlay() {
       {/* Top bar */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: `${r.padY}px ${r.pad}px`,
+        padding: `${compactGrandWinner ? (width < 768 ? 8 : 10) : r.padY}px ${compactGrandWinner ? (width < 768 ? 8 : 18) : r.pad}px`,
         background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)',
         borderBottom: '1px solid rgba(255,255,255,0.1)', zIndex: 10,
       }}>
-        <button onClick={() => { setMode('ready'); setStep(0); setShowConfetti(false); SFX.resetBGM(); }} style={{
-          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-          color: 'white', padding: `${r.padY}px ${r.pad}px`, borderRadius: 8, cursor: 'pointer', fontSize: r.smallFs,
-        }}>← 대기화면</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: width < 768 ? 10 : 16, minWidth: 0, flex: '1 1 0' }}>
+          <button onClick={() => { setMode('ready'); setStep(0); setShowConfetti(false); SFX.resetBGM(); }} style={{
+            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+            color: 'white', padding: `${compactGrandWinner ? (width < 768 ? 8 : 10) : r.padY}px ${compactGrandWinner ? (width < 768 ? 12 : 18) : r.pad}px`, borderRadius: 8, cursor: 'pointer', fontSize: r.smallFs,
+            flex: '0 0 auto',
+          }}>← 대기화면</button>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: r.smallFs }}>{step + 1} / {steps.length}</div>
           <button onClick={() => { const playing = SFX.toggleBGM(); setBgmPlaying(playing); }} style={{
@@ -787,7 +850,7 @@ export default function CeremonyPlay() {
             style={{ width: width < 768 ? 50 : 70, height: 4, accentColor: '#FFD700', cursor: 'pointer', opacity: 0.7 }}
           />
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flex: '1 1 0', justifyContent: 'flex-end' }}>
           {steps.map((_, i) => (
             <div key={i} style={{
               width: i === step ? (width >= 768 ? 24 : 16) : (width >= 768 ? 8 : 6),
@@ -800,13 +863,21 @@ export default function CeremonyPlay() {
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: r.pad, zIndex: 5 }}>
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: compactGrandWinner ? (width < 768 ? 6 : 8) : (width < 768 ? 8 : width >= 1200 ? 24 : 16),
+        zIndex: 5,
+      }}>
         <div style={{
-          background: 'rgba(255,255,255,0.95)', borderRadius: 32,
-          padding: `${r.pad * 1.2}px ${r.pad * 1.5}px`,
+          background: 'rgba(255,255,255,0.95)', borderRadius: width < 768 ? 24 : 28,
+          padding: compactGrandWinner ? (width < 768 ? '10px 10px' : '10px 14px') : (width < 768 ? '14px 14px' : width >= 1200 ? '22px 28px' : '20px 24px'),
           maxWidth: r.contentMax, width: '100%',
           boxShadow: '0 20px 60px rgba(0,0,0,0.4), 0 0 100px rgba(255,215,0,0.05)',
-          minHeight: width < 768 ? 280 : width >= 1200 ? 460 : 360,
+          minHeight: compactGrandWinner ? (width < 768 ? 330 : width >= 1200 ? 480 : 380) : (width < 768 ? 500 : width >= 1200 ? 680 : 560),
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           position: 'relative', overflow: 'hidden',
         }}>
@@ -846,19 +917,26 @@ export default function CeremonyPlay() {
             const [cat, sub] = item.dataKey.split('.');
             const scores = (data as any)[cat][sub] as Record<string, number>;
             return (
-              <div style={{ width: '100%', animation: 'winnerPop 0.6s ease' }}>
-                <h2 style={{
-                  fontFamily: "'Black Han Sans', sans-serif", fontSize: r.h2Fs,
-                  textAlign: 'center', color: '#1e293b', marginTop: 0,
-                  marginBottom: width < 768 ? 12 : 24, paddingTop: width < 768 ? 8 : 16,
-                  letterSpacing: 3,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: r.gap,
-                }}>
-                  <img src={item.icon} alt="" style={{ height: r.iconH * 1.4, objectFit: 'contain' }} />
-                  {item.title}
-                </h2>
-                <BarChart scores={scores} revealed={true} chartHeight={r.barHeight} barMaxWidth={r.barMaxW} numberFontSize={r.barNumFs} />
-                <LeaderBadge scores={scores} r={r} />
+              <div style={{
+                width: '100%',
+                minHeight: width < 768 ? 470 : width >= 1200 ? 640 : 520,
+                animation: 'winnerPop 0.6s ease',
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-end',
+                gap: width < 768 ? 14 : 20,
+                paddingTop: width < 768 ? 24 : 28,
+              }}>
+                <BarChart
+                  scores={scores}
+                  revealed={true}
+                  chartHeight={r.barHeight}
+                  barMaxWidth={r.barMaxW}
+                  numberFontSize={r.barNumFs}
+                  labelFontSize={r.barLabelFs}
+                />
+                <LeaderBadge scores={scores} r={r} item={item} compact={width < 1000} />
               </div>
             );
           })()}
@@ -995,36 +1073,47 @@ export default function CeremonyPlay() {
             // Solo winner
             const gc = TEAM_COLORS[grandWinner as Team];
             const podiumOrder = [ranked[1], ranked[0], ranked[2], ranked[3]];
-            const podiumHeights = width < 768 ? [75, 110, 55, 35] : [100, 150, 75, 50];
+            const podiumHeights = compactGrandWinner
+              ? (width < 768 ? [36, 54, 30, 22] : [36, 56, 30, 22])
+              : (width < 768 ? [75, 110, 55, 35] : [100, 150, 75, 50]);
+            const finalTrophySize = compactGrandWinner ? (width < 768 ? 48 : 60) : r.grandTrophy;
+            const finalTeamFs = compactGrandWinner ? (width < 768 ? '2rem' : '2.55rem') : r.grandTeamFs;
+            const finalScoreFs = compactGrandWinner ? (width < 768 ? '1.2rem' : '1.5rem') : r.grandScoreFs;
             return (
-              <div style={{ width: '100%', textAlign: 'center', animation: 'grandReveal 1s cubic-bezier(0.34, 1.56, 0.64, 1)', position: 'relative' }}>
+              <div style={{
+                width: '100%',
+                textAlign: 'center',
+                animation: 'grandReveal 1s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                position: 'relative',
+                minHeight: compactGrandWinner ? (width < 768 ? 300 : 340) : undefined,
+              }}>
                 <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: '140%', height: '140%', background: `radial-gradient(circle, ${gc.glow} 0%, transparent 60%)`, opacity: 0.3, pointerEvents: 'none', animation: 'pulse 3s ease-in-out infinite' }} />
                 {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
-                  <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: width < 768 ? '0.8rem' : '1.2rem', opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
+                  <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: compactGrandWinner ? '0.75rem' : (width < 768 ? '0.8rem' : '1.2rem'), opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
                 ))}
 
-                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: width < 768 ? '2.8rem' : '3.8rem', marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
-                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '2rem' : r.h2Fs, background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: 8, letterSpacing: 4 }}>최종 우승</h2>
+                <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: compactGrandWinner ? (width < 768 ? '1.55rem' : '1.9rem') : (width < 768 ? '2.8rem' : '3.8rem'), marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
+                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? (width < 768 ? '1.2rem' : '1.45rem') : (width < 768 ? '2rem' : r.h2Fs), background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: compactGrandWinner ? 0 : 8, letterSpacing: compactGrandWinner ? 2 : 4 }}>최종 우승</h2>
                 <div style={{ animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 130 : 170, height: width < 768 ? 130 : 170, borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: width < 768 ? 170 : 220, height: width < 768 ? 170 : 220, borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
-                  <Trophy color={gc.bg} size={r.grandTrophy} />
-                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandTeamFs, color: gc.bg, textShadow: `0 0 40px ${gc.glow}, 0 0 80px ${gc.glow}, 0 2px 4px rgba(0,0,0,0.2)`, margin: '4px 0 4px', letterSpacing: 8, animation: 'pulse 2s ease-in-out infinite' }}>{grandWinner as string}</div>
-                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: r.grandScoreFs, color: '#FFF', background: `linear-gradient(135deg, ${gc.bg}, ${gc.dark})`, padding: '6px 28px', borderRadius: 50, display: 'inline-block', boxShadow: `0 0 40px ${gc.glow}, 0 8px 24px rgba(0,0,0,0.2)`, border: '3px solid rgba(255,255,255,0.3)', animation: 'glowPulse 2s ease-in-out infinite' }}>
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), height: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), height: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
+                  <Trophy color={gc.bg} size={finalTrophySize} />
+                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: finalTeamFs, color: gc.bg, textShadow: `0 0 40px ${gc.glow}, 0 0 80px ${gc.glow}, 0 2px 4px rgba(0,0,0,0.2)`, margin: compactGrandWinner ? '-2px 0 0' : '4px 0 4px', letterSpacing: compactGrandWinner ? 4 : 8, animation: 'pulse 2s ease-in-out infinite' }}>{grandWinner as string}</div>
+                  <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: finalScoreFs, color: '#FFF', background: `linear-gradient(135deg, ${gc.bg}, ${gc.dark})`, padding: compactGrandWinner ? '4px 20px' : '6px 28px', borderRadius: 50, display: 'inline-block', boxShadow: `0 0 40px ${gc.glow}, 0 8px 24px rgba(0,0,0,0.2)`, border: compactGrandWinner ? '2px solid rgba(255,255,255,0.3)' : '3px solid rgba(255,255,255,0.3)', animation: 'glowPulse 2s ease-in-out infinite' }}>
                     {(totals.total[grandWinner as string] || 0).toLocaleString()}점
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: width < 768 ? 10 : 20, marginTop: 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: compactGrandWinner ? 10 : (width < 768 ? 10 : 20), marginTop: compactGrandWinner ? 8 : 20, animation: 'slideUp 0.8s ease 0.6s both' }}>
                   {podiumOrder.map((t, i) => {
                     const isChamp = i === 1;
                     const tc = TEAM_COLORS[t];
                     return (
                       <div key={t} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: `slideUp 0.6s ease ${0.8 + i * 0.15}s both` }}>
-                        {isChamp && <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 6 }}>🥇</div>}
-                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: isChamp ? (width < 768 ? '1.4rem' : '2rem') : (width < 768 ? '1.1rem' : '1.4rem'), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
-                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: width < 768 ? '0.95rem' : '1.2rem', color: isChamp ? tc.dark : '#64748b', fontWeight: 700, marginBottom: 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
+                        {isChamp && <div style={{ fontSize: compactGrandWinner ? '1.25rem' : (width < 768 ? '2rem' : '2.8rem'), marginBottom: compactGrandWinner ? 2 : 6 }}>🥇</div>}
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? (isChamp ? '1.25rem' : '0.95rem') : (isChamp ? (width < 768 ? '1.4rem' : '2rem') : (width < 768 ? '1.1rem' : '1.4rem')), color: tc.bg, fontWeight: 900, textShadow: isChamp ? `0 0 16px ${tc.glow}` : 'none' }}>{t}</div>
+                        <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? '0.8rem' : (width < 768 ? '0.95rem' : '1.2rem'), color: isChamp ? tc.dark : '#64748b', fontWeight: 700, marginBottom: compactGrandWinner ? 3 : 6 }}>{(totals.total[t] || 0).toLocaleString()}점</div>
                         <div style={{
-                          width: width < 768 ? 72 : 130, height: podiumHeights[i],
+                          width: compactGrandWinner ? 72 : (width < 768 ? 72 : 130), height: podiumHeights[i],
                           background: isChamp ? `linear-gradient(180deg, ${tc.mid}, ${tc.bg}, ${tc.dark})` : `linear-gradient(180deg, ${tc.mid}AA, ${tc.bg}88)`,
                           borderRadius: '12px 12px 0 0',
                           boxShadow: isChamp ? `0 0 24px ${tc.glow}, inset 0 2px 8px rgba(255,255,255,0.3)` : '0 4px 12px rgba(0,0,0,0.1)',
@@ -1037,9 +1126,9 @@ export default function CeremonyPlay() {
                     );
                   })}
                 </div>
-                <div style={{ marginTop: 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
-                  <div style={{ fontSize: width < 768 ? '2rem' : '2.8rem', marginBottom: 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
-                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: r.bodyFs, color: '#475569', fontWeight: 600, lineHeight: 1.6 }}>
+                <div style={{ marginTop: compactGrandWinner ? 6 : 12, animation: 'slideUp 0.6s ease 1.6s both' }}>
+                  <div style={{ fontSize: compactGrandWinner ? '1rem' : (width < 768 ? '2rem' : '2.8rem'), marginBottom: compactGrandWinner ? 0 : 4, animation: 'crownBounce 1.5s ease-in-out infinite' }}>🎉🎊🎉</div>
+                  <div style={{ fontFamily: "'Noto Sans KR', sans-serif", fontSize: compactGrandWinner ? '0.74rem' : r.bodyFs, color: '#475569', fontWeight: 600, lineHeight: 1.25 }}>
                     축하합니다! <span style={{ color: '#94a3b8' }}>하나님의 은혜 안에서 모두 수고하셨습니다!</span>
                   </div>
                 </div>
@@ -1048,6 +1137,8 @@ export default function CeremonyPlay() {
                   losers={TEAMS.filter(t => t !== grandWinner).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })))}
                   teamColors={TEAM_COLORS}
                   width={width}
+                  height={height}
+                  compact={compactGrandWinner}
                   isActive={currentStep?.id === 'grand_winner'}
                 />
               </div>
@@ -1058,23 +1149,23 @@ export default function CeremonyPlay() {
       </div>
 
       {/* Navigation */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: r.gap, padding: `${r.pad}px ${r.pad}px ${r.pad * 1.2}px`, zIndex: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: compactGrandWinner ? 10 : r.gap, padding: compactGrandWinner ? '6px 10px 8px' : `${r.pad}px ${r.pad}px ${r.pad * 1.2}px`, zIndex: 10 }}>
         <button onClick={prevStep} disabled={step === 0} style={{
-          padding: `${r.padY + 2}px ${r.pad * 2}px`,
+          padding: compactGrandWinner ? '10px 34px' : `${r.padY + 2}px ${r.pad * 2}px`,
           background: step === 0 ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)',
           border: '1px solid rgba(255,255,255,0.2)',
           color: step === 0 ? 'rgba(255,255,255,0.3)' : 'white',
           borderRadius: 12, cursor: step === 0 ? 'default' : 'pointer',
-          fontFamily: "'Black Han Sans', sans-serif", fontSize: r.bodyFs, letterSpacing: 1,
+          fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? '0.95rem' : r.bodyFs, letterSpacing: 1,
         }}>← 이전</button>
         <button onClick={nextStep} disabled={step === steps.length - 1} style={{
-          padding: `${r.padY + 2}px ${r.pad * 2.5}px`,
+          padding: compactGrandWinner ? '10px 42px' : `${r.padY + 2}px ${r.pad * 2.5}px`,
           background: step === steps.length - 1 ? 'rgba(255,215,0,0.2)' : 'linear-gradient(135deg, #FFD700, #FFA500)',
           border: 'none',
           color: step === steps.length - 1 ? 'rgba(255,215,0,0.5)' : '#1e293b',
           borderRadius: 12, cursor: step === steps.length - 1 ? 'default' : 'pointer',
           fontFamily: "'Black Han Sans', sans-serif",
-          fontSize: r.bodyFs === '0.8rem' ? '1rem' : '1.1rem', letterSpacing: 1,
+          fontSize: compactGrandWinner ? '0.95rem' : (r.bodyFs === '0.8rem' ? '1rem' : '1.1rem'), letterSpacing: 1,
           boxShadow: step < steps.length - 1 ? '0 4px 20px rgba(255,215,0,0.3)' : 'none',
         }}>
           {step === steps.length - 1 ? '🏆 끝' : '다음 →'}
@@ -1082,12 +1173,13 @@ export default function CeremonyPlay() {
       </div>
 
       {/* AWANA logo */}
-      <div style={{ display: 'flex', justifyContent: 'center', padding: `${r.padY}px ${r.pad}px 0`, marginBottom: 36, zIndex: 10 }}>
-        <img src="/awana-logo-awana-clubs.avif" alt="AWANA 클럽" style={{ height: r.awanaBottomH, objectFit: 'contain', opacity: 0.85 }} />
+      <div style={{ display: compactGrandWinner ? 'none' : 'flex', justifyContent: 'center', padding: `${r.padY}px ${r.pad}px 0`, marginBottom: 36, zIndex: 10 }}>
+        <img src="/awana-logo-awana-clubs.avif" alt="AWANA 클럽" style={{ height: compactGrandWinner ? 36 : r.awanaBottomH, objectFit: 'contain', opacity: 0.85 }} />
       </div>
 
       {/* Step label */}
       <div style={{
+        display: compactGrandWinner ? 'none' : 'block',
         position: 'fixed', bottom: 6, left: '50%', transform: 'translateX(-50%)',
         color: 'rgba(255,255,255,0.35)', fontSize: width < 768 ? '0.6rem' : '0.7rem',
         fontFamily: "'Noto Sans KR', sans-serif", zIndex: 10,
