@@ -4,6 +4,8 @@ import { loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../service
 import { supabase } from '../../lib/supabase';
 import type { AwardsData } from '../../types/awana';
 import CeremonyPhotos from './CeremonyPhotos';
+import { DEFAULT_CEREMONY_EFFECT_PRESET } from '../../config/ceremonyEffects';
+import type { CeremonyEffectPresetId } from '../../config/ceremonyEffects';
 
 // ─── Responsive ───
 function useWindowSize() {
@@ -572,6 +574,7 @@ export default function CeremonyPlay() {
   const [bgmPlaying, setBgmPlaying] = useState(true);
   const [urlCopied, setUrlCopied] = useState(false);
   const [bgmVol, setBgmVol] = useState(0.20);
+  const [effectPreset, setEffectPreset] = useState<CeremonyEffectPresetId>(DEFAULT_CEREMONY_EFFECT_PRESET);
   const flowOrder = DEFAULT_FLOW_ORDER;
   const [teamMembers, setTeamMembers] = useState<Record<string, Array<{name: string; avatar_url: string | null}>>>({});
 
@@ -618,12 +621,14 @@ export default function CeremonyPlay() {
     if (local) {
       setData(local.data);
       setConfirmedInfo({ confirmedAt: local.confirmedAt, dateFrom: local.dateFrom, dateTo: local.dateTo });
+      setEffectPreset(local.effectPreset ?? DEFAULT_CEREMONY_EFFECT_PRESET);
       setMode('ready');
     }
     loadConfirmedCeremony().then((confirmed) => {
       if (confirmed) {
         setData(confirmed.data);
         setConfirmedInfo({ confirmedAt: confirmed.confirmedAt, dateFrom: confirmed.dateFrom, dateTo: confirmed.dateTo });
+        setEffectPreset(confirmed.effectPreset ?? DEFAULT_CEREMONY_EFFECT_PRESET);
         setMode('ready');
       } else if (!local) {
         setMode('no_data');
@@ -636,6 +641,7 @@ export default function CeremonyPlay() {
   const grandTied = isTie(grandWinner);
   const grandAllZero = data ? isAllZero(totals.total) : true;
   const grandDisplayTeam = grandTied ? grandWinner[0] : grandWinner;
+  const isSpotlightEffect = effectPreset === 'golden-spotlight';
 
   const steps = [
     { id: 'title', label: '시작' },
@@ -1063,6 +1069,9 @@ export default function CeremonyPlay() {
                     losers={TEAMS.filter(t => !tiedTeams.includes(t)).flatMap(t => (teamMembers[t] || []).map(m => ({ ...m, team: t })))}
                     teamColors={TEAM_COLORS}
                     width={width}
+                    height={height}
+                    compact={compactGrandWinner}
+                    effectPreset={effectPreset}
                     isActive={currentStep?.id === 'grand_winner'}
                     onBurst={() => { SFX._play('/sfx/cannon.mp3', 0.4); setTimeout(() => SFX._play('/sfx/cannon2.mp3', 0.35), 300); }}
                   />
@@ -1072,6 +1081,13 @@ export default function CeremonyPlay() {
 
             // Solo winner
             const gc = TEAM_COLORS[grandWinner as Team];
+            const winnerGlow = isSpotlightEffect
+              ? 'radial-gradient(circle, rgba(250,204,21,0.38) 0%, rgba(255,255,255,0.15) 30%, transparent 62%)'
+              : `radial-gradient(circle, ${gc.glow} 0%, transparent 60%)`;
+            const winnerTitleGradient = isSpotlightEffect
+              ? 'linear-gradient(90deg, #FEF3C7, #FACC15, #FFFFFF, #F59E0B, #FEF3C7)'
+              : 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)';
+            const ringColor = isSpotlightEffect ? '#FACC15' : gc.bg;
             const podiumOrder = [ranked[1], ranked[0], ranked[2], ranked[3]];
             const podiumHeights = compactGrandWinner
               ? (width < 768 ? [36, 54, 30, 22] : [36, 56, 30, 22])
@@ -1087,16 +1103,16 @@ export default function CeremonyPlay() {
                 position: 'relative',
                 minHeight: compactGrandWinner ? (width < 768 ? 300 : 340) : undefined,
               }}>
-                <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: '140%', height: '140%', background: `radial-gradient(circle, ${gc.glow} 0%, transparent 60%)`, opacity: 0.3, pointerEvents: 'none', animation: 'pulse 3s ease-in-out infinite' }} />
+                <div style={{ position: 'absolute', top: '-20%', left: '50%', transform: 'translateX(-50%)', width: '140%', height: '140%', background: winnerGlow, opacity: isSpotlightEffect ? 0.52 : 0.3, pointerEvents: 'none', animation: 'pulse 3s ease-in-out infinite' }} />
                 {['✦', '★', '✧', '⭐', '✦', '★'].map((star, i) => (
-                  <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: compactGrandWinner ? '0.75rem' : (width < 768 ? '0.8rem' : '1.2rem'), opacity: 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: i % 2 === 0 ? '#FFD700' : gc.mid, pointerEvents: 'none' }}>{star}</div>
+                  <div key={i} style={{ position: 'absolute', top: `${10 + (i * 13) % 60}%`, left: `${5 + (i * 17) % 90}%`, fontSize: compactGrandWinner ? '0.75rem' : (width < 768 ? '0.8rem' : '1.2rem'), opacity: isSpotlightEffect ? 0.52 : 0.4, animation: `starSpin ${2 + i * 0.5}s linear infinite`, color: isSpotlightEffect ? (i % 2 === 0 ? '#FACC15' : '#FFFFFF') : (i % 2 === 0 ? '#FFD700' : gc.mid), pointerEvents: 'none' }}>{star}</div>
                 ))}
 
                 <div style={{ animation: 'crownBounce 2s ease-in-out infinite', fontSize: compactGrandWinner ? (width < 768 ? '1.55rem' : '1.9rem') : (width < 768 ? '2.8rem' : '3.8rem'), marginBottom: 0, filter: 'drop-shadow(0 4px 12px rgba(255,215,0,0.5))' }}>👑</div>
-                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? (width < 768 ? '1.2rem' : '1.45rem') : (width < 768 ? '2rem' : r.h2Fs), background: 'linear-gradient(90deg, #FFD700, #FFA500, #FFD700, #FFF8DC, #FFD700)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: compactGrandWinner ? 0 : 8, letterSpacing: compactGrandWinner ? 2 : 4 }}>최종 우승</h2>
+                <h2 style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: compactGrandWinner ? (width < 768 ? '1.2rem' : '1.45rem') : (width < 768 ? '2rem' : r.h2Fs), background: winnerTitleGradient, backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'textShine 3s linear infinite', marginBottom: compactGrandWinner ? 0 : 8, letterSpacing: compactGrandWinner ? 2 : 4 }}>최종 우승</h2>
                 <div style={{ animation: 'popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both', position: 'relative', zIndex: 2 }}>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), height: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), borderRadius: '50%', border: `3px solid ${gc.bg}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), height: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), borderRadius: '50%', border: `2px solid ${gc.bg}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), height: compactGrandWinner ? 104 : (width < 768 ? 130 : 170), borderRadius: '50%', border: `3px solid ${ringColor}33`, animation: 'glowPulse 2s ease-in-out infinite', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), height: compactGrandWinner ? 138 : (width < 768 ? 170 : 220), borderRadius: '50%', border: `2px solid ${ringColor}1A`, animation: 'glowPulse 2s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
                   <Trophy color={gc.bg} size={finalTrophySize} />
                   <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: finalTeamFs, color: gc.bg, textShadow: `0 0 40px ${gc.glow}, 0 0 80px ${gc.glow}, 0 2px 4px rgba(0,0,0,0.2)`, margin: compactGrandWinner ? '-2px 0 0' : '4px 0 4px', letterSpacing: compactGrandWinner ? 4 : 8, animation: 'pulse 2s ease-in-out infinite' }}>{grandWinner as string}</div>
                   <div style={{ fontFamily: "'Black Han Sans', sans-serif", fontSize: finalScoreFs, color: '#FFF', background: `linear-gradient(135deg, ${gc.bg}, ${gc.dark})`, padding: compactGrandWinner ? '4px 20px' : '6px 28px', borderRadius: 50, display: 'inline-block', boxShadow: `0 0 40px ${gc.glow}, 0 8px 24px rgba(0,0,0,0.2)`, border: compactGrandWinner ? '2px solid rgba(255,255,255,0.3)' : '3px solid rgba(255,255,255,0.3)', animation: 'glowPulse 2s ease-in-out infinite' }}>
@@ -1139,6 +1155,7 @@ export default function CeremonyPlay() {
                   width={width}
                   height={height}
                   compact={compactGrandWinner}
+                  effectPreset={effectPreset}
                   isActive={currentStep?.id === 'grand_winner'}
                 />
               </div>

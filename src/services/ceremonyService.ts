@@ -1,5 +1,14 @@
 import { supabase } from '../lib/supabase';
+import {
+  DEFAULT_CEREMONY_EFFECT_SELECTION,
+  isCeremonyEffectSelection,
+  resolveCeremonyEffect,
+} from '../config/ceremonyEffects';
+import type { CeremonyEffectPresetId, CeremonyEffectSelection } from '../config/ceremonyEffects';
 import type { AwardsData, TeamName } from '../types/awana';
+
+const CONFIRMED_CEREMONY_KEY = 'awana-ceremony-confirmed';
+const CEREMONY_EFFECT_SELECTION_KEY = 'awana-ceremony-effect-selection';
 
 export interface BonusDetail {
   team: TeamName;
@@ -16,6 +25,23 @@ export interface ConfirmedCeremony {
   dateFrom: string;
   dateTo: string;
   bonusDetails?: BonusDetail[];
+  effectSelection?: CeremonyEffectSelection;
+  effectPreset?: CeremonyEffectPresetId;
+}
+
+export function getStoredCeremonyEffectSelection(): CeremonyEffectSelection {
+  try {
+    const raw = localStorage.getItem(CEREMONY_EFFECT_SELECTION_KEY);
+    return isCeremonyEffectSelection(raw) ? raw : DEFAULT_CEREMONY_EFFECT_SELECTION;
+  } catch {
+    return DEFAULT_CEREMONY_EFFECT_SELECTION;
+  }
+}
+
+export function setStoredCeremonyEffectSelection(selection: CeremonyEffectSelection) {
+  try {
+    localStorage.setItem(CEREMONY_EFFECT_SELECTION_KEY, selection);
+  } catch { /* ignore */ }
 }
 
 /** Save confirmed ceremony to Supabase + localStorage cache */
@@ -24,8 +50,10 @@ export async function saveConfirmedCeremony(
   dateFrom: string,
   dateTo: string,
   bonusDetails?: BonusDetail[],
+  effectSelection: CeremonyEffectSelection = getStoredCeremonyEffectSelection(),
 ): Promise<ConfirmedCeremony> {
   const now = new Date().toISOString();
+  const effectPreset = resolveCeremonyEffect(effectSelection, now);
 
   // Supabase insert
   const { data: row, error } = await supabase
@@ -51,11 +79,14 @@ export async function saveConfirmedCeremony(
     dateFrom,
     dateTo,
     bonusDetails,
+    effectSelection,
+    effectPreset,
   };
 
   // localStorage fallback cache
   try {
-    localStorage.setItem('awana-ceremony-confirmed', JSON.stringify(confirmed));
+    setStoredCeremonyEffectSelection(effectSelection);
+    localStorage.setItem(CONFIRMED_CEREMONY_KEY, JSON.stringify(confirmed));
   } catch { /* ignore */ }
 
   return confirmed;
@@ -72,6 +103,7 @@ export async function loadConfirmedCeremony(): Promise<ConfirmedCeremony | null>
       .single();
 
     if (!error && data) {
+      const effectSelection = getStoredCeremonyEffectSelection();
       return {
         id: data.id,
         data: data.scores as AwardsData,
@@ -79,6 +111,8 @@ export async function loadConfirmedCeremony(): Promise<ConfirmedCeremony | null>
         dateFrom: data.date_from,
         dateTo: data.date_to,
         bonusDetails: data.bonus_details as BonusDetail[] | undefined,
+        effectSelection,
+        effectPreset: resolveCeremonyEffect(effectSelection, data.confirmed_at),
       };
     }
   } catch { /* fall through to localStorage */ }
@@ -90,10 +124,17 @@ export async function loadConfirmedCeremony(): Promise<ConfirmedCeremony | null>
 /** Sync load from localStorage only (for initial render / non-async contexts) */
 export function loadConfirmedCeremonyLocal(): ConfirmedCeremony | null {
   try {
-    const raw = localStorage.getItem('awana-ceremony-confirmed');
+    const raw = localStorage.getItem(CONFIRMED_CEREMONY_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ConfirmedCeremony;
-    if (parsed?.data?.handbook?.sparks && parsed?.data?.game?.sparks) return parsed;
+    if (parsed?.data?.handbook?.sparks && parsed?.data?.game?.sparks) {
+      const effectSelection = getStoredCeremonyEffectSelection();
+      return {
+        ...parsed,
+        effectSelection,
+        effectPreset: resolveCeremonyEffect(effectSelection, parsed.confirmedAt),
+      };
+    }
     return null;
   } catch {
     return null;

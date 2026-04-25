@@ -2,8 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { buildAwardsData } from '../../services/awardsIntegrationService';
-import { saveConfirmedCeremony, loadConfirmedCeremony, loadConfirmedCeremonyLocal } from '../../services/ceremonyService';
+import {
+  getStoredCeremonyEffectSelection,
+  loadConfirmedCeremony,
+  loadConfirmedCeremonyLocal,
+  saveConfirmedCeremony,
+  setStoredCeremonyEffectSelection,
+} from '../../services/ceremonyService';
 import type { ConfirmedCeremony, BonusDetail } from '../../services/ceremonyService';
+import { CEREMONY_EFFECT_OPTIONS } from '../../config/ceremonyEffects';
+import type { CeremonyEffectSelection } from '../../config/ceremonyEffects';
 import { TEAM_NAMES, TEAM_COLORS } from '../../types/awana';
 import type { AwardsData, TeamName } from '../../types/awana';
 
@@ -37,6 +45,49 @@ function deepCloneAwardsData(d: AwardsData): AwardsData {
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function CeremonyEffectPicker({
+  value,
+  onChange,
+}: {
+  value: CeremonyEffectSelection;
+  onChange: (value: CeremonyEffectSelection) => void;
+}) {
+  const selected = CEREMONY_EFFECT_OPTIONS.find((option) => option.id === value) ?? CEREMONY_EFFECT_OPTIONS[0];
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold text-indigo-700">시상식 효과</p>
+          <p className="text-[11px] text-indigo-400 mt-0.5">
+            매주 템플릿처럼 교체할 수 있어요
+          </p>
+        </div>
+        <select
+          value={value}
+          onChange={(e) => {
+            const next = e.target.value as CeremonyEffectSelection;
+            if (CEREMONY_EFFECT_OPTIONS.some((option) => option.id === next)) onChange(next);
+          }}
+          className="min-w-[150px] rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-bold text-indigo-800 outline-none focus:border-indigo-400"
+        >
+          {CEREMONY_EFFECT_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mt-2 flex items-start gap-2">
+        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-indigo-500 ring-1 ring-indigo-100">
+          {selected.badge}
+        </span>
+        <p className="text-[11px] leading-4 text-gray-500">{selected.description}</p>
+      </div>
+    </div>
+  );
 }
 
 // ─── 공통 점수 테이블 컴포넌트 ───
@@ -301,6 +352,12 @@ export default function CeremonyPage() {
   const [editableData, setEditableData] = useState<AwardsData | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [previousConfirm, setPreviousConfirm] = useState<ConfirmedCeremony | null>(null);
+  const [effectSelection, setEffectSelection] = useState<CeremonyEffectSelection>(() => getStoredCeremonyEffectSelection());
+
+  const updateEffectSelection = (selection: CeremonyEffectSelection) => {
+    setEffectSelection(selection);
+    setStoredCeremonyEffectSelection(selection);
+  };
 
   // --- 이전 확정 가산점을 BonusData로 복원 ---
   const restoreBonusFromDetails = (details?: BonusDetail[]): BonusData => {
@@ -438,7 +495,7 @@ export default function CeremonyPage() {
         }
       }
     }
-    const result = await saveConfirmedCeremony(editableData, dateFrom, dateTo, details.length > 0 ? details : undefined);
+    const result = await saveConfirmedCeremony(editableData, dateFrom, dateTo, details.length > 0 ? details : undefined, effectSelection);
     setConfirmed(true);
     setPreviousConfirm(result);
     toast.success('시상식 데이터가 확정되었습니다!');
@@ -490,12 +547,15 @@ export default function CeremonyPage() {
       {/* Previous confirmed shortcut */}
       {previousConfirm && currentStep === 1 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-amber-800">이전 확정 데이터 있음</p>
               <p className="text-xs text-amber-600 mt-0.5">
                 확정: {formatDateTime(previousConfirm.confirmedAt)} | 기간: {previousConfirm.dateFrom} ~ {previousConfirm.dateTo}
               </p>
+            </div>
+            <div className="sm:min-w-[360px]">
+              <CeremonyEffectPicker value={effectSelection} onChange={updateEffectSelection} />
             </div>
             <button
               onClick={() => navigate('/admin/ceremony-play')}
@@ -697,6 +757,8 @@ export default function CeremonyPage() {
           </div>
 
           <div className="space-y-3">
+            <CeremonyEffectPicker value={effectSelection} onChange={updateEffectSelection} />
+
             <button onClick={handleConfirm}
               className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors shadow-md"
             >{confirmed ? '재확정하기' : '확정하기'}</button>

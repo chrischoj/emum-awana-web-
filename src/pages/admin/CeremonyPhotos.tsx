@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { DEFAULT_CEREMONY_EFFECT_PRESET } from '../../config/ceremonyEffects';
+import type { CeremonyEffectPresetId } from '../../config/ceremonyEffects';
 
 // ─── Types ───
 type Team = 'RED' | 'BLUE' | 'GREEN' | 'YELLOW';
@@ -19,6 +21,7 @@ interface CeremonyPhotosProps {
   width: number;
   height?: number;
   compact?: boolean;
+  effectPreset?: CeremonyEffectPresetId;
   isActive: boolean;
   onBurst?: () => void; // burst 시 효과음 콜백
 }
@@ -118,11 +121,25 @@ function renderAvatar(
 // ═══════════════════════════════════════════
 // ─── CeremonyPhotos Component ───
 // ═══════════════════════════════════════════
-export default function CeremonyPhotos({ winners, losers, teamColors, width, height = 900, compact = false, isActive, onBurst }: CeremonyPhotosProps) {
+export default function CeremonyPhotos({
+  winners,
+  losers,
+  teamColors,
+  width,
+  height = 900,
+  compact = false,
+  effectPreset = DEFAULT_CEREMONY_EFFECT_PRESET,
+  isActive,
+  onBurst,
+}: CeremonyPhotosProps) {
   const [photoPhase, setPhotoPhase] = useState<PhotoPhase>('orbit');
   const [heroIndex, setHeroIndex] = useState(-1);
   const [shuffledOrder, setShuffledOrder] = useState<number[]>([]);
   const [celebrationPhase, setCelebrationPhase] = useState<CelebrationPhase>('settling');
+  const isSpotlightEffect = effectPreset === 'golden-spotlight';
+  const effectAccent = isSpotlightEffect ? '#FACC15' : '#FFD700';
+  const effectAccentSoft = isSpotlightEffect ? 'rgba(250,204,21,0.45)' : 'rgba(255,215,0,0.35)';
+  const effectGlow = isSpotlightEffect ? 'rgba(245,158,11,0.62)' : 'rgba(255,215,0,0.5)';
 
   // ─── Phase timer ───
   useEffect(() => {
@@ -225,12 +242,13 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
           { x: (i * 97 % 300) - 150, y: 400 },
         ];
         const dir = directions[i % 4];
-        const floatX = Math.cos(i * 2.39) * (width < 768 ? 48 : isCompact ? 76 : 120);
-        const floatY = Math.sin(i * 2.39) * (width < 768 ? 32 : isCompact ? 48 : 80);
+        const floatScale = isSpotlightEffect ? 0.72 : 1;
+        const floatX = Math.cos(i * 2.39) * (width < 768 ? 48 : isCompact ? 76 : 120) * floatScale;
+        const floatY = Math.sin(i * 2.39) * (width < 768 ? 32 : isCompact ? 48 : 80) * floatScale;
         return (
           <motion.div key={`orbit-${i}`}
             initial={{ x: dir.x, y: dir.y, scale: 0.1, opacity: 0, rotate: (i * 47 % 360) - 180 }}
-            animate={{ x: floatX, y: floatY, scale: isW ? 0.9 : 0.6, opacity: isW ? 1 : 0.5, rotate: 0 }}
+            animate={{ x: floatX, y: floatY, scale: isW ? (isSpotlightEffect ? 1 : 0.9) : (isSpotlightEffect ? 0.45 : 0.6), opacity: isW ? 1 : (isSpotlightEffect ? 0.28 : 0.5), rotate: 0 }}
             transition={{ type: 'spring', stiffness: 60 + (i * 13 % 40), damping: 12 + (i * 7 % 5), delay: i * 0.08 }}
             style={{
               position: 'absolute', top: '50%', left: '50%', marginLeft: -sz / 2, marginTop: -sz / 2,
@@ -239,18 +257,21 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
           >
             <div style={{
               width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-              border: isW ? `3px solid ${tc.bg}` : `1.5px solid ${tc.bg}66`,
-              boxShadow: isW ? `0 0 16px ${tc.glow}` : `0 0 6px ${tc.glow}33`,
-              filter: isW ? 'none' : 'brightness(0.8) saturate(0.6)',
+              border: isW ? `3px solid ${isSpotlightEffect ? effectAccent : tc.bg}` : `1.5px solid ${isSpotlightEffect ? effectAccent : tc.bg}66`,
+              boxShadow: isW
+                ? `0 0 18px ${isSpotlightEffect ? effectGlow : tc.glow}`
+                : `0 0 6px ${isSpotlightEffect ? 'rgba(245,158,11,0.24)' : tc.glow}`,
+              filter: isW ? 'none' : `brightness(${isSpotlightEffect ? 0.6 : 0.8}) saturate(${isSpotlightEffect ? 0.35 : 0.6})`,
             }}>
               {renderAvatar(photo.avatar_url, photo.name, sz, tc, true)}
             </div>
             {isW && (
               <div style={{
                 position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
-                background: `${tc.bg}CC`, color: '#fff',
+                background: isSpotlightEffect ? 'rgba(15,23,42,0.82)' : `${tc.bg}CC`, color: '#fff',
                 fontSize: width < 768 ? '0.42rem' : isCompact ? '0.5rem' : '0.6rem', fontWeight: 700,
                 padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap',
+                border: isSpotlightEffect ? `1px solid ${effectAccent}` : undefined,
               }}>{photo.name}</div>
             )}
           </motion.div>
@@ -264,7 +285,9 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
         style={{
           position: 'absolute', top: '50%', left: '50%', width: 80, height: 80,
           marginLeft: -40, marginTop: -40, borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,215,0,0.35) 0%, rgba(147,51,234,0.15) 50%, transparent 70%)',
+          background: isSpotlightEffect
+            ? 'radial-gradient(circle, rgba(250,204,21,0.5) 0%, rgba(255,255,255,0.22) 36%, transparent 68%)'
+            : 'radial-gradient(circle, rgba(255,215,0,0.35) 0%, rgba(147,51,234,0.15) 50%, transparent 70%)',
           pointerEvents: 'none', zIndex: 0,
         }}
       />
@@ -295,14 +318,15 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
               >
                 <div style={{
                   width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                  transform: `rotate(${pos.rot}deg)`, border: `2px solid ${tc.bg}44`,
-                  boxShadow: `0 0 4px ${tc.glow}22`, filter: 'brightness(0.7) saturate(0.5)',
+                  transform: `rotate(${pos.rot}deg)`, border: `2px solid ${isSpotlightEffect ? effectAccent : tc.bg}44`,
+                  boxShadow: `0 0 4px ${isSpotlightEffect ? 'rgba(245,158,11,0.22)' : tc.glow}`,
+                  filter: `brightness(${isSpotlightEffect ? 0.55 : 0.7}) saturate(${isSpotlightEffect ? 0.35 : 0.5})`,
                 }}>
                   {renderAvatar(p.avatar_url, p.name, loserSz, tc)}
                 </div>
                 <div style={{
                   position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
-                  background: `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.36rem' : isCompact ? '0.42rem' : '0.5rem',
+                  background: isSpotlightEffect ? 'rgba(15,23,42,0.55)' : `${tc.bg}88`, color: '#fff', fontSize: width < 768 ? '0.36rem' : isCompact ? '0.42rem' : '0.5rem',
                   fontWeight: 500, padding: '1px 4px', borderRadius: 6, whiteSpace: 'nowrap', opacity: 0.6,
                 }}>{p.name}</div>
               </motion.div>
@@ -359,20 +383,20 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
                     animate={{
                       boxShadow: isCurrentHero
                         ? [
-                            `0 0 25px rgba(255,215,0,0.5), 0 0 40px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
-                            `0 0 50px rgba(255,215,0,0.9), 0 0 70px ${tc.glow}88, 0 8px 20px rgba(0,0,0,0.3)`,
-                            `0 0 25px rgba(255,215,0,0.5), 0 0 40px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 25px ${effectGlow}, 0 0 40px ${isSpotlightEffect ? effectAccentSoft : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 50px ${effectGlow}, 0 0 70px ${isSpotlightEffect ? 'rgba(255,255,255,0.45)' : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 25px ${effectGlow}, 0 0 40px ${isSpotlightEffect ? effectAccentSoft : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
                           ]
                         : [
-                            `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
-                            `0 0 35px rgba(255,215,0,0.7), 0 0 48px ${tc.glow}66, 0 8px 20px rgba(0,0,0,0.3)`,
-                            `0 0 15px rgba(255,215,0,0.3), 0 0 24px ${tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 15px ${effectAccentSoft}, 0 0 24px ${isSpotlightEffect ? effectGlow : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 35px ${effectGlow}, 0 0 48px ${isSpotlightEffect ? 'rgba(255,255,255,0.32)' : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
+                            `0 0 15px ${effectAccentSoft}, 0 0 24px ${isSpotlightEffect ? effectGlow : tc.glow}, 0 8px 20px rgba(0,0,0,0.3)`,
                           ],
                     }}
                     transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                     style={{
                       width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden',
-                      transform: `rotate(${pos.rot}deg)`, border: `4px solid ${tc.bg}`,
+                      transform: `rotate(${pos.rot}deg)`, border: `4px solid ${isSpotlightEffect ? effectAccent : tc.bg}`,
                     }}
                   >
                     {p.avatar_url
@@ -413,7 +437,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
                     transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.15 }}
                     style={{
                       position: 'absolute', inset: -10, borderRadius: '50%',
-                      background: `radial-gradient(circle, ${tc.glow} 0%, transparent 70%)`,
+                      background: `radial-gradient(circle, ${isSpotlightEffect ? effectGlow : tc.glow} 0%, transparent 70%)`,
                       pointerEvents: 'none',
                     }}
                   />
@@ -421,9 +445,12 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
 
                 <div style={{
                   position: 'absolute', top: '100%', marginTop: 4, left: '50%', transform: 'translateX(-50%)',
-                  background: `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
+                  background: isSpotlightEffect
+                    ? 'linear-gradient(135deg, #111827, #374151)'
+                    : `linear-gradient(135deg, ${tc.bg}, ${tc.dark})`, color: '#fff',
                   fontSize: width < 768 ? '0.55rem' : isCompact ? '0.68rem' : '0.85rem', fontWeight: 800,
-                  padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${tc.glow}88`,
+                  padding: '2px 8px', borderRadius: 8, boxShadow: `0 2px 8px ${isSpotlightEffect ? 'rgba(245,158,11,0.5)' : tc.glow}`,
+                  border: isSpotlightEffect ? `2px solid ${effectAccent}` : undefined,
                   whiteSpace: 'nowrap', zIndex: 2,
                 }}>{p.name}</div>
               </motion.div>
@@ -451,7 +478,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
               style={{
                 position: 'absolute', top: '50%', left: '50%', width: 120, height: 120,
                 marginLeft: -60, marginTop: -60, borderRadius: '50%',
-                border: '2px solid rgba(255,215,0,0.5)', pointerEvents: 'none', zIndex: 40,
+                border: `2px solid ${isSpotlightEffect ? 'rgba(255,255,255,0.62)' : 'rgba(255,215,0,0.5)'}`, pointerEvents: 'none', zIndex: 40,
               }}
             />
           ))}
@@ -464,7 +491,9 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
               style={{
                 position: 'absolute', top: '50%', left: '50%', width: 2, height: '50%',
                 transformOrigin: 'top center', transform: `rotate(${i * 30}deg)`,
-                background: 'linear-gradient(180deg, rgba(255,215,0,0.8), transparent)',
+                background: isSpotlightEffect
+                  ? 'linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,204,21,0.35), transparent)'
+                  : 'linear-gradient(180deg, rgba(255,215,0,0.8), transparent)',
                 pointerEvents: 'none', zIndex: 39,
               }}
             />
@@ -481,7 +510,7 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
                 style={{
                   position: 'absolute', top: '50%', left: '50%', width: 6, height: 6,
                   marginLeft: -3, marginTop: -3, borderRadius: '50%',
-                  background: i % 2 === 0 ? '#FFD700' : '#FFA500',
+                  background: i % 2 === 0 ? effectAccent : (isSpotlightEffect ? '#FFFFFF' : '#FFA500'),
                   pointerEvents: 'none', zIndex: 41,
                 }}
               />
@@ -494,7 +523,9 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
               {Array.from({ length: 30 }).map((_, i) => {
                 const angle = (i / 30) * Math.PI * 2;
                 const dist = 80 + (i * 41 % 180);
-                const colors = ['#FFD700', '#FFA500', '#FF69B4', '#9333EA', '#22C55E', '#3B82F6', '#EF4444'];
+                const colors = isSpotlightEffect
+                  ? ['#FEF3C7', '#FACC15', '#F59E0B', '#FFFFFF', '#BFDBFE', '#2563EB']
+                  : ['#FFD700', '#FFA500', '#FF69B4', '#9333EA', '#22C55E', '#3B82F6', '#EF4444'];
                 const color = colors[i % colors.length];
                 const size = 3 + (i % 4) * 2;
                 return (
@@ -527,7 +558,9 @@ export default function CeremonyPhotos({ winners, losers, teamColors, width, hei
                 style={{
                   position: 'absolute', top: '50%', left: '50%', width: 60, height: 60,
                   marginLeft: -30, marginTop: -30, borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(255,215,0,0.6) 0%, rgba(255,165,0,0.3) 40%, transparent 70%)',
+                  background: isSpotlightEffect
+                    ? 'radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(250,204,21,0.45) 38%, transparent 70%)'
+                    : 'radial-gradient(circle, rgba(255,215,0,0.6) 0%, rgba(255,165,0,0.3) 40%, transparent 70%)',
                   pointerEvents: 'none', zIndex: 44,
                 }}
               />
