@@ -48,7 +48,7 @@ const TEACHERS: { name: string; phone: string; position: string | null; clubType
   { name: '장찬미', phone: '010-9611-8774', position: '교사', clubType: 'tnt' },
   { name: '김은주', phone: '010-2024-0047', position: '교사', clubType: 'tnt' },
   { name: '김민영', phone: '010-2052-1022', position: '교사', clubType: 'tnt' },
-  { name: '함고운', phone: '010-720-0901', position: '교사', clubType: 'tnt' },
+  { name: '함고운', phone: '010-7200-9017', position: '교사', clubType: 'tnt' },
   // 서기팀
   { name: '천나영', phone: '010-6664-1881', position: '서기팀장', clubType: null },
   { name: '김경란', phone: '010-5761-1070', position: '서기', clubType: null },

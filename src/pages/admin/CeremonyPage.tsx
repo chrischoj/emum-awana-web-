@@ -7,7 +7,7 @@ import {
   loadConfirmedCeremony,
   loadConfirmedCeremonyLocal,
   saveConfirmedCeremony,
-  setStoredCeremonyEffectSelection,
+  updateConfirmedCeremonyEffectSelection,
 } from '../../services/ceremonyService';
 import type { ConfirmedCeremony, BonusDetail } from '../../services/ceremonyService';
 import { CEREMONY_EFFECT_OPTIONS } from '../../config/ceremonyEffects';
@@ -355,8 +355,13 @@ export default function CeremonyPage() {
   const [effectSelection, setEffectSelection] = useState<CeremonyEffectSelection>(() => getStoredCeremonyEffectSelection());
 
   const updateEffectSelection = (selection: CeremonyEffectSelection) => {
+    const currentConfirm = previousConfirm;
     setEffectSelection(selection);
-    setStoredCeremonyEffectSelection(selection);
+    void updateConfirmedCeremonyEffectSelection(currentConfirm, selection).then((effectPreset) => {
+      setPreviousConfirm((prev) => prev && prev.id === currentConfirm?.id
+        ? { ...prev, effectSelection: selection, effectPreset }
+        : prev);
+    });
   };
 
   // --- 이전 확정 가산점을 BonusData로 복원 ---
@@ -388,12 +393,14 @@ export default function CeremonyPage() {
     const local = loadConfirmedCeremonyLocal();
     if (local) {
       setPreviousConfirm(local);
+      if (local.effectSelection) setEffectSelection(local.effectSelection);
       setBonusPoints(restoreBonusFromDetails(local.bonusDetails));
       setBonusReasons(restoreReasonsFromDetails(local.bonusDetails));
     }
     loadConfirmedCeremony().then((c) => {
       if (c) {
         setPreviousConfirm(c);
+        if (c.effectSelection) setEffectSelection(c.effectSelection);
         setBonusPoints(restoreBonusFromDetails(c.bonusDetails));
         setBonusReasons(restoreReasonsFromDetails(c.bonusDetails));
       }
